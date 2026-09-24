@@ -187,16 +187,18 @@ let route = async (config: Config.t, req: Node.HttpServer.request, res: Node.Htt
   }
 }
 
-let start = (config: Config.t): startResult => {
-  let server = Node.HttpServer.createServer((req, res) =>
-    route(config, req, res)
-    ->Promise.catch(err => {
-        Console.error2("reflip: unhandled error", err)
-        textResponse(res, 500, "text/plain", "internal error")
-        Promise.resolve()
-      })
-    ->Promise.ignore
-  )
-  Node.HttpServer.listen(server, config.port, "127.0.0.1", () => ())
-  {server, port: Node.HttpServer.address(server).port}
-}
+let start = (config: Config.t): promise<startResult> =>
+  Promise.make((resolve, _reject) => {
+    let server = Node.HttpServer.createServer((req, res) =>
+      route(config, req, res)
+      ->Promise.catch(err => {
+          Console.error2("reflip: unhandled error", err)
+          textResponse(res, 500, "text/plain", "internal error")
+          Promise.resolve()
+        })
+      ->Promise.ignore
+    )
+    Node.HttpServer.listen(server, config.port, "127.0.0.1", () =>
+      resolve({server, port: Node.HttpServer.address(server).port})
+    )
+  })

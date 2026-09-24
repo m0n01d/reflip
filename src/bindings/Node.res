@@ -34,6 +34,10 @@ module Crypto = {
   @module("node:crypto") external randomUUID: unit => string = "randomUUID"
 }
 
+module Os = {
+  @module("node:os") external tmpdir: unit => string = "tmpdir"
+}
+
 module Url = {
   type t
   @new external make: (string, string) => t = "URL"

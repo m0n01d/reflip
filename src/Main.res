@@ -2,9 +2,14 @@
 //   node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs
 
 let config = Config.fromEnv()
-let {Server.port: port} = Server.start(config)
-Console.log(
-  "reflip: listening on http://127.0.0.1:" ++
-  Int.toString(port) ++
-  " (fixtures=" ++ (config.fixtures ? "on" : "off") ++ ")",
-)
+
+Server.start(config)
+->Promise.then((result: Server.startResult) => {
+    Console.log(
+      "reflip: listening on http://127.0.0.1:" ++
+      Int.toString(result.port) ++
+      " (fixtures=" ++ (config.fixtures ? "on" : "off") ++ ")",
+    )
+    Promise.resolve()
+  })
+->Promise.ignore

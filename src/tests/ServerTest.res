@@ -5,7 +5,7 @@ let run = async () => {
   TestKit.section("Server: fixture-mode POST /api/scene")
 
   let cwd = Node.Process.cwd()
-  let dataDir = Node.Path.join([cwd, "tmp-test-data-" ++ Int.toString(Float.toInt(Date.now()))])
+  let dataDir = Node.Path.join([Node.Os.tmpdir(), "reflip-test-" ++ Node.Crypto.randomUUID()])
   let config: Config.t = {
     Config.port: 0,
     fixtures: true,
@@ -18,7 +18,7 @@ let run = async () => {
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
   }
 
-  let {Server.server, port} = Server.start(config)
+  let {Server.server, port} = await Server.start(config)
 
   // Fixture mode never reads the request body — it always loads
   // tests/fixtures/claude-scene.json instead — so a placeholder body is
