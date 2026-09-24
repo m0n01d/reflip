@@ -11,6 +11,7 @@ type t = {
   ebayClientSecret: option<string>,
   structuredOutput: bool,
   distIndexPath: string,
+  distDir: string,
 }
 
 let getEnv = (key: string): option<string> =>
@@ -28,5 +29,6 @@ let fromEnv = (): t => {
     ebayClientSecret: getEnv("EBAY_CLIENT_SECRET"),
     structuredOutput: getEnv("STRUCTURED_OUTPUT")->Option.getOr("") != "0",
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
+    distDir: Node.Path.join([cwd, "dist"]),
   }
 }

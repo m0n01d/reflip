@@ -16,6 +16,7 @@ let run = async () => {
     ebayClientSecret: None,
     structuredOutput: true,
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
+    distDir: Node.Path.join([cwd, "dist"]),
   }
 
   let {Server.server, port} = await Server.start(config)
