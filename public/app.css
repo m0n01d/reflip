@@ -1,0 +1,179 @@
+:root {
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f4f5f7;
+  color: #111318;
+}
+
+.page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+}
+
+h1 {
+  font-size: 20px;
+  margin: 4px 0 16px;
+}
+
+.pickers {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.picker {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #444;
+}
+
+.picker select {
+  font-size: 15px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+}
+
+.take-photo {
+  display: block;
+  width: 100%;
+  padding: 18px;
+  font-size: 17px;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 12px;
+  border: none;
+  background: #173b5e;
+  color: #fff;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.take-photo:focus-within {
+  outline: 2px solid #4a90d9;
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.status {
+  min-height: 20px;
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.item {
+  background: #fff;
+  border-radius: 10px;
+  padding: 12px 14px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.item-name {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.item-range {
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.item-confidence,
+.item-basis {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 2px;
+}
+
+.item-sources {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.ebay {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.ebay-label {
+  color: #888;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ebay-missing {
+  color: #888;
+  font-style: italic;
+}
+
+.sold-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid #ddd;
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #111318;
+    color: #f0f0f0;
+  }
+  .picker select {
+    background: #1c1f26;
+    color: #f0f0f0;
+    border-color: #333;
+  }
+  .item {
+    background: #1c1f26;
+    box-shadow: none;
+  }
+  .footer {
+    border-top-color: #333;
+  }
+}

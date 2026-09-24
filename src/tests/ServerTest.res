@@ -16,9 +16,10 @@ let run = async () => {
     ebayClientSecret: None,
     structuredOutput: true,
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
+    distDir: Node.Path.join([cwd, "dist"]),
   }
 
-  let {Server.server, port} = await Server.start(config)
+  let {Server.server: server, port} = await Server.start(config)
 
   // Fixture mode never reads the request body — it always loads
   // tests/fixtures/claude-scene.json instead — so a placeholder body is
@@ -43,6 +44,20 @@ let run = async () => {
   TestKit.check("scenes.jsonl was written", Node.Fs.existsSync(logPath))
   let logText = Node.Fs.readFileUtf8(logPath, "utf8")
   TestKit.check("scenes.jsonl has a line", String.length(String.trim(logText)) > 0)
+
+  let badResp = await Fetch.fetch(
+    "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene?model=gpt-4",
+    ~init={
+      Fetch.method: "POST",
+      headers: Dict.fromArray([("content-type", "image/jpeg")]),
+      body: "fixture-mode-ignores-this-body",
+    },
+  )
+  TestKit.check("POST /api/scene?model=gpt-4 responds 400", Fetch.status(badResp) == 400)
+  let badJson = await Fetch.json(badResp)
+  TestKit.check("400 reply has an error field", Json.stringField(badJson, "error")->Option.isSome)
+  let validModels = Json.arrayField(badJson, "validModels")->Option.getOr([])
+  TestKit.check("400 reply lists 3 valid model ids", Array.length(validModels) == 3)
 
   Node.HttpServer.close(server, () => ())
 }

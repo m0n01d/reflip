@@ -4,13 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "rescript build",
+    "build": "rescript build && vite build",
     "clean": "rescript clean",
     "dev": "rescript build -w",
+    "dev:web": "vite",
     "test": "npm run build && node src/tests/AllTests.res.mjs",
     "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs"
   },
   "dependencies": {
-    "rescript": "^12.3.0"
+    "@rescript/react": "^0.15.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "rescript": "^12.3.0",
+    "vite": "^8.3.0"
   }
 }

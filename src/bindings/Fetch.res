@@ -26,3 +26,9 @@ type requestInit = {
 
 // Basic-auth header value for the eBay client-credentials grant.
 @val external btoa: string => string = "btoa"
+
+type headers
+
+@get external responseHeaders: response => headers = "headers"
+
+@send external getHeader: (headers, string) => Nullable.t<string> = "get"

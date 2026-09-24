@@ -1,6 +1,7 @@
 // HTTP server for the reflip brain: one scene endpoint, an rtt log
-// endpoint, and a bare `/`. Binds 127.0.0.1 only — CLAUDE.md hard design
-// rule 4 (tailscale serve proxies HTTPS to it later; never Funnel).
+// endpoint, a bare `/`, and (part B) static files under dist/. Binds
+// 127.0.0.1 only — CLAUDE.md hard design rule 4 (tailscale serve proxies
+// HTTPS to it later; never Funnel).
 
 type startResult = {server: Node.HttpServer.server, port: int}
 
@@ -18,6 +19,34 @@ let textResponse = (
   Node.HttpServer.writeHead(res, status, Dict.fromArray([("Content-Type", contentType)]))
   Node.HttpServer.endWithBody(res, body)
 }
+
+// `Node.HttpServer.endWithBody` only takes a string, which would corrupt a
+// binary file (an icon) read via `readFileUtf8`. Same underlying JS method
+// ("end"), a second typed binding for the Buffer overload.
+@send external endWithBuffer: (Node.HttpServer.response, Node.Buffer.t) => unit = "end"
+
+// Fixed content-type table for static files under dist/. Falls back to
+// application/octet-stream for anything not listed.
+let contentTypeFor = (path: string): string =>
+  if String.endsWith(path, ".html") {
+    "text/html"
+  } else if String.endsWith(path, ".webmanifest") {
+    "application/manifest+json"
+  } else if String.endsWith(path, ".js") || String.endsWith(path, ".mjs") {
+    "text/javascript"
+  } else if String.endsWith(path, ".css") {
+    "text/css"
+  } else if String.endsWith(path, ".json") {
+    "application/json"
+  } else if String.endsWith(path, ".svg") {
+    "image/svg+xml"
+  } else if String.endsWith(path, ".png") {
+    "image/png"
+  } else if String.endsWith(path, ".ico") {
+    "image/x-icon"
+  } else {
+    "application/octet-stream"
+  }
 
 let placeholderHtml = "<!doctype html><html><body>reflip brain is running. Part B (the PWA page) is not built yet.</body></html>"
 
@@ -41,6 +70,27 @@ let handleRoot = (config: Config.t, res: Node.HttpServer.response): unit =>
     textResponse(res, 200, "text/html", placeholderHtml)
   }
 
+// GET for anything else: serve it from dist/ if it exists there. `Node.Path.join`
+// does not sandbox to its first argument (a later ".." segment can walk back
+// out — verified: path.join("/a/b", "/../../c") => "/c"), so this checks the
+// resolved path still starts with distDir before ever touching the
+// filesystem. In practice `pathname` already had any ".." collapsed by the
+// WHATWG URL parser in `route` below, but that is this function's caller's
+// business, not a reason to skip checking here too.
+let handleStatic = (config: Config.t, pathname: string, res: Node.HttpServer.response): unit => {
+  let resolved = Node.Path.join([config.distDir, pathname])
+  if String.startsWith(resolved, config.distDir ++ "/") && Node.Fs.existsSync(resolved) {
+    Node.HttpServer.writeHead(
+      res,
+      200,
+      Dict.fromArray([("Content-Type", contentTypeFor(resolved))]),
+    )
+    endWithBuffer(res, Node.Fs.readFileBuffer(resolved))
+  } else {
+    textResponse(res, 404, "text/plain", "not found")
+  }
+}
+
 let handleRtt = (
   config: Config.t,
   sceneId: string,
@@ -51,10 +101,12 @@ let handleRtt = (
   switch JSON.parseOrThrow(text) {
   | json => {
       let rttMs = Json.floatField(json, "rttMs")->Option.getOr(0.0)
+      let resizeMs = Json.floatField(json, "resizeMs")->Option.getOr(0.0)
       let line = Json.obj([
         ("type", Json.str("rtt")),
         ("sceneId", Json.str(sceneId)),
         ("rttMs", Json.num(rttMs)),
+        ("resizeMs", Json.num(resizeMs)),
         ("ts", Json.num(Date.now())),
       ])
       SceneLog.appendLine(config.dataDir, line)
@@ -162,20 +214,45 @@ let handleScene = async (
   }
 }
 
-let route = async (config: Config.t, req: Node.HttpServer.request, res: Node.HttpServer.response) => {
+let route = async (
+  config: Config.t,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+) => {
   let method = Node.HttpServer.method(req)
   let url = Node.Url.make(Node.HttpServer.url(req), "http://127.0.0.1")
   let pathname = Node.Url.pathname(url)
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
   } else if method == "POST" && pathname == "/api/scene" {
-    let body = await Node.HttpServer.readBody(req)
-    let model =
-      Node.Url.searchParams(url)
-      ->Node.Url.getParam("model")
-      ->Nullable.toOption
-      ->Option.getOr(Pricing.defaultModel)
-    await handleScene(config, model, body, res)
+    let rawModel = Node.Url.searchParams(url)->Node.Url.getParam("model")->Nullable.toOption
+    switch rawModel {
+    | Some(id) =>
+      switch Shared.parseModelId(id) {
+      | Some(m) => {
+          let body = await Node.HttpServer.readBody(req)
+          await handleScene(config, Shared.modelId(m), body, res)
+        }
+      | None =>
+        jsonResponse(
+          res,
+          400,
+          Json.obj([
+            ("error", Json.str("unknown model id: " ++ id)),
+            (
+              "validModels",
+              Json.arr(Shared.allModels->Array.map(m => Json.str(Shared.modelId(m)))),
+            ),
+          ]),
+        )
+      }
+    | None => {
+        let body = await Node.HttpServer.readBody(req)
+        await handleScene(config, Shared.modelId(Shared.defaultModel), body, res)
+      }
+    }
+  } else if method == "GET" {
+    handleStatic(config, pathname, res)
   } else {
     switch parseRttPath(pathname) {
     | Some(sceneId) if method == "POST" => {
@@ -191,11 +268,13 @@ let start = (config: Config.t): promise<startResult> =>
   Promise.make((resolve, _reject) => {
     let server = Node.HttpServer.createServer((req, res) =>
       route(config, req, res)
-      ->Promise.catch(err => {
+      ->Promise.catch(
+        err => {
           Console.error2("reflip: unhandled error", err)
           textResponse(res, 500, "text/plain", "internal error")
           Promise.resolve()
-        })
+        },
+      )
       ->Promise.ignore
     )
     Node.HttpServer.listen(server, config.port, "127.0.0.1", () =>
