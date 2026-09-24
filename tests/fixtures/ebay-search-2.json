@@ -1,0 +1,48 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=vintage+board+game+lot+1970s&limit=50",
+  "total": 5,
+  "limit": 50,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|fixture-2-1|0",
+      "title": "Vintage Board Game Lot 1970s Mixed",
+      "price": {"value": "12.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-2-1",
+      "shippingOptions": [{"shippingCost": {"value": "9.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-2-2|0",
+      "title": "Lot of 5 Vintage 1970s Board Games",
+      "price": {"value": "20.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-2-2",
+      "shippingOptions": [{"shippingCost": {"value": "11.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-2-3|0",
+      "title": "Retro Board Games Bundle 1970s Family",
+      "price": {"value": "16.50", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-2-3",
+      "shippingOptions": [{"shippingCost": {"value": "10.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-2-4|0",
+      "title": "Vintage Game Lot 70s Complete Pieces",
+      "price": {"value": "9.99", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-2-4",
+      "shippingOptions": [{"shippingCost": {"value": "8.50", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-2-5|0",
+      "title": "1970s Board Game Collection Lot of 4",
+      "price": {"value": "24.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-2-5",
+      "shippingOptions": [{"shippingCost": {"value": "12.00", "currency": "USD"}}]
+    }
+  ]
+}

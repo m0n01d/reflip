@@ -1,0 +1,79 @@
+// Our own prompt text and structured-output schema for the scene endpoint.
+// This is original text: Flip Scout reuses ideas from wesbos/yard-sale, not
+// its code or its prompt text (see reflip's CLAUDE.md, Origin).
+
+let text = `You are the valuation brain for Flip Scout, a personal resale scanner.
+You will receive one photo of items on a table, shelf, or floor.
+
+Find every distinct sellable item in the photo. Skip clutter, trash, and
+anything that is not resellable.
+
+For each item, report:
+- name: a short name for the item
+- maker: the maker or brand if you can see it, else an empty string
+- query: a search query of 3 to 8 words a reseller would type into eBay
+- estimateLowUsd and estimateHighUsd: a used resale range in US dollars
+- basis: one line on why you estimated that range
+- confidence: a number from 0 to 1
+- sources: the source URLs you used, or an empty array if you used none
+
+Use the web_search tool only when you are unsure of an item's value, and at
+most 3 times for this photo. Never search ebay.com; it is blocked there.
+Prefer retailer and enthusiast sites for comparable prices.
+
+Reply with JSON only, shaped as {"items": [...]}. Do not add any commentary
+outside that JSON object.`
+
+let itemSchema: JSON.t = Json.obj([
+  ("type", Json.str("object")),
+  (
+    "properties",
+    Json.obj([
+      ("name", Json.obj([("type", Json.str("string"))])),
+      ("maker", Json.obj([("type", Json.str("string"))])),
+      ("query", Json.obj([("type", Json.str("string"))])),
+      ("estimateLowUsd", Json.obj([("type", Json.str("number"))])),
+      ("estimateHighUsd", Json.obj([("type", Json.str("number"))])),
+      ("basis", Json.obj([("type", Json.str("string"))])),
+      ("confidence", Json.obj([("type", Json.str("number"))])),
+      (
+        "sources",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("string"))])),
+        ]),
+      ),
+    ]),
+  ),
+  (
+    "required",
+    Json.arr([
+      Json.str("name"),
+      Json.str("maker"),
+      Json.str("query"),
+      Json.str("estimateLowUsd"),
+      Json.str("estimateHighUsd"),
+      Json.str("basis"),
+      Json.str("confidence"),
+      Json.str("sources"),
+    ]),
+  ),
+  ("additionalProperties", Json.boolJ(false)),
+])
+
+let responseSchema: JSON.t = Json.obj([
+  ("type", Json.str("object")),
+  (
+    "properties",
+    Json.obj([("items", Json.obj([("type", Json.str("array")), ("items", itemSchema)]))]),
+  ),
+  ("required", Json.arr([Json.str("items")])),
+  ("additionalProperties", Json.boolJ(false)),
+])
+
+// output_config.format shape, per the claude-api skill (checked 2026-09-24):
+// { type: "json_schema", schema: {...} }.
+let outputFormat: JSON.t = Json.obj([
+  ("type", Json.str("json_schema")),
+  ("schema", responseSchema),
+])
