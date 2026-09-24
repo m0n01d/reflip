@@ -13,11 +13,11 @@ If the clone fails, keep going with this file. The rules that matter most for th
 
 ## What reflip is
 
-reflip is the M0 spike of Flip Scout. Dwight named it reflip. The spec lives at [`m0n01d/app-ideas`](https://github.com/m0n01d/app-ideas), file `ideas/flip-scout.md`. Stage: building. Update that spec's own stage row to building too, with a link back to this repo.
+reflip is the M0 spike of Flip Scout. Dwight named it reflip. The spec lives at [`m0n01d/app-ideas`](https://github.com/m0n01d/app-ideas), file `ideas/flip-scout.md`. Stage: building.
 
-Flip Scout values items for resale from a photo or a marketplace listing. This spike answers one question: when Claude looks at a photo with vision and web search, what does that one photo cost, in dollars and in seconds?
+Flip Scout values items for resale from a photo or a marketplace listing. This spike answers one question. When Claude looks at a photo with vision and web search, what does one photo cost, in dollars and in seconds?
 
-Part A (this repo, so far) is the brain only: a ReScript 12 server on Node with one scene endpoint, recorded fixtures, and tests. Part B, a bare PWA page that calls this endpoint from a phone, comes in a later session. Do not build UI here yet.
+Part A is the brain. It is a ReScript 12 server on Node with one scene endpoint, recorded fixtures, and tests. Part B is the phone page. It is a ReScript 12 PWA that takes a photo and shows the reply from the brain. Both parts are built and live in this repo.
 
 ## Origin
 
@@ -54,13 +54,15 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/bindings/`: typed externals for Node (`node:fs`, `node:http`, `node:path`, `node:os`, `node:crypto`, `process.env`) and for the global `fetch`.
 - `src/Json.res`: decode and encode helpers over the built-in `JSON` module. Every decode returns an option, never a cast.
 - `src/Types.res`: the shared domain types and the HTTP reply's JSON encoder.
+- `src/Shared.res`: the model variant, the model ids and labels, and the `sceneReply` decoder. It has no Node imports, so both the server and the page use it. Neither side copies a model id string.
 - `src/Pricing.res`, `src/Stats.res`: the cost formula and the price-percentile math, both pure and both tested.
 - `src/SystemPrompt.res`: our own prompt text and the JSON schema for structured output.
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.
 - `src/SceneLog.res`: appends one JSON line per scene to `data/scenes.jsonl`, and writes the raw Claude response to `data/raw/<sceneId>.json`. `data/` is gitignored.
-- `src/Server.res`: the routes: `GET /`, `POST /api/scene`, `POST /api/scene/:id/rtt`.
+- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, and `POST /api/scene/:id/rtt`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`.
 - `src/Main.res`: the entry point `npm start` runs.
+- `src/web/`: the phone page. `Index.res` mounts it. `App.res` holds the view and the side effects. `AppState.res` holds the pure model, the `msg` type, and `update`. `Resize.res` scales and encodes the photo on a canvas. `Api.res` calls `/api/scene` and posts the round-trip time. `WebApi.res` holds the typed DOM and canvas bindings.
 
 ## How to run
 
@@ -71,11 +73,15 @@ npm test
 FIXTURES=1 PORT=8787 npm start
 ```
 
+`npm run build` builds the ReScript, then the Vite bundle, into `dist/`. After that, `npm start` serves the page at `http://127.0.0.1:8787/`.
+
 With the server running, in another shell:
 
 ```sh
 curl -s -X POST --data-binary @tests/fixtures/table.jpg -H 'content-type: image/jpeg' http://127.0.0.1:8787/api/scene
 ```
+
+To develop the page with fast reloads, run the brain in one shell and Vite in another. Use `FIXTURES=1 PORT=8787 npm start` for the brain and `npm run dev:web` for Vite. Vite proxies `/api` to the brain on port 8787. Vite does not serve `/api` itself.
 
 `npm start` uses Node's `--env-file-if-exists` flag. If `~/.config/reflip/env` exists, that flag loads it. If not, `npm start` skips it and keeps going. Put each secret on its own `KEY=value` line there. No secret goes in this repo.
 
@@ -113,7 +119,6 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 
 ## What is not built yet
 
-- Part B, the PWA page. Once `dist/index.html` exists, `GET /` serves it. Until then, `GET /` serves a one-line placeholder.
 - A real `~/.config/reflip/env` with live keys. Nobody has set one up yet, so every real run so far used `FIXTURES=1`.
 - `tailscale serve` in front of this server.
 - The haul-summary email and the Chrome extension side of Flip Scout. Those are later spec work, not this spike.

@@ -48,15 +48,35 @@ h1 {
 }
 
 .take-photo {
+  display: block;
   width: 100%;
   padding: 18px;
   font-size: 17px;
   font-weight: 600;
+  text-align: center;
   border-radius: 12px;
   border: none;
   background: #173b5e;
   color: #fff;
   margin-bottom: 12px;
+  cursor: pointer;
+}
+
+.take-photo:focus-within {
+  outline: 2px solid #4a90d9;
+  outline-offset: 2px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .status {

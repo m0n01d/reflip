@@ -80,7 +80,11 @@ let handleRoot = (config: Config.t, res: Node.HttpServer.response): unit =>
 let handleStatic = (config: Config.t, pathname: string, res: Node.HttpServer.response): unit => {
   let resolved = Node.Path.join([config.distDir, pathname])
   if String.startsWith(resolved, config.distDir ++ "/") && Node.Fs.existsSync(resolved) {
-    Node.HttpServer.writeHead(res, 200, Dict.fromArray([("Content-Type", contentTypeFor(resolved))]))
+    Node.HttpServer.writeHead(
+      res,
+      200,
+      Dict.fromArray([("Content-Type", contentTypeFor(resolved))]),
+    )
     endWithBuffer(res, Node.Fs.readFileBuffer(resolved))
   } else {
     textResponse(res, 404, "text/plain", "not found")
@@ -210,22 +214,43 @@ let handleScene = async (
   }
 }
 
-let route = async (config: Config.t, req: Node.HttpServer.request, res: Node.HttpServer.response) => {
+let route = async (
+  config: Config.t,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+) => {
   let method = Node.HttpServer.method(req)
   let url = Node.Url.make(Node.HttpServer.url(req), "http://127.0.0.1")
   let pathname = Node.Url.pathname(url)
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
   } else if method == "POST" && pathname == "/api/scene" {
-    let body = await Node.HttpServer.readBody(req)
-    let model =
-      Node.Url.searchParams(url)
-      ->Node.Url.getParam("model")
-      ->Nullable.toOption
-      ->Option.flatMap(Shared.parseModelId)
-      ->Option.getOr(Shared.defaultModel)
-      ->Shared.modelId
-    await handleScene(config, model, body, res)
+    let rawModel = Node.Url.searchParams(url)->Node.Url.getParam("model")->Nullable.toOption
+    switch rawModel {
+    | Some(id) =>
+      switch Shared.parseModelId(id) {
+      | Some(m) => {
+          let body = await Node.HttpServer.readBody(req)
+          await handleScene(config, Shared.modelId(m), body, res)
+        }
+      | None =>
+        jsonResponse(
+          res,
+          400,
+          Json.obj([
+            ("error", Json.str("unknown model id: " ++ id)),
+            (
+              "validModels",
+              Json.arr(Shared.allModels->Array.map(m => Json.str(Shared.modelId(m)))),
+            ),
+          ]),
+        )
+      }
+    | None => {
+        let body = await Node.HttpServer.readBody(req)
+        await handleScene(config, Shared.modelId(Shared.defaultModel), body, res)
+      }
+    }
   } else if method == "GET" {
     handleStatic(config, pathname, res)
   } else {
@@ -243,11 +268,13 @@ let start = (config: Config.t): promise<startResult> =>
   Promise.make((resolve, _reject) => {
     let server = Node.HttpServer.createServer((req, res) =>
       route(config, req, res)
-      ->Promise.catch(err => {
+      ->Promise.catch(
+        err => {
           Console.error2("reflip: unhandled error", err)
           textResponse(res, 500, "text/plain", "internal error")
           Promise.resolve()
-        })
+        },
+      )
       ->Promise.ignore
     )
     Node.HttpServer.listen(server, config.port, "127.0.0.1", () =>

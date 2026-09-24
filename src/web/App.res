@@ -35,7 +35,7 @@ let runPhotoFlow = async (
       dispatch(AppState.UploadOk(reply, rttMs))
       switch await Api.postRtt(reply.sceneId, rttMs, resizeMs) {
       | Error(msg) => dispatch(AppState.RttErr(msg))
-      | Ok () => dispatch(AppState.RttSent)
+      | Ok() => dispatch(AppState.RttSent)
       }
     }
   }
@@ -66,8 +66,7 @@ module EbayBlock = {
             " – " ++
             fmtUsd(stats.maxUsd) ++
             " (median " ++
-            fmtUsd(stats.medianUsd) ++
-            ")",
+            fmtUsd(stats.medianUsd) ++ ")",
           )}
         </div>
       </div>
@@ -92,9 +91,7 @@ module ItemCard = {
             {item.sources
             ->Array.mapWithIndex((src, i) =>
               <li key={Int.toString(i)}>
-                <a href={src} target="_blank" rel="noreferrer">
-                  {React.string(src)}
-                </a>
+                <a href={src} target="_blank" rel="noreferrer"> {React.string(src)} </a>
               </li>
             )
             ->React.array}
@@ -117,7 +114,7 @@ module Footer = {
         {React.string(
           "upload: " ++
           switch model.uploadBytes {
-          | Some(b) => Int.toString(b / 1024) ++ " KB"
+          | Some(b) => toFixed(Int.toFloat(b) /. 1024.0, 1) ++ " KB"
           | None => "—"
           },
         )}
@@ -207,13 +204,16 @@ let make = () => {
         </select>
       </label>
     </div>
-    <input
-      className="take-photo"
-      type_="file"
-      accept="image/*"
-      capture=#environment
-      onChange={onFileChange}
-    />
+    <label className="take-photo">
+      <input
+        className="visually-hidden"
+        type_="file"
+        accept="image/*"
+        capture=#environment
+        onChange={onFileChange}
+      />
+      {React.string("Take photo")}
+    </label>
     <div className="status"> {React.string(statusText(model.status))} </div>
     {switch model.reply {
     | None => React.null
