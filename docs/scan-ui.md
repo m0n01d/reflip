@@ -27,8 +27,8 @@ wave split for the work still to do.
 ## 2. Event contract
 
 Every event `POST /api/scene/stream` can send, from `src/stream/ScanEvent.res`.
-The four `spot-*` rows are defined and tested, but the route does not send
-them yet (decision 1 above plans them for a later wave).
+The four `spot-*` rows come from the spot pass, a second, toolless Claude
+call that runs next to the priced call (decision 1 above).
 
 | Event | Data fields | When sent |
 |---|---|---|
@@ -46,10 +46,10 @@ them yet (decision 1 above plans them for a later wave).
 | `scene` | the scene reply itself (no wrapper) | Once, after eBay prices are merged in, right after `done` |
 | `error` | t, message | On a decode error for one item, or on a Claude API failure, a timeout, or a missing API key |
 | `stop` | t | When the phone closes the connection before the scene ends |
-| `spot-started` | t, inputTokens | Not sent yet. Will fire when the spot pass starts |
-| `spot-item` | t, index, name, box | Not sent yet. Will fire once for each item the spot pass finds |
-| `spot-done` | t, claudeMs, inputTokens, outputTokens, usd | Not sent yet. Will fire when the spot pass ends |
-| `spot-failed` | t, message | Not sent yet. Will fire if the spot pass fails |
+| `spot-started` | t, inputTokens | When the spot pass's Claude stream sends `message_start` |
+| `spot-item` | t, index, name, box | Once for each item the spot pass finds |
+| `spot-done` | t, claudeMs, inputTokens, outputTokens, usd | When the spot pass's Claude stream sends `message_stop` |
+| `spot-failed` | t, message | If the spot pass fails, times out, or finds no fixture in fixture mode |
 | `end` | t, status (`done`, `stopped`, `failed`, or `timeout`) | Always last, once for every scene |
 
 `ScanEvent.res` has no Node import. `src/web/` can import it too, the same
