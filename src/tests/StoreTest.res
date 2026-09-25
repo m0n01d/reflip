@@ -270,6 +270,7 @@ let run = () => {
     soldOn: None,
     soldWhere: None,
     createdAt: "2026-09-24T09:10:00.000Z",
+    size: "10 in skillet",
     box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
   }
   Store.insertFind(db, find)
@@ -289,20 +290,23 @@ let run = () => {
         "findsOf round-trips a box",
         f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
       )
+      TestKit.check("findsOf round-trips size", f.size == "10 in skillet")
     }
   | None => TestKit.check("findsOf returned a row", false)
   }
 
-  // -- migrating a pre-box finds table on open ---------------------------------
-  TestKit.section("Store: migrates a finds table with no box columns")
+  // -- migrating a pre-box, pre-size finds table on open ------------------------
+  TestKit.section("Store: migrates a finds table with no box or size columns")
 
-  let migDir = Node.Path.join([Node.Os.tmpdir(), "reflip-store-test-" ++ Node.Crypto.randomUUID()])
-  Node.Fs.mkdirSync(migDir, {recursive: true})
-  let migPath = Node.Path.join([migDir, "old.db"])
+  let migPath = Node.Path.join([
+    Node.Os.tmpdir(),
+    "reflip-store-test-" ++ Node.Crypto.randomUUID() ++ ".db",
+  ])
 
-  // The pre-box `finds` schema, hand-built with the raw Sqlite binding —
-  // the same shape Store.openAt's own CREATE TABLE IF NOT EXISTS wrote
-  // before this change, and so a no-op against a DB that already has it.
+  // The pre-box, pre-size `finds` schema, hand-built with the raw Sqlite
+  // binding — the same shape Store.openAt's own CREATE TABLE IF NOT EXISTS
+  // wrote before this change, and so a no-op against a DB that already has
+  // both columns.
   let oldDb = Sqlite.make(migPath)
   Sqlite.exec(
     oldDb,
@@ -362,6 +366,7 @@ let run = () => {
       soldOn: None,
       soldWhere: None,
       createdAt: "2026-09-24T12:00:02.000Z",
+      size: "10 in",
       box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
     },
   )
@@ -369,14 +374,31 @@ let run = () => {
   let migFinds = Store.findsOf(migDb, "haul-mig")
   TestKit.check("a DB with the old finds schema opens and stores a find", Array.length(migFinds) == 1)
   switch Array.get(migFinds, 0) {
-  | Some(f) =>
-    TestKit.check(
-      "the migrated columns round-trip a box",
-      f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
-    )
+  | Some(f) => {
+      TestKit.check(
+        "the migrated columns round-trip a box",
+        f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      )
+      TestKit.check("the migrated columns round-trip size", f.size == "10 in")
+    }
   | None => TestKit.check("findsOf returned the migrated find", false)
   }
   Store.close(migDb)
+
+  // Opening the same file again must not fail now that both columns exist.
+  let reopened = Store.openAt(migPath)
+  let selectFind = db =>
+    Sqlite.get(Sqlite.prepare(db, "SELECT * FROM finds WHERE findId = ?"), [Sqlite.Text("find-mig")])
+    ->Option.flatMap(Store.decodeFind)
+  switch selectFind(reopened) {
+  | Some(f) =>
+    TestKit.check(
+      "a second open keeps the find, its box and its size",
+      f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}) && f.size == "10 in",
+    )
+  | None => TestKit.check("the find survives a second open", false)
+  }
+  Store.close(reopened)
 
   // -- migrating a pre-size scenes table on open --------------------------------
   TestKit.section("Store: migrates a scenes table with no size columns")

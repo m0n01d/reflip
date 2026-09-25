@@ -6,7 +6,7 @@ Claude, and matching eBay active-listing stats.
 
 <img src="docs/shots/reflip-empty.png" width="220" alt="empty">
 <img src="docs/shots/reflip-results.png" width="220" alt="results">
-<img src="docs/shots/haul-view-crops-after.png" width="220" alt="haul">
+<img src="docs/shots/haul-view-crops-live.png" width="220" alt="haul">
 
 ## Run it
 

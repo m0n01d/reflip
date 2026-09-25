@@ -13,6 +13,9 @@ type claudeItem = {
   // Haul mode only (step 4): where the item sits in the photo. None for a
   // scene-mode reply.
   where: option<string>,
+  // The item's size, when size decides what it is or what it sells for.
+  // Empty string when size does not matter or the model left it out.
+  size: string,
   // Raw [x1, y1, x2, y2] from Claude's reply, in pixels of the photo Claude
   // saw. Not yet validated, clamped, or rescaled — Box.decode does that
   // once the sent photo's size and the model's tier are known. Scene mode
@@ -47,6 +50,7 @@ type replyItem = {
   sources: array<string>,
   ebay: option<ebayStats>,
   soldSearchUrl: string,
+  size: string,
   box: option<box>,
 }
 
@@ -88,6 +92,7 @@ type haulGem = {
   box: option<box>,
   imageWidth: option<int>,
   imageHeight: option<int>,
+  size: string,
 }
 
 type failedPhoto = {
@@ -135,6 +140,7 @@ type sceneReply = {
   // Additive beyond the brief's reply shape: null unless the eBay stats
   // were skipped, in which case this says why. See reflip's CLAUDE.md.
   ebayNote: option<string>,
+  quarterSeen: bool,
 }
 
 // -- JSON encoding (the only direction the HTTP reply needs) --------------
@@ -174,6 +180,7 @@ let encodeReplyItem = (it: replyItem): JSON.t =>
       },
     ),
     ("soldSearchUrl", Json.str(it.soldSearchUrl)),
+    ("size", Json.str(it.size)),
     (
       "box",
       switch it.box {
@@ -218,6 +225,7 @@ let encodeSceneReply = (r: sceneReply): JSON.t =>
       | None => JSON.Encode.null
       },
     ),
+    ("quarterSeen", Json.boolJ(r.quarterSeen)),
   ])
 
 // -- Haul mode JSON encoding -------------------------------------------------
@@ -266,6 +274,7 @@ let encodeHaulGem = (g: haulGem): JSON.t =>
       | None => JSON.Encode.null
       },
     ),
+    ("size", Json.str(g.size)),
   ])
 
 let encodeFailedPhoto = (f: failedPhoto): JSON.t =>

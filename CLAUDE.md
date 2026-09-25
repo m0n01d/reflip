@@ -138,8 +138,13 @@ The script prints one JSON result line and puts its screenshots in the output di
 node scripts/haul-smoke.mjs
 ```
 
+## Live keys
+
+`~/.config/reflip/env` has all five secrets since 2026-09-25. The first live haul ran that day: 3 photos, $0.42 in Claude, one email sent. `EbayClient.statsFor` returned live eBay stats for the three fixture items the same day.
+
+The eBay keys must come from the Production keyset on developer.ebay.com. The App ID contains `-PRD-` and the Cert ID starts with `PRD-`. `api.ebay.com` gives a 401 `invalid_client` to a Sandbox key (`SBX`). It also gives that 401 to a new Production keyset until you opt out of marketplace account deletion notifications. reflip keeps no eBay user data, so the opt-out applies.
+
 ## What is not built yet
 
-- eBay keys. `~/.config/reflip/env` has `ANTHROPIC_API_KEY`, `GMAIL_USER` and `GMAIL_APP_PASSWORD`, but no eBay keys. The first live haul ran on 2026-09-25: 3 photos, $0.42 in Claude, one email sent.
 - `tailscale serve` in front of this server.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.

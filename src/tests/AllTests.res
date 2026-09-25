@@ -14,6 +14,7 @@ AppStateTest.run()
 DigestTest.run()
 ThumbTest.run()
 CropTest.run()
+ScaleRefTest.run()
 BoxLayoutTest.run()
 Console.log("all sync tests passed")
 
@@ -26,6 +27,7 @@ let () =
   ->Promise.then(() => SharedDecodeTest.run())
   ->Promise.then(() => StaticServeTest.run())
   ->Promise.then(() => ClaudeTimeoutTest.run())
+  ->Promise.then(() => ClaudeCutOffTest.run())
   ->Promise.then(() => HaulTest.run())
   ->Promise.then(() => HaulEmailTest.run())
   ->Promise.then(() => {

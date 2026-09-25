@@ -48,6 +48,11 @@ let run = async () => {
         "decoded items each have a sold-search URL",
         Array.every(reply.items, item => String.length(item.soldSearchUrl) > 0),
       )
+      TestKit.check("decoded reply carries quarterSeen from the fixture (true)", reply.quarterSeen)
+      TestKit.check(
+        "decoded items carry a size, including the empty-string and missing cases",
+        Array.map(reply.items, item => item.size) == ["", "10 in", ""],
+      )
       TestKit.check(
         "decoded reply's imageWidth/imageHeight match the real fixture photo (64x48)",
         reply.imageWidth == 64 && reply.imageHeight == 48,
