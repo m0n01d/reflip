@@ -120,6 +120,7 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
         soldOn: None,
         soldWhere: None,
         createdAt: now,
+        size: item.size,
       },
     )
   })
@@ -128,7 +129,7 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
 type outcome =
   | Success(float, float) // costUsd, claudeMs
   | RetryLater(string) // 429/529 — scene stays queued
-  | Failed(string) // everything else, including a missing photo
+  | Failed(string, option<float>, option<float>) // error, costUsd, claudeMs — everything else, including a missing photo; a cut-off reply is billed, so it carries its cost
 
 let claudeErrorText = (err: ClaudeClient.callError): string =>
   switch err {
@@ -138,12 +139,12 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
   | ClaudeClient.Timeout(ms) =>
     "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
   | ClaudeClient.DecodeFailed(_) => "could not decode Claude's reply"
-  | ClaudeClient.CutOff => "reply cut off"
+  | ClaudeClient.CutOff(_) => "reply cut off"
   }
 
 let runScene = async (t: t, scene: Store.scene): outcome =>
   switch readPhotoBase64(scene.photoPath) {
-  | None => Failed("could not read photo: " ++ scene.photoPath)
+  | None => Failed("could not read photo: " ++ scene.photoPath, None, None)
   | Some(imageBase64) => {
       let model = Shared.modelId(Shared.defaultModel)
       let claudeStart = Date.now()
@@ -168,10 +169,31 @@ let runScene = async (t: t, scene: Store.scene): outcome =>
         }
       | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
         RetryLater(claudeErrorText(err))
-      | Error(err) => Failed(claudeErrorText(err))
+      | Error(ClaudeClient.CutOff(raw) as err) => {
+          let claudeMs = Date.now() -. claudeStart
+          let costUsd = Pricing.usdCost(~model, ~usage=ClaudeClient.usageOfResponse(raw))
+          Failed(claudeErrorText(err), Some(costUsd), Some(claudeMs))
+        }
+      | Error(err) => Failed(claudeErrorText(err), None, None)
       }
     }
   }
+
+// Adds a scene's Claude spend to the haul and stops the haul when the total
+// reaches the budget. A cut-off (failed) scene is real spend too.
+let addCostAndCheckBudget = (t: t, ~haulId: string, costUsd: float): unit => {
+  let total = Store.addHaulCost(t.store, ~haulId, costUsd)
+  if total >= t.config.haulMaxUsd {
+    Store.stopHaul(
+      t.store,
+      ~haulId,
+      ~reason="budget reached: $" ++
+      Float.toFixed(total, ~digits=2) ++
+      " of $" ++
+      Float.toFixed(t.config.haulMaxUsd, ~digits=2),
+    )
+  }
+}
 
 let rec kick = (t: t): unit =>
   if t.running < t.config.haulConcurrency && Date.now() >= t.pausedUntil {
@@ -190,22 +212,12 @@ and process = async (t: t, scene: Store.scene): unit => {
   let outcome = try {
     await runScene(t, scene)
   } catch {
-  | JsExn(e) => Failed(JsExn.message(e)->Option.getOr("unknown error"))
+  | JsExn(e) => Failed(JsExn.message(e)->Option.getOr("unknown error"), None, None)
   }
   switch outcome {
   | Success(costUsd, _claudeMs) => {
       resetStreak(t, scene.haulId)
-      let total = Store.addHaulCost(t.store, ~haulId=scene.haulId, costUsd)
-      if total >= t.config.haulMaxUsd {
-        Store.stopHaul(
-          t.store,
-          ~haulId=scene.haulId,
-          ~reason="budget reached: $" ++
-          Float.toFixed(total, ~digits=2) ++
-          " of $" ++
-          Float.toFixed(t.config.haulMaxUsd, ~digits=2),
-        )
-      }
+      addCostAndCheckBudget(t, ~haulId=scene.haulId, costUsd)
     }
   | RetryLater(msg) => {
       Store.setStatus(t.store, ~sceneId=scene.sceneId, Store.Queued)
@@ -221,8 +233,11 @@ and process = async (t: t, scene: Store.scene): unit => {
         Node.Timer.setTimeout(() => kick(t), retryMsFor(t.config))
       }
     }
-  | Failed(msg) => {
-      Store.failScene(t.store, ~sceneId=scene.sceneId, ~error=msg, ~costUsd=None, ~claudeMs=None)
+  | Failed(msg, costUsd, claudeMs) => {
+      Store.failScene(t.store, ~sceneId=scene.sceneId, ~error=msg, ~costUsd, ~claudeMs)
+      // The budget check runs first. stopHaul keeps the first reason, so when
+      // one scene hits both limits, "budget reached" wins over the streak.
+      costUsd->Option.forEach(usd => addCostAndCheckBudget(t, ~haulId=scene.haulId, usd))
       let streak = bumpStreak(t, scene.haulId)
       if streak >= failStreakLimit {
         Store.stopHaul(

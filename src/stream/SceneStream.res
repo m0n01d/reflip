@@ -40,23 +40,6 @@ type model = {
 type msg = Event(ClaudeEvents.t)
 
 module ItemDecode = {
-  let claudeItem: D.t<Types.claudeItem> = D.object(field => {
-      let maker = field.optional("maker", D.string)->Option.flatMap(m => m == "" ? None : Some(m))
-      let sources = field.optional("sources", D.array(D.string))->Option.getOr([])
-      {
-        Types.name: field.required("name", D.string),
-        maker,
-        query: field.required("query", D.string),
-        estimateLowUsd: field.required("estimateLowUsd", D.float),
-        estimateHighUsd: field.required("estimateHighUsd", D.float),
-        basis: field.required("basis", D.string),
-        confidence: field.required("confidence", D.float),
-        sources,
-        where: field.optional("where", D.string),
-        box: field.optional("box", D.array(D.float)),
-      }
-    })
-
   let query: D.t<option<string>> = D.object(field => field.optional("query", D.string))
 }
 
@@ -94,6 +77,17 @@ let items = (model: model): array<Types.claudeItem> => model.items
 let usage = (model: model): Types.usage => model.usage
 let finalText = (model: model): string => model.text
 
+// The top-level quarterSeen the final text's JSON carries, read the same
+// way ClaudeClient.decodeResponse reads it from the non-streaming reply:
+// Json.boolField with the same false fallback. False when the text is not
+// (yet) valid JSON, such as a scene that stopped before quarterSeen ever
+// streamed.
+let quarterSeen = (model: model): bool =>
+  switch JSON.parseOrThrow(model.text) {
+  | parsed => Json.boolField(parsed, "quarterSeen")->Option.getOr(false)
+  | exception JsExn(_) => false
+  }
+
 let findOpenBlock = (openBlocks: array<(int, openBlock)>, index: int): option<openBlock> =>
   Array.find(openBlocks, ((i, _)) => i == index)->Option.map(((_, b)) => b)
 
@@ -118,7 +112,11 @@ let applyFound = (model: model, found: ItemScanner.found): (model, array<logEven
       [BoxFound({index, box})],
     )
   | ItemScanner.ItemClosed({index, json}) =>
-      switch JsonCombinators.Json.decode(json, ItemDecode.claudeItem) {
+      // Reuse ClaudeClient.decodeItem, the non-streaming route's own item
+      // decoder, instead of a second, hand-rolled copy of the same field
+      // list. One place knows what an item's JSON looks like, size
+      // included.
+      switch ClaudeClient.decodeItem(json) {
       | Ok(claudeItem) =>
           let (_, model2) = takeBoxFor(model, index)
           (

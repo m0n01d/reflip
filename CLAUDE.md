@@ -125,8 +125,13 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 
 `tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Nothing there came from a real API call.
 
+## Live keys
+
+`~/.config/reflip/env` has all five secrets since 2026-09-25. The first live haul ran that day: 3 photos, $0.42 in Claude, one email sent. `EbayClient.statsFor` returned live eBay stats for the three fixture items the same day.
+
+The eBay keys must come from the Production keyset on developer.ebay.com. The App ID contains `-PRD-` and the Cert ID starts with `PRD-`. `api.ebay.com` gives a 401 `invalid_client` to a Sandbox key (`SBX`). It also gives that 401 to a new Production keyset until you opt out of marketplace account deletion notifications. reflip keeps no eBay user data, so the opt-out applies.
+
 ## What is not built yet
 
-- eBay keys. `~/.config/reflip/env` has `ANTHROPIC_API_KEY`, `GMAIL_USER` and `GMAIL_APP_PASSWORD`, but no eBay keys. The first live haul ran on 2026-09-25: 3 photos, $0.42 in Claude, one email sent.
 - The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, and a way to keep the brain running.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.

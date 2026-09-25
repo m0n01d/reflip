@@ -226,6 +226,7 @@ let buildSceneReply = async (
   ~outputPath: string,
   ~items: array<Types.claudeItem>,
   ~usage: Types.usage,
+  ~quarterSeen: bool,
 ): Types.sceneReply => {
   let ebayStart = Date.now()
   let merged = await Promise.all(
@@ -250,6 +251,7 @@ let buildSceneReply = async (
       sources: item.sources,
       ebay,
       soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+      size: item.size,
       box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
     }
   })
@@ -273,6 +275,7 @@ let buildSceneReply = async (
     timing: {Types.serverMs, claudeMs, ebayMs},
     cost,
     ebayNote,
+    quarterSeen,
   }
 }
 
@@ -392,8 +395,52 @@ let handleScene = async (
         }
       | Error(ClaudeClient.DecodeFailed(_)) =>
         jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
-      | Error(ClaudeClient.CutOff) =>
-        jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
+      | Error(ClaudeClient.CutOff(raw)) => {
+          let claudeMs = Date.now() -. claudeStart
+          let sceneId = Node.Crypto.randomUUID()
+          let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, raw)
+          let usage = ClaudeClient.usageOfResponse(raw)
+          let cost: Types.cost = {
+            Types.usd: Pricing.usdCost(~model, ~usage),
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            cacheReadTokens: usage.cacheReadInputTokens,
+            cacheWriteTokens: usage.cacheCreationInputTokens,
+            webSearches: usage.webSearchRequests,
+          }
+          SceneLog.appendLine(
+            config.dataDir,
+            Json.obj([
+              ("sceneId", Json.str(sceneId)),
+              ("model", Json.str(model)),
+              ("error", Json.str("reply cut off")),
+              ("stopReason", Json.str("max_tokens")),
+              ("outputPath", Json.str(outputPath)),
+              ("imageWidth", Json.num(Int.toFloat(sentWidth))),
+              ("imageHeight", Json.num(Int.toFloat(sentHeight))),
+              ("timing", Json.obj([("claudeMs", Json.num(claudeMs))])),
+              ("cost", Types.encodeCost(cost)),
+            ]),
+          )
+          Console.error(
+            "reflip: scene " ++
+            sceneId ++
+            " cut off, " ++
+            Int.toString(usage.outputTokens) ++
+            " output tokens, " ++
+            Int.toString(usage.webSearchRequests) ++
+            " web searches, $" ++
+            Float.toString(cost.usd),
+          )
+          jsonResponse(
+            res,
+            502,
+            Json.obj([
+              ("error", Json.str("reply cut off")),
+              ("sceneId", Json.str(sceneId)),
+            ]),
+          )
+        }
       | Ok(decoded) => {
           let claudeMs = Date.now() -. claudeStart
           let sceneId = Node.Crypto.randomUUID()
@@ -409,6 +456,7 @@ let handleScene = async (
             ~outputPath,
             ~items=decoded.items,
             ~usage=decoded.usage,
+            ~quarterSeen=decoded.quarterSeen,
           )
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
           jsonResponse(res, 200, Types.encodeSceneReply(reply))

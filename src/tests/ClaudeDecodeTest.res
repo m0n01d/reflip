@@ -12,6 +12,15 @@ let run = () => {
       TestKit.check("fixture has 3 items", Array.length(decoded.items) == 3)
       TestKit.check("fixture usage has 2 web searches", decoded.usage.webSearchRequests == 2)
       TestKit.check("scene fixture has no otherCount", decoded.otherCount == None)
+      TestKit.check("scene fixture reports quarterSeen true", decoded.quarterSeen == true)
+      TestKit.check(
+        "scene fixture's skillet has a size",
+        Array.get(decoded.items, 1)->Option.map(i => i.size) == Some("10 in"),
+      )
+      TestKit.check(
+        "scene fixture's board game lot has no size key, decoded as an empty string",
+        Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
+      )
     }
   | Error(_) => TestKit.check("fixture decodes", false)
   }
@@ -60,6 +69,14 @@ let run = () => {
         Array.get(decoded.items, 0)->Option.flatMap(i => i.where)->Option.isSome,
       )
       TestKit.check("haul fixture otherCount is 12", decoded.otherCount == Some(12))
+      TestKit.check(
+        "haul fixture's skillet has a size",
+        Array.get(decoded.items, 1)->Option.map(i => i.size) == Some("No. 8"),
+      )
+      TestKit.check(
+        "haul fixture's brooch has no size key, decoded as an empty string",
+        Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
+      )
       // The haul prompt asks for no box, so a haul item decodes with None.
       TestKit.check(
         "haul fixture items have no box",
@@ -67,6 +84,39 @@ let run = () => {
       )
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)
+  }
+
+  // A reply with no size on its item and no top-level quarterSeen at all —
+  // both should decode to their defaults, not fail the decode.
+  let noScaleRefFields = Json.obj([
+    (
+      "content",
+      Json.arr([
+        Json.obj([
+          (
+            "type",
+            Json.str("text"),
+          ),
+          (
+            "text",
+            Json.str(
+              "{\"items\": [{\"name\": \"Mystery item\", \"maker\": \"\", \"query\": \"mystery item\", \"estimateLowUsd\": 1, \"estimateHighUsd\": 2, \"basis\": \"guess\", \"confidence\": 0.1, \"sources\": []}]}",
+            ),
+          ),
+        ]),
+      ]),
+    ),
+    ("usage", Json.obj([("input_tokens", Json.num(1.0)), ("output_tokens", Json.num(1.0))])),
+  ])
+  switch ClaudeClient.decodeResponse(noScaleRefFields) {
+  | Ok(decoded) => {
+      TestKit.check(
+        "a missing size on an item decodes as an empty string",
+        Array.get(decoded.items, 0)->Option.map(i => i.size) == Some(""),
+      )
+      TestKit.check("a missing top-level quarterSeen decodes as false", decoded.quarterSeen == false)
+    }
+  | Error(_) => TestKit.check("a reply with no scale-ref fields still decodes", false)
   }
 
   // A reply cut short by the token limit is a different callError, not a
@@ -83,7 +133,7 @@ let run = () => {
     ("usage", Json.obj([("input_tokens", Json.num(1.0)), ("output_tokens", Json.num(1.0))])),
   ])
   switch ClaudeClient.parseClaudeJson(maxTokensJson) {
-  | Error(ClaudeClient.CutOff) => TestKit.check("stop_reason max_tokens gives CutOff", true)
+  | Error(ClaudeClient.CutOff(_)) => TestKit.check("stop_reason max_tokens gives CutOff", true)
   | _ => TestKit.check("stop_reason max_tokens should give CutOff", false)
   }
 

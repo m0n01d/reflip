@@ -136,13 +136,18 @@ let runHappyPath = async () => {
     switch JsonCombinators.Json.parse(e.data) {
     | Error(_) => TestKit.check("scene event data parses as JSON", false)
     | Ok(json) =>
-      TestKit.check(
-        "scene event decodes with Shared.decodeSceneReply",
-        switch Shared.decodeSceneReply(json) {
-        | Ok(_) => true
-        | Error(_) => false
-        },
-      )
+      switch Shared.decodeSceneReply(json) {
+      | Error(_) => TestKit.check("scene event decodes with Shared.decodeSceneReply", false)
+      | Ok(decoded) =>
+        TestKit.check("scene event decodes with Shared.decodeSceneReply", true)
+        // The stream path carries main's size and quarterSeen fields the
+        // same as the non-streaming /api/scene route does.
+        TestKit.check("the scene event reports quarterSeen", decoded.quarterSeen == true)
+        TestKit.check(
+          "the scene event carries an item's size from the stream",
+          Array.get(decoded.items, 1)->Option.map(i => i.size) == Some("10 in"),
+        )
+      }
     }
   }
 

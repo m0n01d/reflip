@@ -146,7 +146,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"es.test/pyrex-bow"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ls\"]}, {\"name\": \""}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ls\"], \"size\": \"\"}, {\"name\": \""}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"Cast iron skillet"}}
@@ -203,7 +203,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"tibles.test/cast-"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"iron-skillets\"]},"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"iron-skillets\"], \"size\": \"10 in\"},"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" {\"name\": \"Board "}}
@@ -248,7 +248,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"4, \"sources\":"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" []}]}"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" []}], \"quarterSeen\": true}"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":7}

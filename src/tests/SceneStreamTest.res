@@ -151,6 +151,14 @@ let checkAtChunkSize = (chunkSize: int) => {
     label ++ ": items equal ClaudeClient.decodeResponse on claude-scene.json",
     itemArraysEqual(items, expectedItems),
   )
+  TestKit.check(
+    label ++ ": an item's size arrives from the stream",
+    Array.get(items, 1)->Option.map(i => i.size) == Some("10 in"),
+  )
+  TestKit.check(
+    label ++ ": quarterSeen arrives from the stream",
+    SceneStream.quarterSeen(model) == true,
+  )
 }
 
 let run = () => {
