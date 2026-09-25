@@ -36,6 +36,20 @@
   color: var(--scan-ink);
   font-family: var(--scan-font-display);
   -webkit-font-smoothing: antialiased;
+  /* Ready screen (gap 1/F1): the shell itself reaches the full small
+     viewport height, so .scan-ready below can be `flex: 1` into whatever
+     is left after the header and the mode switch, with no hard-coded
+     height for either one. svh (not vh/dvh): the guaranteed-visible
+     height with iOS Safari's toolbars shown — vh is the LARGER
+     toolbars-hidden height, which is what pushed .scan-ready-actions's
+     flex-grow spacer (and the settings chip after it) below what is
+     actually on screen with toolbars showing. Same background-color as
+     `body:has(.scan-shell)` below, so a shell shorter than 100svh
+     (Live/Done/Haul) still looks exactly like before — this only moves
+     WHERE that fill color paints from, not its value. */
+  display: flex;
+  flex-direction: column;
+  min-height: 100svh;
 }
 
 /* Scan mode's own background must fill the whole page, not just the shell's
@@ -173,13 +187,14 @@ body:has(.scan-shell) {
 /* -- Ready screen --------------------------------------------------------- */
 
 .scan-ready {
-  /* svh (small viewport height): the guaranteed-visible height with iOS
-     Safari's toolbars shown. 100vh there is the LARGER toolbars-hidden
-     height, so a min-height keyed to it pushes .scan-ready-actions's
-     flex-grow spacer (and the settings chip after it) past what's
-     actually on screen with toolbars showing (gap 1). svh never assumes
-     the toolbars collapse, unlike dvh. */
-  min-height: calc(100svh - 56px - 2px);
+  /* flex: 1 (not a min-height calc): .scan-shell above is now the one
+     min-height:100svh box, so this just takes whatever is left after the
+     header and the mode switch — no hard-coded height to keep in sync
+     with either one. The original gap-1 fix (100vh -> 100svh here) still
+     did not subtract the mode switch's own height (a 52px box plus
+     margin), so the chip stayed clipped; a second magic number
+     (calc(100svh - 110px)) would only have moved the bug, not fixed it. */
+  flex: 1;
   display: flex;
   flex-direction: column;
   padding: 0 16px;
