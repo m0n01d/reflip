@@ -170,9 +170,15 @@ let make = (
               ->Array.mapWithIndex((pair, i) => {
                 let (s, box) = pair
                 let (left, top) = boxCenterPct(box, model.sentWidth, model.sentHeight)
-                let half = Option.getOr(Array.get(halfSizes, i), 22.0)
-                let hw = pctOf(half *. 2.0, Int.toFloat(model.sentWidth))
-                let hh = pctOf(half *. 2.0, Int.toFloat(model.sentHeight))
+                // halfSizes is array<option<float>> (None = a lone pin, no
+                // neighbor to size against) — Array.get adds its own option
+                // layer, so flatten before handing it to pinSizeCss.
+                let half = switch Array.get(halfSizes, i) {
+                | Some(h) => h
+                | None => None
+                }
+                let hw = BoxLayout.pinSizeCss(half, Int.toFloat(model.sentWidth))
+                let hh = BoxLayout.pinSizeCss(half, Int.toFloat(model.sentHeight))
                 let latest = isLatest(s.number)
                 let gem = s.item->Option.mapOr(false, isGem)
                 <button
