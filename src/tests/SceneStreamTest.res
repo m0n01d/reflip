@@ -43,8 +43,11 @@ let expectedKinds = [
   "ToolRunDone",
   "SearchStarted",
   "SearchFailed",
+  "BoxFound",
   "ItemFound",
+  "BoxFound",
   "ItemFound",
+  "BoxFound",
   "ItemFound",
   "Finished",
 ]
@@ -57,7 +60,9 @@ let claudeItemsEqual = (a: Types.claudeItem, b: Types.claudeItem): bool =>
   a.estimateHighUsd == b.estimateHighUsd &&
   a.basis == b.basis &&
   a.confidence == b.confidence &&
-  Array.join(a.sources, "|") == Array.join(b.sources, "|")
+  Array.join(a.sources, "|") == Array.join(b.sources, "|") &&
+  a.size == b.size &&
+  a.box == b.box
 
 let itemArraysEqual = (a: array<Types.claudeItem>, b: array<Types.claudeItem>): bool =>
   if Array.length(a) != Array.length(b) {
@@ -138,7 +143,7 @@ let checkAtChunkSize = (chunkSize: int) => {
   | _ => TestKit.check(label ++ ": search failed code present", false)
   }
 
-  switch Array.get(logs, 11) {
+  switch Array.get(logs, 14) {
   | Some(SceneStream.Finished({stopReason, usage})) =>
       TestKit.check(label ++ ": finished stop reason", stopReason == "end_turn")
       TestKit.check(label ++ ": finished web search requests", usage.webSearchRequests == 2)
@@ -151,6 +156,14 @@ let checkAtChunkSize = (chunkSize: int) => {
     label ++ ": items equal ClaudeClient.decodeResponse on claude-scene.json",
     itemArraysEqual(items, expectedItems),
   )
+  TestKit.check(
+    label ++ ": an item's size arrives from the stream",
+    Array.get(items, 1)->Option.map(i => i.size) == Some("10 in"),
+  )
+  TestKit.check(
+    label ++ ": quarterSeen arrives from the stream",
+    SceneStream.quarterSeen(model) == true,
+  )
 }
 
 let run = () => {
@@ -161,4 +174,12 @@ let run = () => {
   checkAtChunkSize(len)
   checkAtChunkSize(97)
   checkAtChunkSize(5)
+
+  TestKit.section("SceneStream.quarterSeen (wrapped JSON fallback)")
+  let wrapped = "Here is the result:\n{\"quarterSeen\": true, \"items\": []}\nEnd of output."
+  let wrappedModel = {...SceneStream.init, text: wrapped}
+  TestKit.check(
+    "quarterSeen is true when the final text has prose around the JSON",
+    SceneStream.quarterSeen(wrappedModel) == true,
+  )
 }

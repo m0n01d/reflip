@@ -86,7 +86,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"xing "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowl set\", \"maker"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowl set\", \"box\": [2, 4, 20, 30], \"maker"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"Pyrex\", \"quer"}}
@@ -146,13 +146,13 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"es.test/pyrex-bow"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ls\"]}, {\"name\": \""}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ls\"], \"size\": \"\"}, {\"name\": \""}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"Cast iron skillet"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"maker\": \"\", \""}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"box\": [24, 6, 42, 28], \"maker\": \"\", \""}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"query\": \"vintage "}}
@@ -203,13 +203,13 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"tibles.test/cast-"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"iron-skillets\"]},"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"iron-skillets\"], \"size\": \"10 in\"},"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" {\"name\": \"Board "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"game lot\", \"maker"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"game lot\", \"box\": [46, 2, 62, 34], \"maker"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"\", \"query\": \""}}
@@ -248,7 +248,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"4, \"sources\":"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" []}]}"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" []}], \"quarterSeen\": true}"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":7}

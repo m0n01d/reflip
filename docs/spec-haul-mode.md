@@ -31,6 +31,9 @@ A haul is the set of photos from one visit. A gem is an item that is worth enoug
 The phone page:
 
 - A haul view: Start haul, Take photo, Add photos, the counts, the gems so far, and Done.
+- Each gem card shows a crop of its item, as the item card in the scene view does. `BoxLayout.res` gives the crop, with a 10% margin around the box.
+- The crop loads the photo from `GET /api/scenes/:id/photo`. A gem with no box, or with no stored photo size, shows the text "no box" and no crop.
+- A tap on a gem card opens its full photo under the card, with the box of the gem drawn on it. A second tap closes it. One card at a time is open.
 - Add photos is `<input type="file" multiple accept="image/*">` with no `capture` attribute, so iOS opens the photo library.
 - The photo queue lives in IndexedDB, through `idb-keyval`. `WebApi.res` gets typed bindings for `get`, `set`, `del` and `keys`. The key of each entry is `q|<haulId>|<clientId>`, and its value is the resized JPEG blob. The client ID comes from `crypto.randomUUID`.
 - The key `haul` holds the ID of the current haul. After a reload, the page reads it and shows that haul again.
@@ -40,10 +43,10 @@ The phone page:
 
 The brain:
 
-- Store: SQLite through `node:sqlite`, in `data/reflip.db`, as M1 decided. The `DATA_DIR` variable moves the `data/` folder, for example to a temp folder for a test. `src/bindings/` gets typed externals for the `DatabaseSync` calls that the store uses. Each row decode returns an option.
+- Store: SQLite through `node:sqlite`, in `data/reflip.db`, as M1 decided. The `DATA_DIR` variable moves the `data/` folder, for example to a temp folder for a test. `src/bindings/` gets typed externals for the `DatabaseSync` calls that the store uses. Each row decode returns an option. If the store opens an old database with no box columns or no size columns, it adds them before it runs queries.
 - Table `hauls`: `haulId`, `name`, `startedAt`, `doneAt`, `emailedAt`, `costUsd`, `stopReason`, `emailNote`. `stopReason` tells why the worker stopped the haul. `emailNote` tells where the digest went, or why it did not go.
-- Table `scenes`: `sceneId`, `haulId`, `clientId`, `status` (queued, running, done, failed), `photoPath`, `error`, `costUsd`, `claudeMs`, `otherCount`, `createdAt`. The pair `haulId` and `clientId` is unique.
-- Table `finds`: the M1 table with the M1 column names. Haul mode writes one row for each item in the reply. It fills `sceneId`, which M1 already had, and adds the columns `query`, `where` and `ebayJson`. `query` is the eBay search text from Claude. `ebayJson` holds the eBay stats for that find, or null. M1 adds the paid and sold entries later.
+- Table `scenes`: `sceneId`, `haulId`, `clientId`, `status` (queued, running, done, failed), `photoPath`, `error`, `costUsd`, `claudeMs`, `otherCount`, `createdAt`, `imageWidth`, `imageHeight`. The pair `haulId` and `clientId` is unique. `imageWidth` and `imageHeight` are the size of the stored photo in pixels, as nullable INTEGER. The upload route reads them with `JpegSize.res`. If it cannot read them, both are null. Scenes from before 2026-09-25 keep null.
+- Table `finds`: the M1 table with the M1 column names. Haul mode writes one row for each item in the reply. It fills `sceneId`, which M1 already had, and adds the columns `query`, `where`, `ebayJson`, `boxX1`, `boxY1`, `boxX2` and `boxY2`. `query` is the eBay search text from Claude. `ebayJson` holds the eBay stats for that find, or null. The four box columns are nullable INTEGER, one for each side of the item's box in pixels. A find with no box has null in all four. M1 adds the paid and sold entries later.
 - Photos: `data/photos/<sceneId>.jpg`. `data/` is gitignored.
 - The worker is a queue inside the brain process. It runs at most `HAUL_CONCURRENCY` Claude calls at a time, 4 by default. When the brain starts, it sets each `running` scene back to `queued`. A restart then loses no photo.
 - If Claude returns a 429 or a 529, the worker waits and keeps the scene queued. It stops the haul after 3 failures in a row and records why in `stopReason`. A 429 or a 529 counts toward those 3 failures. A success sets the count back to 0.
@@ -54,26 +57,38 @@ The routes:
 
 - `POST /api/hauls` starts a haul and returns its ID. Outside fixture mode, if `ANTHROPIC_API_KEY` is not set, it answers 503 and starts no haul.
 - `POST /api/hauls/:id/scenes` takes one JPEG as the body and a client ID in the `x-client-id` header. The client ID is 1 to 64 characters of `[A-Za-z0-9-]`, or the route answers 400. It saves the photo, queues the scene and answers 202 with the scene ID. If the same client ID comes again, the route returns the same scene ID. A retried upload then costs nothing.
-- `GET /api/hauls/:id` returns the counts, the cost so far and the gems so far.
+- `GET /api/hauls/:id` returns the counts, the cost so far and the gems so far. Each gem has its `box` as `[x1, y1, x2, y2]` or null. It also has the `imageWidth` and the `imageHeight` of its photo, or null.
+- `GET /api/scenes/:id/photo` returns the stored photo of a scene as `image/jpeg`. The ID is 1 to 64 characters of `[A-Za-z0-9-]`, or the route answers 400.
+- The photo route joins the path, then makes sure that the path is inside `data/photos/`, as the `dist/` route does. If no photo exists, it answers 404.
+- The photo of a scene never changes. Thus the photo reply has `Cache-Control: private, max-age=31536000, immutable`. Like every route, it listens on 127.0.0.1 only.
 - `POST /api/hauls/:id/done` closes the haul.
 - `POST /api/scene` stays as it is, so the single-photo flow keeps working.
 
 The haul prompt:
 
 - It is a haul variant of the text in `SystemPrompt.res`. It adds the gem threshold.
-- The schema gets two fields. `where` is a short phrase that locates the item in the photo, for example "top shelf, fourth spine from the left, red". `otherCount` is the number of items that are not gems.
+- The schema gets three fields. `where` is a short phrase that locates the item in the photo, for example "top shelf, fourth spine from the left, red". `otherCount` is the number of items that are not gems. `box` is `[x1, y1, x2, y2]` in pixels of the sent photo, the same field the scene prompt asks for. The prompt states the width and the height of the sent photo.
+- This prompt is version `haul-3`.
+- The worker reads the width and the height of the photo with `JpegSize.res`, then checks each box with `Box.res`. `Box.res` drops a box that is bad, so the item keeps its other fields with no box.
 - If `stop_reason` is `max_tokens`, the scene fails with the error "reply cut off". The digest lists that photo.
 
 The digest and the email:
 
 - `Digest.res` is a pure function from the rows of one haul to a subject, an HTML body and a text body. It has a hand-computed test.
+- The email has one section for each photo that has a gem. The sections follow the order of each photo's best gem.
+- Each section shows the full photo once, about 640 px on the long edge. Under the photo, each gem gets a card: a crop, then its name, range, where, confidence, eBay line and sold link.
+- A gem with no box shows the text "no box" and no crop.
+- The text body of the email uses the same sections and groups as the HTML body.
+- The subject line does not change.
 - `Email.res` builds the MIME message. Its MIME code started as a copy of dippa's `src/worker/Email.res`, with the UTF-8 fix that `flip-scout.md` in app-ideas names.
 - The email goes through Gmail SMTP (`smtp.gmail.com`, port 465) with an app password, through `nodemailer`. The secrets are `GMAIL_USER` and `GMAIL_APP_PASSWORD`, in `~/.config/reflip/env`. Dwight writes them himself.
 - `EMAIL_TO` is optional. If it is not set, the email goes to `GMAIL_USER`.
 - The first build used the Gmail API with an OAuth refresh token. Dwight chose SMTP on 2026-09-25. He had an app password and no OAuth keys. Also, while a Google app is in Testing, its refresh token expires after 7 days.
 - `npm run email:check` logs in to Gmail SMTP with the secrets and sends nothing. It shows if the app password works.
-- Each gem thumbnail is an inline attachment (`cid:`), 480px on the long edge. Gmail cannot load images from the tailnet.
-- The brain makes each thumbnail with `/usr/bin/sips` on macOS, in `Thumb.res`. It never makes a photo larger. If the photo is 480px or smaller on the long edge, `Thumb.res` copies it unchanged. If `sips` fails, the email uses the original photo.
+- The inline images in the email (`cid:`) are the full photo of each section. They also include the crop of each gem that has a box. Gmail cannot load images from the tailnet.
+- The brain makes the full-photo image with `Thumb.res`, scaled to 640 px on the long edge. It never makes a photo larger.
+- The brain makes each gem crop with `Crop.res`. `Crop.res` adds a 10% margin on each side of the box. This margin follows the same rule that the page uses in `BoxLayout.res`. `Crop.res` clamps the crop to the photo, then cuts it out with `sips`. It then scales the crop to 240 px on the long edge with `Thumb.res`. It never scales up.
+- If `sips` fails on the full photo, the email uses the original photo.
 - With `FIXTURES=1`, the brain writes the email to `data/outbox/<haulId>.eml` and sends nothing. A missing Gmail secret outside fixture mode does the same, and the page tells why.
 - `HaulEmail.res` makes this choice and writes `emailNote`. For example, in fixture mode the note is "written to data/outbox/<haulId>.eml because FIXTURES=1". If a send fails, the brain writes the `.eml` file and the note gives the error.
 
@@ -83,6 +98,7 @@ The first experiment measured a median of $0.152 and 47.1 s in Claude for each s
 
 - A haul of 60 photos costs about $9.
 - With 4 calls at a time, the brain values about 5 photos a minute. The brain values photos while Dwight walks, so the digest comes a few minutes after Done.
+- A live haul with boxes on 2026-09-25 valued 3 photos (s01 to s03) for $0.50 on Sonnet 5. The same 3 photos cost $0.42 before the prompt asked for boxes. Claude took 73 s, 80 s and 135 s for the photos. The longest call is 45 s under the 180 s timeout.
 - Four calls at a time read about 225,000 input tokens a minute. The rate-limit page lists 1,000 requests and 2,000,000 input tokens a minute for Claude Sonnet 5 (platform.claude.com/docs/en/api/rate-limits, read 2026-09-24). Cost, not the rate limit, sets the size of a haul.
 
 ## Decisions
@@ -117,7 +133,8 @@ In order:
 - The web search tool has no parameter that limits the result size of one search. Only `max_uses` limits the count (the web search tool page, read 2026-09-24).
 - A cheap mode for a haul with no hurry: the Message Batches API. It costs 50% less, and most batches finish in less than 1 hour. It accepts the web search tool. The docs do not say whether it accepts `output_config.format` (the batch processing page, read 2026-09-24).
 - A shutter in the page through `getUserMedia`, which is faster than the file picker. First make sure that iOS 27 does not ask for the camera again at each start.
-- A thumbnail cropped to the gem, from the boxes in `docs/spec-item-boxes.md`. ~~Claude gives no reliable boxes today.~~ Struck 2026-09-24: the Claude vision docs have a guide for boxes in pixel coordinates (platform.claude.com/docs/en/build-with-claude/vision-coordinates). The docs call the coordinates approximate.
+- Done 2026-09-25: a thumbnail cropped to the gem, from the boxes in `docs/spec-item-boxes.md`. Each gem card in the digest email shows this crop. See Shape, "The digest and the email". ~~Claude gives no reliable boxes today.~~ Struck 2026-09-24: the Claude vision docs have a guide for boxes in pixel coordinates (platform.claude.com/docs/en/build-with-claude/vision-coordinates). The docs call the coordinates approximate.
+- Done 2026-09-25: a crop on each gem card in the phone haul view, and the photo route. See Shape, "The phone page" and "The routes".
 - The haul as CSV through the share sheet, as `flip-scout.md` asks.
 - Web Push when the digest is ready.
 - Price tags read from the photo, so that the digest shows the profit.

@@ -67,6 +67,9 @@ type model = {
   // display-only, read by ScanShell.res.
   activeTab: tab,
   settingsOpen: bool,
+  // The findId of the open gem card in haul mode, or None if every card is
+  // closed. At most one card is open at a time (AppState.update, ToggleGem).
+  openGem: option<string>,
 }
 
 type msg =
@@ -105,6 +108,7 @@ type msg =
   | Scan(ScanState.msg)
   | SetActiveTab(tab)
   | SetSettingsOpen(bool)
+  | ToggleGem(string) // a tap on a gem card's findId — same id closes, another switches, None opens
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -125,6 +129,7 @@ let initialModel: model = {
   scan: ScanState.initialModel,
   activeTab: ScanTab,
   settingsOpen: false,
+  openGem: None,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -276,4 +281,11 @@ let update = (model: model, msg: msg): model =>
   | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
   | SetActiveTab(t) => {...model, activeTab: t}
   | SetSettingsOpen(open_) => {...model, settingsOpen: open_}
+  | ToggleGem(findId) => {
+      ...model,
+      openGem: switch model.openGem {
+      | Some(current) if current == findId => None
+      | _ => Some(findId)
+      },
+    }
   }

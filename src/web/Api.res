@@ -120,6 +120,12 @@ let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
 // Posts one queued photo. The brain answers 202 with {"sceneId", ...} and,
 // for a client id it has already seen, "duplicate": true — a retried
 // upload then costs nothing.
+// The stored photo of a scene (docs/spec-haul-mode.md "The routes",
+// GET /api/scenes/:id/photo). A plain string build, not a fetch — the page
+// hands this straight to an <img src> or a CSS background-image.
+let scenePhotoUrl = (sceneId: string): string =>
+  "/api/scenes/" ++ encodeURIComponent(sceneId) ++ "/photo"
+
 let postHaulScene = async (
   haulId: string,
   clientId: string,

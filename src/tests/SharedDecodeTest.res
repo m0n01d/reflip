@@ -64,5 +64,54 @@ let run = async () => {
     }
   }
 
+  TestKit.section("Shared.decodeHaulGem")
+
+  let gemWithBoxJson = Json.obj([
+    ("findId", Json.str("find-1")),
+    ("sceneId", Json.str("scene-1")),
+    ("name", Json.str("Brass table lamp")),
+    ("estimateLowUsd", Json.num(20.0)),
+    ("estimateHighUsd", Json.num(45.0)),
+    ("confidence", Json.num(0.8)),
+    ("soldSearchUrl", Json.str("https://www.ebay.com/sch/i.html?_nkw=lamp")),
+    ("box", Json.arr([Json.num(2.0), Json.num(4.0), Json.num(20.0), Json.num(30.0)])),
+    ("imageWidth", Json.num(64.0)),
+    ("imageHeight", Json.num(48.0)),
+  ])
+  switch Shared.decodeHaulGem(gemWithBoxJson) {
+  | Error(msg) => TestKit.check("a gem with a box and a size decodes (" ++ msg ++ ")", false)
+  | Ok(gem) => {
+      TestKit.check(
+        "decodeHaulGem decodes the box",
+        gem.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      )
+      TestKit.check(
+        "decodeHaulGem decodes the size",
+        gem.imageWidth == Some(64) && gem.imageHeight == Some(48),
+      )
+    }
+  }
+
+  // A gem with no box/imageWidth/imageHeight fields at all — the shape a
+  // pre-2026-09-25 status reply would have had. Every missing field must
+  // decode to None, not an error.
+  let gemNoBoxJson = Json.obj([
+    ("findId", Json.str("find-2")),
+    ("sceneId", Json.str("scene-2")),
+    ("name", Json.str("Griswold cast iron skillet")),
+    ("estimateLowUsd", Json.num(20.0)),
+    ("estimateHighUsd", Json.num(60.0)),
+    ("confidence", Json.num(0.7)),
+    ("soldSearchUrl", Json.str("https://www.ebay.com/sch/i.html?_nkw=skillet")),
+  ])
+  switch Shared.decodeHaulGem(gemNoBoxJson) {
+  | Error(msg) => TestKit.check("a gem missing box/size fields decodes (" ++ msg ++ ")", false)
+  | Ok(gem) =>
+    TestKit.check(
+      "decodeHaulGem leaves box and size None when the fields are absent",
+      gem.box == None && gem.imageWidth == None && gem.imageHeight == None,
+    )
+  }
+
   Node.HttpServer.close(server, () => ())
 }

@@ -187,6 +187,15 @@ let runHaul = () => {
   TestKit.check("NewHaul resets back to NoHaul", h14.haul == AppState.NoHaul)
   TestKit.check("NewHaul clears the queue", h14.queue == [])
   TestKit.check("NewHaul clears the store name", h14.storeName == "")
+
+  // -- ToggleGem: same id closes, another id switches, None opens ---------
+  TestKit.check("a fresh model has no open gem card", h0.openGem == None)
+  let g1 = AppState.update(h0, AppState.ToggleGem("find-a"))
+  TestKit.check("ToggleGem opens a closed card", g1.openGem == Some("find-a"))
+  let g2 = AppState.update(g1, AppState.ToggleGem("find-b"))
+  TestKit.check("ToggleGem on a different id switches the open card", g2.openGem == Some("find-b"))
+  let g3 = AppState.update(g2, AppState.ToggleGem("find-b"))
+  TestKit.check("ToggleGem on the open card's own id closes it", g3.openGem == None)
 }
 
 let run = () => {
