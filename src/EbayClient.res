@@ -99,7 +99,17 @@ let statsFor = async (
   item: Types.claudeItem,
 ): (option<Types.ebayStats>, option<string>) =>
   if config.fixtures {
-    (decodeStats(searchFixture(config.fixturesDir, index)), None)
+    // Fixture mode has only as many ebay-search-<n>.json files as the
+    // static test scene has items (0, 1, 2). A live-recorded fixture, or a
+    // larger synthetic scene, can ask for an index past that -- give that
+    // item no eBay data instead of letting readFileUtf8 throw ENOENT.
+    let fixturePath =
+      Node.Path.join([config.fixturesDir, "ebay-search-" ++ Int.toString(index) ++ ".json"])
+    if Node.Fs.existsSync(fixturePath) {
+      (decodeStats(searchFixture(config.fixturesDir, index)), None)
+    } else {
+      (None, None)
+    }
   } else {
     switch (config.ebayClientId, config.ebayClientSecret) {
     | (Some(id), Some(secret)) =>

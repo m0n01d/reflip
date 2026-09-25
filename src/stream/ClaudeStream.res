@@ -98,21 +98,34 @@ let runFixture = (
   ~startMs: float,
 ): promise<outcome> => {
   let elapsedMs = () => Date.now() -. startMs
-  let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, "claude-stream.sse"]), "utf8")
-  let (_, sseEvents) = Sse.feed(Sse.empty, text)
   let modelRef = ref(SceneStream.init)
   onHeaders(elapsedMs())
-  let delayMs = fixtureDelayMs()
-  let rec go = (i: int): promise<outcome> =>
-    if Fetch.AbortSignal.aborted(stop) {
-      Promise.resolve(Stopped(modelRef.contents))
-    } else if i >= Array.length(sseEvents) {
-      Promise.resolve(Completed(modelRef.contents))
-    } else {
-      feedSse(modelRef, elapsedMs, onRaw, onEvent, [Array.getUnsafe(sseEvents, i)])
-      sleep(delayMs)->Promise.then(() => go(i + 1))
-    }
-  go(0)
+  switch FixtureReplay.findFile(config.fixturesDir, "claude-stream") {
+  | Some(path) =>
+    let events = FixtureReplay.readEvents(path)
+    let speed = config.streamFixtureSpeed->Option.getOr(1.0)
+    FixtureReplay.play(events, ~speed, ~stop, ~onEvent=sseEvt =>
+      feedSse(modelRef, elapsedMs, onRaw, onEvent, [sseEvt])
+    )->Promise.then(() =>
+      Promise.resolve(
+        Fetch.AbortSignal.aborted(stop) ? Stopped(modelRef.contents) : Completed(modelRef.contents),
+      )
+    )
+  | None =>
+    let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, "claude-stream.sse"]), "utf8")
+    let (_, sseEvents) = Sse.feed(Sse.empty, text)
+    let delayMs = fixtureDelayMs()
+    let rec go = (i: int): promise<outcome> =>
+      if Fetch.AbortSignal.aborted(stop) {
+        Promise.resolve(Stopped(modelRef.contents))
+      } else if i >= Array.length(sseEvents) {
+        Promise.resolve(Completed(modelRef.contents))
+      } else {
+        feedSse(modelRef, elapsedMs, onRaw, onEvent, [Array.getUnsafe(sseEvents, i)])
+        sleep(delayMs)->Promise.then(() => go(i + 1))
+      }
+    go(0)
+  }
 }
 
 // The real call. AbortSignal.any([timeout, stop]) covers both ways a
