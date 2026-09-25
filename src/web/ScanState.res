@@ -386,14 +386,22 @@ let logToggleText = (n: int): string =>
 // Array.join, which this repo's own Digest.res and HaulEmail.res comments
 // flag as unverified.
 let commaInt = (n: int): string => {
-  let digits = Int.toString(n)
+  // Int.toString(-100) is "-100" — comma-grouping those chars directly
+  // treats "-" as if it were a digit ("-,100"). Split the sign from the
+  // digit string first, group only the digits, then prepend the sign.
+  // Never negate n directly: negating Int.min overflows.
+  let s = Int.toString(n)
+  let (sign, digits) = String.startsWith(s, "-")
+    ? ("-", String.substring(s, ~start=1, ~end=String.length(s)))
+    : ("", s)
   let chars = String.split(digits, "")
   let len = Array.length(chars)
-  chars->Array.reduceWithIndex("", (acc, ch, i) => {
+  let grouped = chars->Array.reduceWithIndex("", (acc, ch, i) => {
     let fromRight = len - i
     let sep = i > 0 && mod(fromRight, 3) == 0 ? "," : ""
     acc ++ sep ++ ch
   })
+  sign ++ grouped
 }
 
 let usd0 = (v: float): string => Int.toString(Float.toInt(Math.round(v)))
@@ -605,9 +613,7 @@ let trackMarks = (m: model): array<trackMark> => {
 let hasNoEbayData = (m: model): bool =>
   switch m.sceneReply {
   | None => false
-  | Some(r) =>
-    r.ebayNote->Option.isSome ||
-      (Array.length(r.items) > 0 && Array.every(r.items, it => it.ebay->Option.isNone))
+  | Some(r) => Array.length(r.items) > 0 && Array.every(r.items, it => it.ebay->Option.isNone)
   }
 
 // -- Run receipt ------------------------------------------------------------
@@ -638,7 +644,7 @@ let receipt = (m: model): option<receipt> =>
   m.doneInfo->Option.map(d => {
     modelLabel: shortModelLabel(m.selectedModel),
     photoSize: Int.toString(m.sentWidth) ++
-    "×" ++
+    " × " ++
     Int.toString(m.sentHeight) ++
     " · " ++
     mb(m.uploadBytes) ++
@@ -648,3 +654,11 @@ let receipt = (m: model): option<receipt> =>
     webSearches: d.webSearches,
     cost: "$" ++ Float.toString(Math.round(d.usd *. 10000.0) /. 10000.0),
   })
+
+// Settings sheet model order (docs/design/scan-ui/Main.dc.html MODELS):
+// Sonnet 5, Opus 5.5, Haiku 4.5 — differs from Shared.allModels order
+// ([Opus5_5, Sonnet5, Haiku4_5]), so it lives in web code, not Shared.res.
+// ScanStateTest checks it holds exactly Shared.allModels, each once, so
+// a model added to Shared later fails a test instead of silently
+// dropping out of Settings (R6).
+let settingsModelOrder: array<Shared.model> = [Shared.Sonnet5, Shared.Opus5_5, Shared.Haiku4_5]

@@ -232,7 +232,11 @@ let make = (
               </div>
             }}
             {Array.length(lines) > 1
-              ? <button type_="button" onClick={toggleLog} className="scan-log-toggle">
+              ? <button
+                  type_="button"
+                  onClick={toggleLog}
+                  ariaExpanded={logOpen}
+                  className="scan-log-toggle">
                   <span> {React.string(ScanState.logToggleText(Array.length(lines)))} </span>
                   {chevron(
                     ~className="scan-log-toggle-chevron" ++
@@ -269,7 +273,19 @@ let make = (
               : React.null}
             {ScanState.hasNoEbayData(model)
               ? <div className="scan-noebay">
-                  <span className="scan-noebay-icon" ariaHidden={true}> {React.string("⚠")} </span>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    ariaHidden={true}
+                    className="scan-noebay-icon">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 11v5M12 7.5v.01" />
+                  </svg>
                   <span>
                     <span className="scan-noebay-title"> {React.string("No eBay stats")} </span>
                     <span className="scan-noebay-note">
@@ -303,10 +319,16 @@ let make = (
           ? <div className="scan-gems">
               <div className="scan-section-head">
                 <h3 className="scan-section-title"> {React.string("Worth a look")} </h3>
-                <span className="scan-section-count"> {React.string(Int.toString(summary.count))} </span>
+                <span className="scan-section-count">
+                  {React.string(
+                    Int.toString(summary.count) ++
+                    " · " ++
+                    ScanState.moneyRange(summary.sumLowUsd, summary.sumHighUsd),
+                  )}
+                </span>
               </div>
               <div className="scan-section-sub">
-                {React.string(ScanState.moneyRange(summary.sumLowUsd, summary.sumHighUsd))}
+                {React.string("high estimate $20 or more")}
               </div>
               <div className="scan-rows-card">
                 {summary.items
@@ -531,17 +553,22 @@ let make = (
                     <div className="scan-ebay-top">
                       <span className="scan-ebay-label"> {React.string("eBay")} </span>
                       <span className="scan-ebay-flag">
-                        {switch (item.ebay, model.sceneReply->Option.flatMap(r => r.ebayNote)) {
-                        | (Some(stats), _) => React.string(Int.toString(stats.count) ++ " listings")
-                        | (None, Some(_)) => React.string("stats off")
-                        | (None, None) => React.null
+                        {switch (item.ebay, model.sceneReply) {
+                        | (Some(stats), _) =>
+                          React.string(ScanState.plural(stats.count, "listing", "listings"))
+                        | (None, None) => React.string("after Claude")
+                        | (None, Some(r)) =>
+                          switch r.ebayNote {
+                          | Some(_) => React.string("stats off")
+                          | None => React.null
+                          }
                         }}
                       </span>
                     </div>
                     {switch item.ebay {
                     | Some(stats) =>
                       <>
-                        <div className="scan-ebay-title"> {React.string("Sold, last 90 days")} </div>
+                        <div className="scan-ebay-title"> {React.string("active asking prices, not sold")} </div>
                         <div className="scan-ebay-stats">
                           <span>
                             {React.string(

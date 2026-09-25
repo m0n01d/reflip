@@ -471,6 +471,55 @@ let run = () => {
       "ebayNote absent, items=[] -> false",
       ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(emptyItems)}) == false,
     )
+
+    // -- R3: a scene-wide ebayNote no longer forces true when an item
+    // actually has stats (EbayClient.res/Server.res set that note on one
+    // failed search even when other items succeeded) ---------------------
+    let noteButOneItemHasEbay = {
+      ...baseReply,
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+      items: [
+        {
+          ...testItem(),
+          ebay: Some({
+            Types.count: 2,
+            minUsd: 10.0,
+            p25Usd: 11.0,
+            medianUsd: 12.0,
+            p75Usd: 13.0,
+            maxUsd: 14.0,
+          }),
+        },
+      ],
+    }
+    TestKit.check(
+      "ebayNote present, one item has eBay data -> false (R3)",
+      ScanState.hasNoEbayData({
+        ...ScanState.initialModel,
+        sceneReply: Some(noteButOneItemHasEbay),
+      }) == false,
+    )
+
+    // -- R6: the Settings sheet's own model order must stay exactly
+    // Shared.allModels, each once, so a model added to Shared later
+    // fails this test instead of silently dropping out of Settings ------
+    TestKit.section("ScanState.settingsModelOrder")
+    let orderIds = ScanState.settingsModelOrder->Array.map(Shared.modelId)
+    let allIds = Shared.allModels->Array.map(Shared.modelId)
+    TestKit.check(
+      "settingsModelOrder is the same length as Shared.allModels",
+      Array.length(orderIds) == Array.length(allIds),
+    )
+    TestKit.check(
+      "settingsModelOrder contains every Shared.allModels id exactly once",
+      allIds->Array.every(id => orderIds->Array.filter(x => x == id)->Array.length == 1),
+    )
+
+    // -- R7: commaInt on a negative number must not comma-group the "-"
+    // sign as if it were a digit -----------------------------------------
+    TestKit.section("ScanState.commaInt negatives")
+    TestKit.check("commaInt -100 (3 digits, no comma)", ScanState.commaInt(-100) == "-100")
+    TestKit.check("commaInt -40218 (one comma)", ScanState.commaInt(-40218) == "-40,218")
   }
   runCopyGaps()
 }
