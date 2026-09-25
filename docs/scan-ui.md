@@ -58,27 +58,28 @@ way it already imports `Shared.res`.
 ## 3. Routes, now and planned
 
 **`POST /api/scene/stream` (now).** The route takes a photo and streams the
-events from §2. It makes one `AbortController` for the Claude call. If the
-client closes the connection, the route aborts the Claude call today. The
-scene then logs as stopped.
+events from §2. It makes one `AbortController` for the Claude call.
+`SceneRegistry` buffers every event and keeps the scene running after a
+client disconnects. Per decision 3, only a stop request or the 180 second
+time limit aborts the Claude call now. A dropped connection alone does
+not.
 
-**`POST /api/scene/stream` (planned).** Per decision 3, a dropped connection
-must not abort the Claude call. The scene keeps running on the brain. The
-page reconnects with `GET /api/scene/:id/events` (below) to catch up.
+**`GET /api/scene/:id/events?from=<n>` (now).** This route replays the
+scene's buffered events, starting at index `n`. The default for `n` is 0,
+so a caller that leaves it out gets the full buffer. After the replay, the
+route stays open. It sends new events live, until the `end` event closes
+the connection. It returns a 404 JSON error when the scene id is unknown
+or expired.
 
-**`POST /api/scene/:id/stop` (planned, does not exist yet).** This route
-ends a scene on purpose, apart from the stream connection. It returns 202
-when it accepts the stop. It returns 404 when the scene id is not known. It
-returns 200 with the scene status when the scene already ended.
+**`POST /api/scene/:id/stop` (now).** This route ends a scene on purpose,
+apart from the stream connection. It returns 202 when the scene is still
+running and accepts the stop. It returns 404 when the scene id is
+unknown. It returns 200 with the scene's end status when the scene
+already ended.
 
-**`GET /api/scene/:id/events` (planned, does not exist yet).** This route
-first replays every event of the scene from the start. Then it stays open
-and sends new events live. It closes the connection after the `end` event.
-It returns a 404 JSON error when the scene id is not known or is too old.
-
-**Scene storage (planned).** The brain keeps an ended scene for 30 minutes.
-The constant name is `SCENE_KEEP_MS`. Neither this constant nor an event
-store for a scene exists in the code yet. Wave 2 (§5) adds both.
+**Scene storage (now).** `SceneRegistry` keeps an ended scene for 30
+minutes, in the `SCENE_KEEP_MS` constant. It checks for expired scenes
+each time a new scene starts, and removes them.
 
 ## 4. Page flow by design moment
 
