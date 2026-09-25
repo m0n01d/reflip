@@ -76,9 +76,9 @@ let checkDrained = (t: t, haulId: string): unit =>
     }
   }
 
-let readPhotoBase64 = (photoPath: string): option<string> =>
+let readPhotoBuffer = (photoPath: string): option<Node.Buffer.t> =>
   try {
-    Some(Node.Fs.readFileBuffer(photoPath)->Node.Buffer.toStringWithEncoding("base64"))
+    Some(Node.Fs.readFileBuffer(photoPath))
   } catch {
   | JsExn(_) => None
   }
@@ -87,7 +87,13 @@ let readPhotoBase64 = (photoPath: string): option<string> =>
 // the haul prompt (step 4); promptVersion is the scene prompt's constant
 // until then too. Only items at or above the haul's gem threshold get an
 // eBay lookup — the same threshold HaulStatus.res uses to pick gems.
-let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded): unit => {
+let insertFinds = async (
+  t: t,
+  scene: Store.scene,
+  decoded: ClaudeClient.decoded,
+  ~sentWidth: int,
+  ~sentHeight: int,
+): unit => {
   let now = Date.toISOString(Date.make())
   let ebayResults = await Promise.all(
     Array.mapWithIndex(decoded.items, (item, i) =>
@@ -120,6 +126,7 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
         soldOn: None,
         soldWhere: None,
         createdAt: now,
+        box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=Shared.defaultModel),
       },
     )
   })
@@ -142,33 +149,38 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
   }
 
 let runScene = async (t: t, scene: Store.scene): outcome =>
-  switch readPhotoBase64(scene.photoPath) {
+  switch readPhotoBuffer(scene.photoPath) {
   | None => Failed("could not read photo: " ++ scene.photoPath)
-  | Some(imageBase64) => {
-      let model = Shared.modelId(Shared.defaultModel)
-      let claudeStart = Date.now()
-      switch await ClaudeClient.call(
-        ~config=t.config,
-        ~model,
-        ~imageBase64,
-        ~mode=ClaudeClient.Haul(t.config.haulGemMinUsd),
-      ) {
-      | Ok(decoded) => {
-          let claudeMs = Date.now() -. claudeStart
-          let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
-          await insertFinds(t, scene, decoded)
-          Store.finishScene(
-            t.store,
-            ~sceneId=scene.sceneId,
-            ~costUsd,
-            ~claudeMs,
-            ~otherCount=decoded.otherCount,
-          )
-          Success(costUsd, claudeMs)
+  | Some(buf) =>
+    switch JpegSize.dimensions(buf) {
+    | None => Failed("could not read the photo's width and height: " ++ scene.photoPath)
+    | Some((width, height)) => {
+        let imageBase64 = Node.Buffer.toStringWithEncoding(buf, "base64")
+        let model = Shared.modelId(Shared.defaultModel)
+        let claudeStart = Date.now()
+        switch await ClaudeClient.call(
+          ~config=t.config,
+          ~model,
+          ~imageBase64,
+          ~mode=ClaudeClient.Haul({gemMinUsd: t.config.haulGemMinUsd, width, height}),
+        ) {
+        | Ok(decoded) => {
+            let claudeMs = Date.now() -. claudeStart
+            let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
+            await insertFinds(t, scene, decoded, ~sentWidth=width, ~sentHeight=height)
+            Store.finishScene(
+              t.store,
+              ~sceneId=scene.sceneId,
+              ~costUsd,
+              ~claudeMs,
+              ~otherCount=decoded.otherCount,
+            )
+            Success(costUsd, claudeMs)
+          }
+        | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
+          RetryLater(claudeErrorText(err))
+        | Error(err) => Failed(claudeErrorText(err))
         }
-      | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
-        RetryLater(claudeErrorText(err))
-      | Error(err) => Failed(claudeErrorText(err))
       }
     }
   }

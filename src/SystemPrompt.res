@@ -120,6 +120,11 @@ For each listed item, report:
 - sources: the source URLs you used, or an empty array if you used none
 - where: a short phrase that locates the item in the photo, such as "top
   shelf, fourth spine from the left, red"
+- box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
+  in the photo, in integer pixel coordinates. x1 and y1 are the pixel
+  position of the top-left corner. x2 and y2 are the pixel position of the
+  bottom-right corner. The photo's width and height in pixels are given
+  below.
 
 Count every other visible, resellable item that you did not list above,
 and report that count as otherCount.
@@ -153,6 +158,13 @@ let haulItemSchema: JSON.t = Json.obj([
         ]),
       ),
       ("where", Json.obj([("type", Json.str("string"))])),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
     ]),
   ),
   (
@@ -167,6 +179,7 @@ let haulItemSchema: JSON.t = Json.obj([
       Json.str("confidence"),
       Json.str("sources"),
       Json.str("where"),
+      Json.str("box"),
     ]),
   ),
   ("additionalProperties", Json.boolJ(false)),
@@ -191,4 +204,4 @@ let haulOutputFormat: JSON.t = Json.obj([
   ("schema", haulResponseSchema),
 ])
 
-let haulPromptVersion = "haul-1"
+let haulPromptVersion = "haul-2"

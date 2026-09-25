@@ -207,6 +207,7 @@ let run = () => {
     soldOn: None,
     soldWhere: None,
     createdAt: "2026-09-24T09:10:00.000Z",
+    box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
   }
   Store.insertFind(db, find)
 
@@ -221,9 +222,96 @@ let run = () => {
         f.where == Some(trickyWhere),
       )
       TestKit.approx("findsOf round-trips estimateLowUsd", f.estimateLowUsd, 20.0, ~eps=1e-9)
+      TestKit.check(
+        "findsOf round-trips a box",
+        f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      )
     }
   | None => TestKit.check("findsOf returned a row", false)
   }
+
+  // -- migrating a pre-box finds table on open ---------------------------------
+  TestKit.section("Store: migrates a finds table with no box columns")
+
+  let migDir = Node.Path.join([Node.Os.tmpdir(), "reflip-store-test-" ++ Node.Crypto.randomUUID()])
+  Node.Fs.mkdirSync(migDir, {recursive: true})
+  let migPath = Node.Path.join([migDir, "old.db"])
+
+  // The pre-box `finds` schema, hand-built with the raw Sqlite binding —
+  // the same shape Store.openAt's own CREATE TABLE IF NOT EXISTS wrote
+  // before this change, and so a no-op against a DB that already has it.
+  let oldDb = Sqlite.make(migPath)
+  Sqlite.exec(
+    oldDb,
+    `CREATE TABLE finds (
+      findId TEXT PRIMARY KEY,
+      sceneId TEXT NOT NULL,
+      model TEXT NOT NULL,
+      fixture INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      query TEXT NOT NULL,
+      "where" TEXT,
+      estimateLowUsd REAL NOT NULL,
+      estimateHighUsd REAL NOT NULL,
+      confidence REAL NOT NULL,
+      category TEXT,
+      promptVersion TEXT NOT NULL,
+      ebayJson TEXT,
+      paidUsd REAL,
+      soldUsd REAL,
+      soldOn TEXT,
+      soldWhere TEXT,
+      createdAt TEXT NOT NULL
+    )`,
+  )
+  Sqlite.close(oldDb)
+
+  let migDb = Store.openAt(migPath)
+  Store.createHaul(migDb, ~haulId="haul-mig", ~name=None, ~now="2026-09-24T12:00:00.000Z")->ignore
+  Store.addScene(
+    migDb,
+    ~haulId="haul-mig",
+    ~clientId="client-mig",
+    ~sceneId="scene-mig",
+    ~photoPath="data/photos/scene-mig.jpg",
+    ~now="2026-09-24T12:00:01.000Z",
+  )->ignore
+  Store.insertFind(
+    migDb,
+    {
+      Store.findId: "find-mig",
+      sceneId: "scene-mig",
+      model: "claude-sonnet-5",
+      fixture: true,
+      name: "Migrated gem",
+      query: "migrated gem query",
+      where: Some("shelf"),
+      estimateLowUsd: 10.0,
+      estimateHighUsd: 20.0,
+      confidence: 0.5,
+      category: None,
+      promptVersion: "haul-2",
+      ebayJson: None,
+      paidUsd: None,
+      soldUsd: None,
+      soldOn: None,
+      soldWhere: None,
+      createdAt: "2026-09-24T12:00:02.000Z",
+      box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+    },
+  )
+
+  let migFinds = Store.findsOf(migDb, "haul-mig")
+  TestKit.check("a DB with the old finds schema opens and stores a find", Array.length(migFinds) == 1)
+  switch Array.get(migFinds, 0) {
+  | Some(f) =>
+    TestKit.check(
+      "the migrated columns round-trip a box",
+      f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+    )
+  | None => TestKit.check("findsOf returned the migrated find", false)
+  }
+  Store.close(migDb)
 
   // -- counts -------------------------------------------------------------------
   TestKit.section("Store: counts")

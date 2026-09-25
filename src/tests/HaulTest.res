@@ -166,6 +166,31 @@ let run = async () => {
     Json.intField(statusJson1, "otherCount") == Some(39),
   )
 
+  // Each scene's 3 finds come from the same claude-haul.json fixture: the
+  // first two items carry a box in table.jpg's 64x48 pixels (Box.decode
+  // passes them through unchanged, since the high tier doesn't resize a
+  // photo that small), and the third item's box is degenerate on purpose
+  // (x2 <= x1), so Box.decode drops it and that find stores no box.
+  let finds1 = Store.findsOf(store1, haulId1)
+  TestKit.check("all 9 finds (3 scenes x 3 items) were stored", Array.length(finds1) == 9)
+  let lampFinds = Array.filter(finds1, f => f.name == "Brass table lamp")
+  let skilletFinds = Array.filter(finds1, f => f.name == "Griswold cast iron skillet")
+  let broochFinds = Array.filter(finds1, f => f.name == "Costume jewelry brooch")
+  TestKit.check(
+    "every lamp find stores the fixture's box",
+    Array.length(lampFinds) == 3 &&
+      Array.every(lampFinds, f => f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30})),
+  )
+  TestKit.check(
+    "every skillet find stores the fixture's box",
+    Array.length(skilletFinds) == 3 &&
+      Array.every(skilletFinds, f => f.box == Some({Types.x1: 24, y1: 6, x2: 42, y2: 28})),
+  )
+  TestKit.check(
+    "every brooch find has no box, its fixture box is degenerate",
+    Array.length(broochFinds) == 3 && Array.every(broochFinds, f => f.box == None),
+  )
+
   let doneStatus = await postEmpty(base1 ++ "/api/hauls/" ++ haulId1 ++ "/done")
   TestKit.check("POST done responds 200", doneStatus == 200)
   let (_status, doneJson) = await getJson(base1 ++ "/api/hauls/" ++ haulId1)

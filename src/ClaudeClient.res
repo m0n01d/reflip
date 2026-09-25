@@ -21,11 +21,12 @@ type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) |
 
 // Scene mode is the single-photo M0 endpoint. It carries the width and the
 // height of the sent photo, so the prompt can ask for a box per item in
-// pixels of that photo (docs/spec-item-boxes.md). Haul(gemMinUsd) is the haul
-// queue (step 4): a different prompt and schema, gated on the same $ floor
+// pixels of that photo (docs/spec-item-boxes.md). Haul is the haul queue
+// (step 4): a different prompt and schema, gated on the same $ floor
 // HaulStatus and HaulWorker use to decide what counts as a gem. The haul
-// prompt asks for no box, so it needs no size.
-type mode = Scene({width: int, height: int}) | Haul(float)
+// prompt now asks for a box too (docs/spec-item-boxes.md's follow-up), so it
+// carries the sent photo's width and height, same as Scene.
+type mode = Scene({width: int, height: int}) | Haul({gemMinUsd: float, width: int, height: int})
 
 let decodeUsage = (json: JSON.t): Types.usage => {
   let webSearchRequests =
@@ -166,7 +167,7 @@ let parseClaudeJson = (json: JSON.t): result<decoded, callError> =>
 let systemTextFor = (mode: mode): string =>
   switch mode {
   | Scene(_) => SystemPrompt.text
-  | Haul(gemMinUsd) => SystemPrompt.haulPrompt(~gemMinUsd)
+  | Haul({gemMinUsd}) => SystemPrompt.haulPrompt(~gemMinUsd)
   }
 
 let outputFormatFor = (mode: mode): JSON.t =>
@@ -194,13 +195,14 @@ let buildRequestBody = (
       ]),
     ),
   ])
-  let text = switch mode {
-  | Scene({width, height}) =>
+  let sizeText = (width: int, height: int): string =>
     "This photo is " ++
     Int.toString(width) ++
     " pixels wide and " ++
     Int.toString(height) ++ " pixels tall. Value the resellable items on this table."
-  | Haul(_) => "Value the resellable items on this table."
+  let text = switch mode {
+  | Scene({width, height}) => sizeText(width, height)
+  | Haul({width, height}) => sizeText(width, height)
   }
   let textBlock = Json.obj([("type", Json.str("text")), ("text", Json.str(text))])
   let tool = Json.obj([

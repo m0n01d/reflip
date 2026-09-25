@@ -14,3 +14,8 @@ small generated image, not a real photo.
 `table.jpg` is 64x48 pixels. Each item in `claude-scene.json` has a `box`
 in pixels of that image, so fixture mode shows boxes when you send
 `table.jpg`. With any other photo, the boxes stay near its top-left corner.
+
+`claude-haul.json`'s first two items have a `box` in the same pixels of
+`table.jpg`, so a haul find gets an item box too (PR #8's follow-up). Its
+third item's box is `[50, 30, 46, 40]`, x2 at or below x1 on purpose, so
+Box.decode drops it and that find stores no box.

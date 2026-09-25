@@ -51,6 +51,7 @@ type find = {
   soldOn: option<string>,
   soldWhere: option<string>,
   createdAt: string,
+  box: option<Types.box>,
 }
 
 type counts = {
@@ -177,6 +178,18 @@ let decodeFind = (json: JSON.t): option<find> =>
       Some(promptVersion),
       Some(createdAt),
     ) =>
+    // All four box columns present means the find was stored with a valid
+    // box (Box.decode already dropped a degenerate one before insertFind);
+    // any other combination, including a pre-migration row, is None.
+    let box = switch (
+      Json.intField(json, "boxX1"),
+      Json.intField(json, "boxY1"),
+      Json.intField(json, "boxX2"),
+      Json.intField(json, "boxY2"),
+    ) {
+    | (Some(x1), Some(y1), Some(x2), Some(y2)) => Some({Types.x1, y1, x2, y2})
+    | _ => None
+    }
     Some({
       findId,
       sceneId,
@@ -196,6 +209,7 @@ let decodeFind = (json: JSON.t): option<find> =>
       soldOn: Json.stringField(json, "soldOn"),
       soldWhere: Json.stringField(json, "soldWhere"),
       createdAt,
+      box,
     })
   | _ => None
   }
@@ -257,10 +271,35 @@ let openAt = (path: string): t => {
       soldUsd REAL,
       soldOn TEXT,
       soldWhere TEXT,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      boxX1 INTEGER,
+      boxY1 INTEGER,
+      boxX2 INTEGER,
+      boxY2 INTEGER
     )`,
   )
   Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
+
+  // A DB from before item boxes has a `finds` table with no box columns.
+  // CREATE TABLE IF NOT EXISTS above is a no-op on an existing table, so
+  // check PRAGMA table_info and add any column it doesn't already list.
+  let findsCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(finds)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasCol = (name: string): bool => Array.some(findsCols, c => c == name)
+  if !hasCol("boxX1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX1 INTEGER`)
+  }
+  if !hasCol("boxY1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY1 INTEGER`)
+  }
+  if !hasCol("boxX2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX2 INTEGER`)
+  }
+  if !hasCol("boxY2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY2 INTEGER`)
+  }
 
   db
 }
@@ -457,8 +496,9 @@ let insertFind = (db: t, find: find): unit => {
     `INSERT INTO finds (
       findId, sceneId, model, fixture, name, query, "where",
       estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
-      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt,
+      boxX1, boxY1, boxX2, boxY2
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   Sqlite.run(
     stmt,
@@ -481,6 +521,10 @@ let insertFind = (db: t, find: find): unit => {
       optText(find.soldOn),
       optText(find.soldWhere),
       Sqlite.Text(find.createdAt),
+      optInt(find.box->Option.map(b => b.x1)),
+      optInt(find.box->Option.map(b => b.y1)),
+      optInt(find.box->Option.map(b => b.x2)),
+      optInt(find.box->Option.map(b => b.y2)),
     ],
   )->ignore
 }
