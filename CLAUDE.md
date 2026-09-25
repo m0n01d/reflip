@@ -123,7 +123,7 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 
 `npm test` builds, then runs `src/tests/AllTests.res.mjs`. Each test file uses `node:assert` through `src/tests/TestKit.res`, the same shape as dippa's own test kit. A failing assertion throws, so a red test fails the process exit code.
 
-`tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Nothing there came from a real API call.
+`tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Some files came from real Claude calls. `tests/fixtures/demo/claude-stream.events.jsonl.gz` records a priced call from before the stall fix. The recording is 112.6 s long. `tests/fixtures/demo/claude-spot.events.jsonl.gz` records one live spot pass. `tests/fixtures/spot/claude-spot.events.jsonl` is that spot recording with changed timings.
 
 `scripts/haul-smoke.mjs` is a repeatable smoke test of the phone haul view. It uses fixture mode and drives the page with dev-browser. The script builds the app, then starts the server on a free port. The server gets a throwaway data directory and no live secrets. It starts a haul, adds the fixture photo five times, and waits for the haul to finish. Then it opens, switches, and closes each gem card, and taps one sold link. The script blocks ebay.com, so that tap never reaches the network.
 
