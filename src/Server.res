@@ -505,16 +505,40 @@ let handleSceneStop = (sceneId: string, res: Node.HttpServer.response): unit =>
 // events until `end`. 404 JSON for an unknown or expired id. SceneRegistry
 // itself sends the SSE headers and closes the response once found, so
 // there is nothing left to do here on that path.
+// GET /api/scene/:id/events?from=<n> (docs/scan-ui.md §3): replays a
+// scene's buffer from index n (default 0), then stays open for live
+// events until `end`. A missing `from` still means 0. A `from` that is not
+// a whole number 0 or more is a 400 JSON error (Opus review item 3) --
+// before this fix, a negative value was clamped to 0 in
+// SceneRegistry.attach, and an unparseable one fell back to that same
+// default 0, so either one silently replayed the whole buffer instead of
+// being rejected. 404 JSON for an unknown or expired id. SceneRegistry
+// does the actual buffer replay plus live hookup.
 let handleSceneEvents = (url: Node.Url.t, sceneId: string, res: Node.HttpServer.response): unit => {
-  let from =
-    Node.Url.searchParams(url)
-    ->Node.Url.getParam("from")
-    ->Nullable.toOption
-    ->Option.flatMap(s => Int.fromString(s))
-    ->Option.getOr(0)
-  switch SceneRegistry.attach(sceneId, res, ~from) {
-  | SceneRegistry.NotFound => errorJson(res, 404, "unknown scene id: " ++ sceneId)
-  | SceneRegistry.Attached => ()
+  // A non-negative decimal integer round-trips through Int.toString; a
+  // negative sign, a non-numeric string, or any other stray character
+  // ("1.5", "05", " 5") does not, so this one check rejects all of them.
+  let parseFrom = (s: string): option<int> =>
+    switch Int.fromString(s) {
+    | Some(n) if n >= 0 && Int.toString(n) == s => Some(n)
+    | _ => None
+    }
+  let fromParam = Node.Url.searchParams(url)->Node.Url.getParam("from")->Nullable.toOption
+  let fromResult = switch fromParam {
+  | None => Ok(0)
+  | Some(s) =>
+    switch parseFrom(s) {
+    | Some(n) => Ok(n)
+    | None => Error(s)
+    }
+  }
+  switch fromResult {
+  | Error(s) => errorJson(res, 400, "from must be a whole number, 0 or more: " ++ s)
+  | Ok(from) =>
+    switch SceneRegistry.attach(sceneId, res, ~from) {
+    | SceneRegistry.NotFound => errorJson(res, 404, "unknown scene id: " ++ sceneId)
+    | SceneRegistry.Attached => ()
+    }
   }
 }
 

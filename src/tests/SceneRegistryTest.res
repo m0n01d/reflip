@@ -325,6 +325,56 @@ let testDropSwitch = async (port: int, photo: Node.Buffer.t) => {
   )
 }
 
+// Same endpoint as getEvents, but `from` is passed through verbatim as a
+// string instead of an option<int> -- so a test can send a malformed value
+// ("-1", "abc") that getEvents's typed ~from: option<int> can't express.
+let getEventsRaw = (port: int, sceneId: string, ~from: string): promise<Fetch.response> =>
+  Fetch.fetch(
+    "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene/" ++ sceneId ++ "/events?from=" ++ from,
+    ~init={Fetch.method: "GET", signal: Fetch.AbortSignal.timeout(20_000)},
+  )
+
+// GET .../events?from=<n>: a negative or non-integer `from` is a 400 JSON
+// error (Opus review item 3). Before the fix, `from=-1` was clamped to 0 in
+// SceneRegistry.attach, and `from=abc` failed Int.fromString and fell back
+// to the same default 0 -- either one silently replayed the whole buffer
+// instead of rejecting the request. The bad-input checks run against an id
+// that does not exist: the validation is meant to happen before the scene
+// lookup, so it must reject these regardless of whether the id is real.
+let testEventsFromValidation = async (port: int, photo: Node.Buffer.t) => {
+  TestKit.section("SceneRegistry: GET .../events?from=<n> validates from")
+
+  let negResp = await getEventsRaw(port, "no-such-scene-id", ~from="-1")
+  TestKit.check("from=-1 is 400", Fetch.status(negResp) == 400)
+  let negJson = await Fetch.json(negResp)
+  TestKit.check(
+    "from=-1's 400 body has an error field",
+    Json.stringField(negJson, "error")->Option.isSome,
+  )
+
+  let nonIntResp = await getEventsRaw(port, "no-such-scene-id", ~from="abc")
+  TestKit.check("from=abc is 400", Fetch.status(nonIntResp) == 400)
+  let nonIntJson = await Fetch.json(nonIntResp)
+  TestKit.check(
+    "from=abc's 400 body has an error field",
+    Json.stringField(nonIntJson, "error")->Option.isSome,
+  )
+
+  Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "5")
+  let resp = await postScene(port, photo)
+  let full = await readEvents(resp)
+  let sceneId = sceneIdOf(full)
+  TestKit.check("captured a sceneId for the valid-from check", sceneId != "")
+
+  let validResp = await getEventsRaw(port, sceneId, ~from="0")
+  TestKit.check("from=0 (valid) still responds 200", Fetch.status(validResp) == 200)
+  let validEvents = await readEvents(validResp)
+  TestKit.check(
+    "from=0 (valid) still replays the full buffer",
+    Array.join(kindsOf(validEvents), ",") == Array.join(kindsOf(full), ","),
+  )
+}
+
 let run = async () => {
   let dataDir = Node.Path.join([Node.Os.tmpdir(), "reflip-test-" ++ Node.Crypto.randomUUID()])
   let config = baseConfig(dataDir)
@@ -337,6 +387,7 @@ let run = async () => {
   await testStopCodes(port, photo)
   await testExpiry(port, photo)
   await testDropSwitch(port, photo)
+  await testEventsFromValidation(port, photo)
 
   Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "")
   Node.HttpServer.close(server, () => ())
