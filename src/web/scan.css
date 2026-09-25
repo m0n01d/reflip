@@ -479,8 +479,9 @@ body:has(.scan-shell) {
 
 .scan-pin-badge-gem {
   position: absolute;
-  left: 9px;
-  top: 9px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -493,6 +494,7 @@ body:has(.scan-shell) {
   text-align: center;
   box-shadow: 0 0 0 2px var(--scan-card), 0 3px 8px rgba(27, 24, 19, .45);
   transition: transform .5s cubic-bezier(.34, 1.56, .64, 1);
+  pointer-events: none;
 }
 
 .scan-pin-badge-gem-top {
@@ -501,14 +503,16 @@ body:has(.scan-shell) {
 
 .scan-pin-badge-plain {
   position: absolute;
-  left: 16px;
-  top: 16px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 12px;
   height: 12px;
   border-radius: 50%;
   background-color: var(--scan-card);
   box-shadow: 0 0 0 2px var(--scan-ink), 0 2px 5px rgba(27, 24, 19, .4);
   transition: transform .5s cubic-bezier(.34, 1.56, .64, 1);
+  pointer-events: none;
 }
 
 /* The most-recently-landed sticker: raised above its neighbors and scaled
@@ -518,7 +522,7 @@ body:has(.scan-shell) {
 }
 
 .scan-pin-badge-latest {
-  transform: scale(1.32);
+  transform: translate(-50%, -50%) scale(1.32);
 }
 
 .scan-pin-callout {

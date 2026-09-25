@@ -51,4 +51,57 @@ let run = () => {
     "a tap inside only the larger box picks it",
     BoxLayout.hitTest(boxes, 5.0, 5.0) == Some(0),
   )
+
+  // -- pinHalfSizes: two pins 20px apart split the gap evenly ---------------
+  // Chebyshev distance is 20 (only x differs); half of that is 10, inside
+  // [minHalf=4, maxHalf=22], so no clamp fires.
+  TestKit.check(
+    "two pins 20px apart both get half-size 10",
+    BoxLayout.pinHalfSizes([(100.0, 100.0), (120.0, 100.0)]) == [10.0, 10.0],
+  )
+
+  // -- pinHalfSizes: a lone pin has no neighbor, so it gets the max ---------
+  TestKit.check(
+    "a lone pin gets the max half-size 22 (no other center to measure against)",
+    BoxLayout.pinHalfSizes([(50.0, 50.0)]) == [22.0],
+  )
+
+  // -- pinHalfSizes: coincident pins (distance 0) both clamp to the floor ---
+  // The documented can't-fix case: two pins on the exact same spot cannot
+  // both get non-overlapping boxes, so both clamp to minHalf.
+  TestKit.check(
+    "two pins at the same spot both get the floor half-size 4",
+    BoxLayout.pinHalfSizes([(70.0, 70.0), (70.0, 70.0)]) == [4.0, 4.0],
+  )
+
+  // -- pinHalfSizes: a dense generated grid never lets two boxes overlap ----
+  // A 5x5 grid at 10px spacing (>= 2*minHalf=8, so the floor cannot force
+  // an overlap). For every pair i,j, h_i + h_j <= chebyshev(i,j) must hold,
+  // or the two axis-aligned squares centered on i and j would overlap.
+  let gridRows = [0, 1, 2, 3, 4]
+  let gridCols = [0, 1, 2, 3, 4]
+  let grid = gridRows->Array.reduce([], (acc, row) =>
+    Array.concat(
+      acc,
+      gridCols->Array.map(col => (Int.toFloat(col) *. 10.0, Int.toFloat(row) *. 10.0)),
+    )
+  )
+  let gridHalves = BoxLayout.pinHalfSizes(grid)
+  let chebyshev = (x1: float, y1: float, x2: float, y2: float): float =>
+    Math.max(Math.abs(x1 -. x2), Math.abs(y1 -. y2))
+  let epsilon = 0.001
+  let noOverlap = grid->Array.reduceWithIndex(true, (okSoFar, p1, i) => {
+    let (x1, y1) = p1
+    let hi = Option.getOr(Array.get(gridHalves, i), 0.0)
+    grid->Array.reduceWithIndex(okSoFar, (ok, p2, j) =>
+      if j <= i {
+        ok
+      } else {
+        let (x2, y2) = p2
+        let hj = Option.getOr(Array.get(gridHalves, j), 0.0)
+        ok && (hi +. hj <= chebyshev(x1, y1, x2, y2) +. epsilon)
+      }
+    )
+  })
+  TestKit.check("no two boxes overlap on a dense 5x5 grid at 10px spacing", noOverlap)
 }
