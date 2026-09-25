@@ -1,6 +1,6 @@
 # Fixtures
 
-These files are synthetic. Nobody captured them from a real call.
+Most files here are synthetic. Three files are recordings of real Claude calls: `demo/claude-stream.events.jsonl.gz`, `demo/claude-spot.events.jsonl.gz` and `spot/claude-spot.events.jsonl`.
 
 We shaped `claude-scene.json` and `claude-haul.json` from the Messages API,
 per the claude-api skill. `claude-haul.json` is the haul prompt's shape

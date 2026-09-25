@@ -2,8 +2,8 @@
 // the ClaudeStream.run call): it now matches any exception, not only a JS
 // Error wrapped as JsExn. The seam is STREAM_THROW_EXN, a fixture-mode-only
 // test switch declared next to STREAM_DROP_AFTER_MS in StreamRoute.res --
-// it raises StreamRouteTestThrow, a plain ReScript `exception`, with
-// `raise`, before the Claude call. No JS Error, no fs call, no dataDir
+// it throws StreamRouteTestThrow, a plain ReScript `exception`, with
+// `throw`, before the Claude call. No JS Error, no fs call, no dataDir
 // trick: unlike StreamRouteWriteFailTest.res's ENOTDIR, this failure never
 // touches JS-land at all.
 
