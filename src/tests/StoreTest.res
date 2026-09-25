@@ -99,6 +99,14 @@ let run = () => {
     "addScene with no size leaves both fields None",
     sNoSize.imageWidth == None && sNoSize.imageHeight == None,
   )
+  switch Store.sceneByClient(db, ~haulId="haul-1", ~clientId="client-nosize") {
+  | Some(s) =>
+    TestKit.check(
+      "a fresh read of the no-size scene keeps both fields None",
+      s.imageWidth == None && s.imageHeight == None,
+    )
+  | None => TestKit.check("sceneByClient found the no-size scene", false)
+  }
 
   // -- nextQueued: FIFO and skips a stopped haul -----------------------------
   TestKit.section("Store: nextQueued is FIFO and skips a stopped haul")
@@ -397,9 +405,24 @@ let run = () => {
       UNIQUE (haulId, clientId)
     )`,
   )
+  // A scene row written under the old schema, before the size columns
+  // existed — the shape a pre-2026-09-25 scene has on disk today.
+  Sqlite.exec(
+    oldDb2,
+    `INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt)
+     VALUES ('scene-presize', 'haul-mig2', 'client-presize', 'queued', 'data/photos/scene-presize.jpg', '2026-09-25T11:59:00.000Z')`,
+  )
   Sqlite.close(oldDb2)
 
   let migDb2 = Store.openAt(migPath2)
+  switch Store.sceneByClient(migDb2, ~haulId="haul-mig2", ~clientId="client-presize") {
+  | Some(s) =>
+    TestKit.check(
+      "a pre-migration scene with no size columns reads back with None sizes",
+      s.imageWidth == None && s.imageHeight == None,
+    )
+  | None => TestKit.check("sceneByClient found the pre-migration scene", false)
+  }
   Store.createHaul(migDb2, ~haulId="haul-mig2", ~name=None, ~now="2026-09-25T12:00:00.000Z")->ignore
   let migScene = Store.addScene(
     migDb2,

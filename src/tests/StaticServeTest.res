@@ -49,6 +49,11 @@ let run = async () => {
 
   let unknownIdResp = await Fetch.fetch(base ++ "/api/scenes/no-such-scene/photo")
   TestKit.check("an unknown scene id is 404", Fetch.status(unknownIdResp) == 404)
+  let unknownIdJson = await Fetch.json(unknownIdResp)
+  TestKit.check(
+    "the 404 reply has an error field, same shape as the 400",
+    Json.stringField(unknownIdJson, "error")->Option.isSome,
+  )
 
   Node.HttpServer.close(server, () => ())
 }

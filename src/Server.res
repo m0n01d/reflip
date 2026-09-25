@@ -304,7 +304,7 @@ let handleScenePhoto = (config: Config.t, id: string, res: Node.HttpServer.respo
       )
       endWithBuffer(res, Node.Fs.readFileBuffer(resolved))
     } else {
-      textResponse(res, 404, "text/plain", "not found")
+      errorJson(res, 404, "not found")
     }
   }
 

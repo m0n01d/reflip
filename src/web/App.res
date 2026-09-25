@@ -106,29 +106,29 @@ module EbayBlock = {
 // card can reuse it too — it has a box and a size, but no sceneReply.
 module PhotoView = {
   @react.component
-  let make = (
-    ~photoUrl: string,
-    ~imageWidth: int,
-    ~imageHeight: int,
-    ~selectedBox: option<Types.box>,
-    ~onPhotoTap: ReactEvent.Mouse.t => unit,
-  ) =>
-    <div id={photoWrapId} className="photo-wrap">
-      <img className="photo-img" src={photoUrl} onClick={onPhotoTap} />
-      {switch selectedBox {
-      | None => React.null
-      | Some(b) =>
-        <div
-          className="photo-box"
-          style={{
-            JsxDOMStyle.left: pct(b.x1, imageWidth),
-            top: pct(b.y1, imageHeight),
-            width: pct(b.x2 - b.x1, imageWidth),
-            height: pct(b.y2 - b.y1, imageHeight),
-          }}
-        />
-      }}
-    </div>
+    let make = (
+      ~photoUrl: string,
+      ~imageWidth: option<int>,
+      ~imageHeight: option<int>,
+      ~selectedBox: option<Types.box>,
+      ~onPhotoTap: ReactEvent.Mouse.t => unit,
+    ) =>
+      <div id={photoWrapId} className="photo-wrap">
+        <img className="photo-img" src={photoUrl} onClick={onPhotoTap} />
+        {switch (selectedBox, imageWidth, imageHeight) {
+        | (Some(b), Some(imageWidth), Some(imageHeight)) =>
+          <div
+            className="photo-box"
+            style={{
+              JsxDOMStyle.left: pct(b.x1, imageWidth),
+              top: pct(b.y1, imageHeight),
+              width: pct(b.x2 - b.x1, imageWidth),
+              height: pct(b.y2 - b.y1, imageHeight),
+            }}
+          />
+        | _ => React.null
+        }}
+      </div>
 }
 
 // The crop of one item's box out of its photo: a 10% margin around the box,
@@ -363,52 +363,48 @@ let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
 // click from bubbling up to the card's own onClick.
 module GemCard = {
   @react.component
-  let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
-    <li className="item" onClick={_ => onToggle(gem.findId)}>
-      <div className="item-top">
-        <CropView
-          box={gem.box}
-          photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-          imageWidth={gem.imageWidth}
-          imageHeight={gem.imageHeight}
-        />
-        <div className="item-info">
-          <div className="item-name"> {React.string(gem.name)} </div>
-          <div className="item-range">
-            {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
-          </div>
-          {switch gem.where {
-          | Some(w) => <div className="item-basis"> {React.string(w)} </div>
-          | None => React.null
-          }}
-          <div className="item-confidence">
-            {React.string("confidence " ++ fmtPct(gem.confidence))}
+    let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
+      <li className="item" onClick={_ => onToggle(gem.findId)}>
+        <div className="item-top">
+          <CropView
+            box={gem.box}
+            photoUrl={Api.scenePhotoUrl(gem.sceneId)}
+            imageWidth={gem.imageWidth}
+            imageHeight={gem.imageHeight}
+          />
+          <div className="item-info">
+            <div className="item-name"> {React.string(gem.name)} </div>
+            <div className="item-range">
+              {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
+            </div>
+            {switch gem.where {
+            | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+            | None => React.null
+            }}
+            <div className="item-confidence">
+              {React.string("confidence " ++ fmtPct(gem.confidence))}
+            </div>
           </div>
         </div>
-      </div>
-      <EbayBlock ebay={gem.ebay} />
-      <a
-        className="sold-link"
-        href={gem.soldSearchUrl}
-        target="_blank"
-        rel="noreferrer"
-        onClick={ReactEvent.Mouse.stopPropagation}>
-        {React.string("Sold listings")}
-      </a>
-      {isOpen
-        ? switch (gem.imageWidth, gem.imageHeight) {
-          | (Some(imageWidth), Some(imageHeight)) =>
-            <PhotoView
+        <EbayBlock ebay={gem.ebay} />
+        <a
+          className="sold-link"
+          href={gem.soldSearchUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={ReactEvent.Mouse.stopPropagation}>
+          {React.string("Sold listings")}
+        </a>
+        {isOpen
+          ? <PhotoView
               photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-              imageWidth
-              imageHeight
+              imageWidth={gem.imageWidth}
+              imageHeight={gem.imageHeight}
               selectedBox={gem.box}
               onPhotoTap={_ => ()}
             />
-          | _ => React.null
-          }
-        : React.null}
-    </li>
+          : React.null}
+      </li>
 }
 
 module HaulView = {
@@ -756,8 +752,8 @@ let make = () => {
           <>
             <PhotoView
               photoUrl
-              imageWidth={reply.imageWidth}
-              imageHeight={reply.imageHeight}
+              imageWidth={Some(reply.imageWidth)}
+              imageHeight={Some(reply.imageHeight)}
               selectedBox
               onPhotoTap
             />
