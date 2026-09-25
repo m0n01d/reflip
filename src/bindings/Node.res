@@ -42,6 +42,9 @@ module Process = {
   // Used by EmailCheck.res to report a clean 0/1 status instead of an
   // uncaught-rejection stack trace.
   @scope("process") @val external exit: int => unit = "exit"
+  // [execPath, scriptPath, ...userArgs] -- StreamSpike.res slices off the
+  // first two to get just the flags the caller passed after the script name.
+  @scope("process") @val external argv: array<string> = "argv"
 }
 
 module Crypto = {
