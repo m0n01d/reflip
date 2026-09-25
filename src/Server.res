@@ -429,7 +429,7 @@ let start = (config: Config.t): promise<startResult> =>
     }
     let worker = HaulWorker.make(~config, ~store, ~onDrained=haulId => {
       Console.log("reflip: haul " ++ haulId ++ " drained")
-      Promise.resolve()
+      HaulEmail.send(config, store, haulId)
     })
     let server = Node.HttpServer.createServer((req, res) =>
       route(config, store, worker, req, res)

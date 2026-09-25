@@ -8,6 +8,8 @@ module Buffer = {
   @val @scope("Buffer") external concat: array<t> => t = "concat"
   @send external toStringWithEncoding: (t, string) => string = "toString"
   @get external length: t => int = "length"
+
+  @val @scope("Buffer") external fromString: (string, string) => t = "from"
 }
 
 module Fs = {
@@ -24,6 +26,8 @@ module Fs = {
 
   type mkdirOptions = {recursive: bool}
   @module("node:fs") external mkdirSync: (string, mkdirOptions) => unit = "mkdirSync"
+
+  @module("node:fs") external copyFileSync: (string, string) => unit = "copyFileSync"
 }
 
 module Path = {

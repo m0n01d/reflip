@@ -8,6 +8,9 @@ EbayDecodeTest.run()
 GuardTest.run()
 StoreTest.run()
 AppStateTest.run()
+DigestTest.run()
+EmailTest.run()
+ThumbTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server): a rejection here fails the process
@@ -18,6 +21,7 @@ let () =
   ->Promise.then(() => StaticServeTest.run())
   ->Promise.then(() => ClaudeTimeoutTest.run())
   ->Promise.then(() => HaulTest.run())
+  ->Promise.then(() => HaulEmailTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()
