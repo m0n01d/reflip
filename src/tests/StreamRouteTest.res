@@ -9,7 +9,7 @@ let cwd = Node.Process.cwd()
 // Every SceneStream.logEvent the fixture SSE actually produces, in order,
 // via StreamRoute's SSE names — see SceneStreamTest.res's own
 // `expectedKinds` for the SceneStream-level list this maps from. Wrapped
-// with StreamRoute's own photo-received and scene.
+// with StreamRoute's own photo-received, scene and end.
 let expectedKinds = [
   "photo-received",
   "claude-started",
@@ -28,6 +28,11 @@ let expectedKinds = [
   "item",
   "done",
   "scene",
+  // No tests/fixtures/claude-spot fixture exists, so the spot pass ends in
+  // SpotPass.NoFixture and finishSpot (StreamRoute.handle) writes exactly
+  // this one event, right before `end`.
+  "spot-failed",
+  "end",
 ]
 
 // Reads a fetch response body as SSE, one event at a time, with its
@@ -163,7 +168,7 @@ let runHappyPath = async () => {
 }
 
 let runStopPath = async () => {
-  TestKit.section("StreamRoute: client abort stops the upstream Claude request")
+  TestKit.section("StreamRoute: a client abort alone no longer stops the upstream Claude request")
 
   let sseText = Node.Fs.readFileUtf8(
     Node.Path.join([cwd, "tests/fixtures/claude-stream.sse"]),
@@ -256,6 +261,7 @@ let runStopPath = async () => {
   )
   TestKit.check("POST /api/scene/stream (stub) responds 200", Fetch.status(resp) == 200)
 
+  let sceneIdRef = ref("")
   switch Fetch.body(resp) {
   | None => TestKit.check("response had a body to read", false)
   | Some(stream) => {
@@ -273,6 +279,14 @@ let runStopPath = async () => {
               let text = TextDecoder.decodeStream(decoder, bytes, {stream: true})
               let (state2, events) = Sse.feed(sseStateRef.contents, text)
               sseStateRef := state2
+              switch Array.find(events, e => e.event == "photo-received") {
+              | Some(e) =>
+                switch JsonCombinators.Json.parse(e.data) {
+                | Ok(json) => sceneIdRef := Json.stringField(json, "sceneId")->Option.getOr("")
+                | Error(_) => ()
+                }
+              | None => ()
+              }
               switch Array.find(events, e => e.event == "item") {
               | Some(_) => Fetch.AbortController.abort(testController)
               | None => await readUntilItem()
@@ -285,6 +299,21 @@ let runStopPath = async () => {
     }
   }
 
+  // docs/scan-ui.md §1 decision 3: a dropped phone connection must not
+  // stop the scene by itself. Give the stub a moment it could have used
+  // to see a close, then confirm it never did.
+  await ClaudeStream.sleep(300)
+  TestKit.check(
+    "a client abort alone leaves the upstream Claude request running",
+    !stubClosedRef.contents,
+  )
+
+  // Stop is now its own request, apart from the stream connection. This
+  // test runs in the same process as the server under test, so call
+  // SceneRegistry directly the way POST /api/scene/:id/stop does, and
+  // confirm that DOES abort the call.
+  SceneRegistry.requestStop(sceneIdRef.contents)->ignore
+
   // Give every wait a time limit: poll for up to 2 s, per the brief.
   let deadline = Date.now() +. 2000.0
   let rec waitForStubClose = async (): unit =>
@@ -295,7 +324,7 @@ let runStopPath = async () => {
       await waitForStubClose()
     }
   await waitForStubClose()
-  TestKit.check("the stub sees its request closed within 2 s", stubClosedRef.contents)
+  TestKit.check("requestStop aborts the upstream Claude request within 2 s", stubClosedRef.contents)
 
   // The scene-log append is a synchronous fs write in the same reaction
   // chain that closes the upstream connection to the stub; this is slack
@@ -458,7 +487,9 @@ let runFetchFailsMidStreamPath = async () => {
 // the same crash as the test above, from a different call site
 // (buildSceneReply, not ClaudeStream.runLive).
 let runEbayThrowsPath = async () => {
-  TestKit.section("StreamRoute: an eBay lookup that throws still ends the SSE stream with an error event")
+  TestKit.section(
+    "StreamRoute: an eBay lookup that throws still sends the scene, with no eBay data",
+  )
 
   let sseText = Node.Fs.readFileUtf8(
     Node.Path.join([cwd, "tests/fixtures/claude-stream.sse"]),
@@ -511,15 +542,54 @@ let runEbayThrowsPath = async () => {
   )
   TestKit.check("POST /api/scene/stream still answers 200", Fetch.status(resp) == 200)
 
+  // Review finding R2: the eBay failure no longer fails the scene. It
+  // sends `error`, then `scene` with no eBay data, then `end` done.
   let received = await readAllEvents(resp, Date.now())
-  switch Array.find(received, ((_, e)) => e.event == "error") {
-  | None => TestKit.check("an error event was received", false)
-  | Some(_) => TestKit.check("an error event was received", true)
+  let kinds = Array.map(received, ((_, e)) => e.event)
+  let sceneKinds = Array.filter(kinds, k => !String.startsWith(k, "spot-"))
+  let n = Array.length(sceneKinds)
+  TestKit.check(
+    "the scene ends in error, scene, end (spot events aside) -- got " ++ Array.join(kinds, ","),
+    n >= 3 &&
+    Array.get(sceneKinds, n - 3) == Some("error") &&
+    Array.get(sceneKinds, n - 2) == Some("scene") &&
+    Array.get(sceneKinds, n - 1) == Some("end"),
+  )
+  let dataOf = (kind: string): option<JSON.t> =>
+    switch Array.find(received, ((_, e)) => e.event == kind) {
+    | None => None
+    | Some((_, e)) =>
+      switch JsonCombinators.Json.parse(e.data) {
+      | Ok(json) => Some(json)
+      | Error(_) => None
+      }
+    }
+  switch dataOf("scene") {
+  | None => TestKit.check("a scene event was sent, and its data parses", false)
+  | Some(json) => {
+      let items = Json.arrayField(json, "items")->Option.getOr([])
+      TestKit.check(
+        "the scene has items, and every item's ebay is null",
+        Array.length(items) > 0 &&
+          Array.every(items, item =>
+            switch item {
+            | JSON.Object(d) => Dict.get(d, "ebay") == Some(JSON.Null)
+            | _ => false
+            }
+          ),
+      )
+      TestKit.check(
+        "ebayNote says the eBay lookup failed",
+        Json.stringField(json, "ebayNote")
+        ->Option.map(note => String.includes(note, "eBay lookup failed"))
+        ->Option.getOr(false),
+      )
+    }
   }
-  switch Array.find(received, ((_, e)) => e.event == "scene") {
-  | None => TestKit.check("no scene event was sent, since buildSceneReply threw", true)
-  | Some(_) => TestKit.check("no scene event was sent, since buildSceneReply threw", false)
-  }
+  TestKit.check(
+    "end status is done",
+    dataOf("end")->Option.flatMap(j => Json.stringField(j, "status")) == Some("done"),
+  )
 
   Node.HttpServer.close(server, () => ())
   Node.HttpServer.close(stub, () => ())

@@ -514,6 +514,83 @@ let handleScene = async (
     }
   }
 
+type sceneRoute = Stop(string) | Events(string)
+let parseScenePath = (method: string, pathname: string): option<sceneRoute> => {
+  let parts = pathname->String.split("/")->Array.filter(s => s != "")
+  if Array.length(parts) == 4 {
+    let a = Array.getUnsafe(parts, 0)
+    let b = Array.getUnsafe(parts, 1)
+    let id = Array.getUnsafe(parts, 2)
+    let c = Array.getUnsafe(parts, 3)
+    if a == "api" && b == "scene" {
+      switch (method, c) {
+      | ("POST", "stop") => Some(Stop(id))
+      | ("GET", "events") => Some(Events(id))
+      | _ => None
+      }
+    } else {
+      None
+    }
+  } else {
+    None
+  }
+}
+
+// POST /api/scene/:id/stop (docs/scan-ui.md §3): ends a scene on purpose,
+// apart from the stream connection. 202 while it is still finishing up,
+// 200 with its final status once it already ended, 404 for an unknown or
+// expired id.
+let handleSceneStop = (sceneId: string, res: Node.HttpServer.response): unit =>
+  switch SceneRegistry.requestStop(sceneId) {
+  | None => errorJson(res, 404, "unknown scene id: " ++ sceneId)
+  | Some(SceneRegistry.Running) =>
+    jsonResponse(res, 202, Json.obj([("status", Json.str("stopping"))]))
+  | Some(SceneRegistry.Ended(status)) =>
+    jsonResponse(res, 200, Json.obj([("status", Json.str(ScanEvent.EndStatus.toString(status)))]))
+  }
+
+// GET /api/scene/:id/events?from=<n> (docs/scan-ui.md §3): replays a
+// scene's buffer from index n (default 0), then stays open for live
+// events until `end`. 404 JSON for an unknown or expired id. SceneRegistry
+// itself sends the SSE headers and closes the response once found, so
+// there is nothing left to do here on that path.
+// GET /api/scene/:id/events?from=<n> (docs/scan-ui.md §3): replays a
+// scene's buffer from index n (default 0), then stays open for live
+// events until `end`. A missing `from` still means 0. A `from` that is not
+// a whole number 0 or more is a 400 JSON error (Opus review item 3) --
+// before this fix, a negative value was clamped to 0 in
+// SceneRegistry.attach, and an unparseable one fell back to that same
+// default 0, so either one silently replayed the whole buffer instead of
+// being rejected. 404 JSON for an unknown or expired id. SceneRegistry
+// does the actual buffer replay plus live hookup.
+let handleSceneEvents = (url: Node.Url.t, sceneId: string, res: Node.HttpServer.response): unit => {
+  // A non-negative decimal integer round-trips through Int.toString; a
+  // negative sign, a non-numeric string, or any other stray character
+  // ("1.5", "05", " 5") does not, so this one check rejects all of them.
+  let parseFrom = (s: string): option<int> =>
+    switch Int.fromString(s) {
+    | Some(n) if n >= 0 && Int.toString(n) == s => Some(n)
+    | _ => None
+    }
+  let fromParam = Node.Url.searchParams(url)->Node.Url.getParam("from")->Nullable.toOption
+  let fromResult = switch fromParam {
+  | None => Ok(0)
+  | Some(s) =>
+    switch parseFrom(s) {
+    | Some(n) => Ok(n)
+    | None => Error(s)
+    }
+  }
+  switch fromResult {
+  | Error(s) => errorJson(res, 400, "from must be a whole number, 0 or more: " ++ s)
+  | Ok(from) =>
+    switch SceneRegistry.attach(sceneId, res, ~from) {
+    | SceneRegistry.NotFound => errorJson(res, 404, "unknown scene id: " ++ sceneId)
+    | SceneRegistry.Attached => ()
+    }
+  }
+}
+
 let route = async (
   config: Config.t,
   store: Store.t,
@@ -530,6 +607,10 @@ let route = async (
   | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)
   | Some(MarkDone(haulId)) => handleMarkDone(config, store, worker, haulId, res)
   | Some(ScenePhoto(sceneId)) => handleScenePhoto(config, sceneId, res)
+  | None =>
+  switch parseScenePath(method, pathname) {
+  | Some(Stop(sceneId)) => handleSceneStop(sceneId, res)
+  | Some(Events(sceneId)) => handleSceneEvents(url, sceneId, res)
   | None =>
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
@@ -603,6 +684,7 @@ let route = async (
       }
     | _ => textResponse(res, 404, "text/plain", "not found")
     }
+  }
   }
   }
 }

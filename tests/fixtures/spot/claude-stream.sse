@@ -1,0 +1,261 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_fixture_01","type":"message","role":"assistant","model":"claude-sonnet-5","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":2800,"output_tokens":5,"cache_creation_input_tokens":0,"cache_read_input_tokens":0}}}
+
+event: ping
+data: {"type":"ping"}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"fixture-signature-not-real"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_code_01","name":"code_execution","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"code"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\": \"run(\\"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\"check\\\")\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"server_tool_use","id":"srvtoolu_search_01","name":"web_search","caller":{"type":"code_execution_20260120","tool_id":"srvtoolu_code_01"},"input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"{\"query\": "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"\"vintage Pyrex nesti"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":2,"delta":{"type":"input_json_delta","partial_json":"ng mixing bowls set\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: content_block_start
+data: {"type":"content_block_start","index":3,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_search_01","caller":{"type":"code_execution_20260120","tool_id":"srvtoolu_code_01"},"content":[{"type":"web_search_result","title":"Vintage Pyrex nesting bowls, set of 4","url":"https://example-collectibles.test/pyrex-bowls","encrypted_content":"fixture-enc-1","page_age":"3 days ago"},{"type":"web_search_result","title":"Pyrex primary colors mixing bowl set - sold listing","url":"https://example-auction.test/pyrex-primary","encrypted_content":"fixture-enc-2","page_age":"2 weeks ago"},{"type":"web_search_result","title":"How to date vintage Pyrex nesting bowls","url":"https://example-guide.test/pyrex-dating","encrypted_content":"fixture-enc-3","page_age":"1 year ago"}]}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":3}
+
+event: content_block_start
+data: {"type":"content_block_start","index":4,"content_block":{"type":"code_execution_tool_result","tool_use_id":"srvtoolu_code_01","content":{"type":"encrypted_code_execution_result","encrypted_stdout":"fixture-encrypted-blob-not-real","encrypted_stderr":"","return_code":0}}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":4}
+
+event: content_block_start
+data: {"type":"content_block_start","index":5,"content_block":{"type":"server_tool_use","id":"srvtoolu_search_02","name":"web_search","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":5,"delta":{"type":"input_json_delta","partial_json":"{\"query\": \"rare"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":5,"delta":{"type":"input_json_delta","partial_json":" vintage board game lot price guide\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":5}
+
+event: content_block_start
+data: {"type":"content_block_start","index":6,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_search_02","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":6}
+
+event: content_block_start
+data: {"type":"content_block_start","index":7,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"{\"items\": [{\"name"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"Pyrex mi"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"xing "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowl set\", \"maker"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"Pyrex\", \"quer"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"y\": \"vintage Pyre"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"x nesting mixing "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowls set\", \"esti"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"mateLowUsd\": 35, "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\"estimateHighUsd\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":": 8"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"5, \"basis\": \"C"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"omplete vintage n"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"esting sets sell "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"steadily to colle"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ctors\", \"confiden"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ce\": 0."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"7, \"source"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"s\": [\"https:\\"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"/\\"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"/e"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"xample-collectibl"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"es.test/pyrex-bow"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"ls\"]}, {\"name\": \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"Cast iron skillet"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"maker\": \"\", \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"query\": \"vintage "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"unmarked cast iro"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"n skillet 10 inch"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"estimateLowUs"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"d\": 1"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"5, \"estimate"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"HighUsd\": 40, \"ba"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"sis\": \"Unmarked s"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"killets sell for "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"less than Gri"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"swol"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"d or Wagner\", \"co"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"nfidence\": 0.5, \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"sources\": [\"https"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"://example-collec"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"tibles.test/cast-"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"iron-skillets\"]},"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" {\"name\": \"Board "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"game lot\", \"maker"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"\", \"query\": \""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"vintage board gam"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"e lot 1970s\", \"es"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"timateLowUsd\": 10"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":", \"estimateHighUs"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"d\": 25, \"basis\": "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\"Mixed-condition "}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"lots sell low wit"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"hout box art phot"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"os\", \"confidence\""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":": 0."}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"4, \"sources\":"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" []}]}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":7}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"input_tokens":2800,"output_tokens":410,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"server_tool_use":{"web_search_requests":2}}}
+
+event: message_stop
+data: {"type":"message_stop"}
+

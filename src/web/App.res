@@ -53,6 +53,32 @@ let runPhotoFlow = async (
   }
 }
 
+// The side-effect edge for the new streaming scan flow (docs/scan-ui.md):
+// resize, then hand the blob straight to ScanApi.run, which owns the POST,
+// the SSE read, the heartbeat watchdog and the reconnect backoff. Reports
+// the handle and the object URL back through the two setters, so Stop and
+// New scan's own edge effects (in make, below) can reach them.
+let runScanFlow = async (
+  dispatch: AppState.msg => unit,
+  setHandle: ScanApi.handle => unit,
+  setPhotoUrl: string => unit,
+  scanModel: Shared.model,
+  longEdge: int,
+  file: WebApi.blob,
+) =>
+  switch await Resize.resizeToJpeg(file, longEdge) {
+  | Error(msg) => dispatch(AppState.ResizeErr(msg))
+  | Ok((blob, _resizeMs)) =>
+    let photoUrl = WebApi.createObjectURL(blob)
+    setPhotoUrl(photoUrl)
+    dispatch(
+      AppState.Scan(
+        ScanState.PhotoPicked({model: scanModel, photoUrl, bytes: WebApi.blobSize(blob)}),
+      ),
+    )
+    setHandle(ScanApi.run(~model=scanModel, ~blob, ~dispatch=msg => dispatch(AppState.Scan(msg))))
+  }
+
 let statusText = (status: AppState.status): string =>
   switch status {
   | Idle => ""
@@ -588,7 +614,52 @@ let make = () => {
     }
   }, (pollHaulId, pollActive))
 
-  let onFileChange = (event: ReactEvent.Form.t) => {
+  // -- the new streaming scan flow: refs so Stop/New scan's edge effects
+  // below can reach the live ScanApi.handle and revoke the current photo's
+  // object URL. A plain React.useRef, not state — neither should ever
+  // trigger a re-render on its own.
+  let scanHandleRef: React.ref<option<ScanApi.handle>> = React.useRef(None)
+  let scanPhotoUrlRef: React.ref<option<string>> = React.useRef(None)
+
+  // -- Stop: the view only dispatches StopTapped; this is the edge effect
+  // that actually asks the brain to stop, once stopRequested flips true.
+  React.useEffect1(() => {
+    if model.scan.stopRequested {
+      switch scanHandleRef.current {
+      | Some(handle) => handle.stop()->Promise.ignore
+      | None => ()
+      }
+    }
+    None
+  }, [model.scan.stopRequested])
+
+  // -- New scan: the view only dispatches NewScan, which resets model.scan
+  // back to ScanState.initialModel (phase Ready). This is the edge effect
+  // that tears down any live connection and revokes the finished photo's
+  // object URL once that reset lands (a no-op on first mount — Ready is
+  // also the very first phase, before any handle or photo URL exists).
+  React.useEffect1(() => {
+    if model.scan.phase == ScanState.Ready {
+      switch scanHandleRef.current {
+      | Some(handle) =>
+        handle.abort()
+        scanHandleRef.current = None
+      | None => ()
+      }
+      switch scanPhotoUrlRef.current {
+      | Some(url) =>
+        WebApi.revokeObjectURL(url)
+        scanPhotoUrlRef.current = None
+      | None => ()
+      }
+    }
+    None
+  }, [model.scan.phase])
+
+  // A new photo for the scan flow: revoke the previous scan's object URL
+  // and abort any live connection first (same guard runPhotoFlow's onChange
+  // below applies), then hand off to the edge function above.
+  let onScanFileChange = (event: ReactEvent.Form.t) => {
     let target = WebApi.eventTarget(event)
     switch WebApi.targetFiles(target)->Nullable.toOption {
     | None => ()
@@ -597,36 +668,24 @@ let make = () => {
         switch WebApi.fileListItem(files, 0)->Nullable.toOption {
         | None => ()
         | Some(file) =>
-          // A new photo replaces the old object URL — revoke it here,
-          // synchronously, before the async resize/upload flow starts.
-          switch model.photoUrl {
+          switch scanHandleRef.current {
+          | Some(handle) => handle.abort()
+          | None => ()
+          }
+          switch scanPhotoUrlRef.current {
           | Some(url) => WebApi.revokeObjectURL(url)
           | None => ()
           }
-          runPhotoFlow(
+          runScanFlow(
             dispatch,
-            Shared.modelId(model.selectedModel),
+            handle => scanHandleRef.current = Some(handle),
+            url => scanPhotoUrlRef.current = Some(url),
+            model.selectedModel,
             model.longEdge,
             file,
           )->Promise.ignore
         }
       }
-    }
-  }
-
-  let onModelChange = (event: ReactEvent.Form.t) => {
-    let value = WebApi.targetValue(WebApi.eventTarget(event))
-    switch Shared.parseModelId(value) {
-    | Some(m) => dispatch(AppState.SetModel(m))
-    | None => ()
-    }
-  }
-
-  let onLongEdgeChange = (event: ReactEvent.Form.t) => {
-    let value = WebApi.targetValue(WebApi.eventTarget(event))
-    switch Int.fromString(value) {
-    | Some(n) => dispatch(AppState.SetLongEdge(n))
-    | None => ()
     }
   }
 
@@ -670,136 +729,16 @@ let make = () => {
       }
     }
 
-  // A tap on a card: select it, then scroll the photo into view so the
-  // item's box (drawn next render) is visible.
-  let onSelectCard = (i: int) => {
-    dispatch(AppState.SelectItem(i))
-    scrollIntoViewById(photoWrapId)
+  let isScanMode = switch model.haul {
+  | NoHaul => true
+  | Starting | Active(_) | Finishing(_) | Finished(_) => false
   }
 
-  // A tap on the photo: convert the tap point to photo pixels using the
-  // tapped element's own on-screen rect (it is the <img>, sized to the
-  // photo's aspect ratio), then hit-test. A miss does nothing; a hit
-  // selects that item's card and scrolls it into view.
-  let onPhotoTap = (event: ReactEvent.Mouse.t) =>
-    switch model.reply {
-    | None => ()
-    | Some(reply) =>
-      let rect = WebApi.getBoundingClientRect(WebApi.mouseCurrentTarget(event))
-      let px =
-        (Int.toFloat(ReactEvent.Mouse.clientX(event)) -. rect.left) *.
-        Int.toFloat(reply.imageWidth) /.
-        rect.width
-      let py =
-        (Int.toFloat(ReactEvent.Mouse.clientY(event)) -. rect.top) *.
-        Int.toFloat(reply.imageHeight) /.
-        rect.height
-      let boxes = reply.items->Array.map(item => item.box)
-      switch BoxLayout.hitTest(boxes, px, py) {
-      | None => ()
-      | Some(i) =>
-        dispatch(AppState.SelectItem(i))
-        scrollIntoViewById(itemCardId(i))
-      }
-    }
-
-  let selectedBox =
-    model.selected
-    ->Option.flatMap(i => model.reply->Option.flatMap(reply => Array.get(reply.items, i)))
-    ->Option.flatMap(item => item.box)
-
   <div className="page">
-    <h1> {React.string("reflip")} </h1>
+    {isScanMode ? React.null : <h1> {React.string("reflip")} </h1>}
     {switch model.haul {
     | NoHaul =>
-      <>
-        <section className="haul-start">
-          <h2> {React.string("Haul mode")} </h2>
-          <input
-            className="store-name"
-            type_="text"
-            placeholder="Store name (optional)"
-            value={model.storeName}
-            onChange={onStoreNameChange}
-          />
-          <button className="take-photo" onClick={onStartHaul}>
-            {React.string("Start haul")}
-          </button>
-          {switch model.haulError {
-          | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
-          | None => React.null
-          }}
-        </section>
-        <hr />
-        <div className="pickers">
-          <label className="picker">
-            {React.string("Model")}
-            <select value={Shared.modelId(model.selectedModel)} onChange={onModelChange}>
-              {Shared.allModels
-              ->Array.map(m =>
-                <option key={Shared.modelId(m)} value={Shared.modelId(m)}>
-                  {React.string(Shared.modelLabel(m))}
-                </option>
-              )
-              ->React.array}
-            </select>
-          </label>
-          <label className="picker">
-            {React.string("Long edge")}
-            <select value={Int.toString(model.longEdge)} onChange={onLongEdgeChange}>
-              <option value="1568"> {React.string("1568 px (default)")} </option>
-              <option value="2576"> {React.string("2576 px")} </option>
-            </select>
-          </label>
-        </div>
-        <label className="take-photo">
-          <input
-            className="visually-hidden"
-            type_="file"
-            accept="image/*"
-            capture=#environment
-            onChange={onFileChange}
-          />
-          {React.string("Take photo")}
-        </label>
-        <div className="hint">
-          {React.string("Put a quarter next to small items to show their size.")}
-        </div>
-        <div className="status"> {React.string(statusText(model.status))} </div>
-        {switch (model.reply, model.photoUrl) {
-        | (Some(reply), Some(photoUrl)) =>
-          <>
-            <PhotoView
-              photoUrl
-              imageWidth={Some(reply.imageWidth)}
-              imageHeight={Some(reply.imageHeight)}
-              selectedBox
-              onPhotoTap
-            />
-            <ul className="items">
-              {reply.items
-              ->Array.mapWithIndex((item, i) =>
-                <ItemCard
-                  key={Int.toString(i)}
-                  item
-                  index=i
-                  photoUrl
-                  imageWidth={reply.imageWidth}
-                  imageHeight={reply.imageHeight}
-                  selected={model.selected == Some(i)}
-                  onSelect=onSelectCard
-                />
-              )
-              ->React.array}
-            </ul>
-          </>
-        | _ => React.null
-        }}
-        {switch model.reply {
-        | None => React.null
-        | Some(reply) => <Footer model reply />
-        }}
-      </>
+      <ScanShell model dispatch onScanFileChange onStoreNameChange onStartHaul />
     | Starting => <div className="status"> {React.string("starting haul…")} </div>
     | Active(status) | Finishing(status) | Finished(status) =>
       <HaulView

@@ -28,3 +28,37 @@ too (PR #8's follow-up). Its second item's box (the skillet, a gem) is
 and that find stores no box — the skillet is a gem, so this is the fixture
 that proves a gem with no box works end to end, all the way through the
 haul digest email.
+
+## Timed replay
+
+`FixtureReplay.res` reads a recorded Claude stream. It replays the stream
+in real time. It does not send every event at once.
+
+A recording is one file, `<base>.events.jsonl`, or its gzip form,
+`<base>.events.jsonl.gz`. Each line is one JSON object, with fields `ms`,
+`event`, and `data`. The `ms` field is the offset of the event from the
+start of the recorded call.
+
+`STREAM_FIXTURE_SPEED` sets the replay speed. FixtureReplay divides the
+`ms` value of each event by this number. A speed of 10 plays the recording
+10 times faster than real time. The default speed is 1. FixtureReplay
+ignores a value of 0 or less, and uses speed 1 instead.
+
+`tests/fixtures/replay/` holds a small recording for tests.
+`tests/fixtures/demo/` holds a full recording, with about 22 items over
+112 seconds.
+
+Use this command to start the demo server at speed 10:
+
+```sh
+FIXTURES=1 FIXTURES_DIR=tests/fixtures/demo STREAM_FIXTURE_SPEED=10 PORT=8793 npm start
+```
+
+Then, in a second shell, send the test photo to the stream route:
+
+```sh
+curl -sN -X POST --data-binary @tests/fixtures/table.jpg -H 'content-type: image/jpeg' http://127.0.0.1:8793/api/scene/stream
+```
+
+If neither file exists, ClaudeStream uses `claude-stream.sse`. The route
+used this fixture before this feature existed.

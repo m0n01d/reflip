@@ -30,7 +30,13 @@ type haulPhase =
   | Starting
   | Active(Types.haulStatus)
   | Finishing(Types.haulStatus) // Done tapped: draining the queue, then POST done
-  | Finished(Types.haulStatus) // brain confirmed done; polling continues until emailedAt
+  | Finished(Types.haulStatus)
+
+// The Scan/Haul chrome switch (docs/design/scan-ui/Main.dc.html) — display
+// only, independent of haulPhase above. NoHaul + HaulTab shows the existing
+// haul-start entry form; NoHaul + ScanTab shows the restyled scan Ready
+// screen. Any other haulPhase always shows HaulView regardless of this.
+type tab = ScanTab | HaulTab // brain confirmed done; polling continues until emailedAt
 
 type model = {
   selectedModel: Shared.model,
@@ -54,6 +60,13 @@ type model = {
   // The index into reply.items of the tapped card, or the item whose box
   // holds a tapped point on the photo. A new photo clears it.
   selected: option<int>,
+  // The new streaming scan flow (docs/scan-ui.md): ScanState owns its own
+  // model/msg/update, folded in here through the Scan msg below.
+  scan: ScanState.model,
+  // Scan/Haul chrome switch + the Settings sheet (Model, Photo size) — both
+  // display-only, read by ScanShell.res.
+  activeTab: tab,
+  settingsOpen: bool,
   // The findId of the open gem card in haul mode, or None if every card is
   // closed. At most one card is open at a time (AppState.update, ToggleGem).
   openGem: option<string>,
@@ -92,6 +105,9 @@ type msg =
   | DoneFailed(string)
   | NewHaul // start over once the haul is emailed
   | SelectItem(int)
+  | Scan(ScanState.msg)
+  | SetActiveTab(tab)
+  | SetSettingsOpen(bool)
   | ToggleGem(string) // a tap on a gem card's findId — same id closes, another switches, None opens
 
 let initialModel: model = {
@@ -110,6 +126,9 @@ let initialModel: model = {
   haulError: None,
   photoUrl: None,
   selected: None,
+  scan: ScanState.initialModel,
+  activeTab: ScanTab,
+  settingsOpen: false,
   openGem: None,
 }
 
@@ -259,6 +278,9 @@ let update = (model: model, msg: msg): model =>
       haulError: None,
     }
   | SelectItem(i) => {...model, selected: Some(i)}
+  | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
+  | SetActiveTab(t) => {...model, activeTab: t}
+  | SetSettingsOpen(open_) => {...model, settingsOpen: open_}
   | ToggleGem(findId) => {
       ...model,
       openGem: switch model.openGem {
