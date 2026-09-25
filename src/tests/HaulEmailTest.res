@@ -144,7 +144,7 @@ let run = async () => {
   let emailNote = Json.stringField(finalJson, "emailNote")->Option.getOr("")
   TestKit.check(
     "the emailNote says why it went to the outbox instead of Gmail",
-    emailNote == "data/outbox/" ++ haulId ++ ".eml because FIXTURES=1",
+    emailNote == "written to data/outbox/" ++ haulId ++ ".eml because FIXTURES=1",
   )
 
   let emlPath = Node.Path.join([dataDir, "outbox", haulId ++ ".eml"])

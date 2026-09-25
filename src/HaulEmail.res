@@ -156,11 +156,11 @@ let send = async (config: Config.t, store: Store.t, haulId: string): unit =>
         Store.markEmailed(store, ~haulId, ~now, ~note=Some(note))
       }
       if config.fixtures {
-        toOutbox(outboxNoteName(haulId) ++ " because FIXTURES=1")
+        toOutbox("written to " ++ outboxNoteName(haulId) ++ " because FIXTURES=1")
       } else {
         switch Email.credsFromEnv(Config.getEnv) {
         | Error(missing) =>
-          toOutbox(outboxNoteName(haulId) ++ " because " ++ joinComma(missing) ++ " are not set")
+          toOutbox("written to " ++ outboxNoteName(haulId) ++ " because " ++ joinComma(missing) ++ " are not set")
         | Ok(creds) =>
           switch await Email.send(~creds, ~mime) {
           | Ok() => Store.markEmailed(store, ~haulId, ~now, ~note=Some("sent"))
