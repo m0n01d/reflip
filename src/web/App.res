@@ -665,8 +665,13 @@ let make = () => {
       }
     }
 
+  let isScanMode = switch model.haul {
+  | NoHaul => true
+  | Starting | Active(_) | Finishing(_) | Finished(_) => false
+  }
+
   <div className="page">
-    <h1> {React.string("reflip")} </h1>
+    {isScanMode ? React.null : <h1> {React.string("reflip")} </h1>}
     {switch model.haul {
     | NoHaul =>
       <ScanShell model dispatch onScanFileChange onStoreNameChange onStartHaul />

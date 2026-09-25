@@ -38,6 +38,13 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Scan mode's own background must fill the whole page, not just the shell's
+   own box — otherwise app.css's grey body shows around the 480px column and
+   below a board shorter than the viewport (e.g. Midway's card). */
+body:has(.scan-shell) {
+  background: var(--scan-bg);
+}
+
 /* -- Header (shared shape, Ready and Run both render their own) --------- */
 
 .scan-header {
