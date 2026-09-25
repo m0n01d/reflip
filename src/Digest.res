@@ -35,6 +35,8 @@ type t = {subject: string, html: string, text: string}
 
 let usd = (n: float): string => "$" ++ Int.toString(Float.toInt(Math.round(n)))
 
+let usdCents = (n: float): string => "$" ++ Float.toFixed(n, ~digits=2)
+
 let pct = (c: float): string => Int.toString(Float.toInt(Math.round(c *. 100.0))) ++ "%"
 
 // Concatenates an array of strings with no separator, without relying on an
@@ -177,7 +179,7 @@ let htmlBody = (input: input, sortedGems: array<gem>, subject: string, ~cidFor: 
     "<p style=\"margin:16px 0 0 0;color:#555555\">" ++
     Int.toString(input.valuedCount) ++
     " photos valued, cost " ++
-    usd(input.costUsd) ++
+    usdCents(input.costUsd) ++
     ".</p>"
   "<div style=\"font-family:sans-serif;color:#222222;max-width:480px;margin:0 auto\">" ++
   "<h1 style=\"font-size:18px;margin:0 0 16px 0\">" ++
@@ -250,7 +252,7 @@ let textBody = (input: input, sortedGems: array<gem>, subject: string): string =
   stopText(input.stopReason) ++
   Int.toString(input.valuedCount) ++
   " photos valued, cost " ++
-  usd(input.costUsd) ++
+  usdCents(input.costUsd) ++
   ".\n"
 }
 

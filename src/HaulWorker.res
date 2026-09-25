@@ -201,9 +201,9 @@ and process = async (t: t, scene: Store.scene): unit => {
           t.store,
           ~haulId=scene.haulId,
           ~reason="budget reached: $" ++
-          Float.toString(total) ++
+          Float.toFixed(total, ~digits=2) ++
           " of $" ++
-          Float.toString(t.config.haulMaxUsd),
+          Float.toFixed(t.config.haulMaxUsd, ~digits=2),
         )
       }
     }

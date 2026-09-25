@@ -289,7 +289,7 @@ module HaulView = {
           {React.string("on phone " ++ Int.toString(onPhone))}
         </div>
         <div className="count">
-          {React.string("uploaded " ++ Int.toString(model.uploadedCount))}
+          {React.string("uploaded " ++ Int.toString(AppState.uploadedShown(model, status.counts)))}
         </div>
         <div className="count">
           {React.string("valued " ++ Int.toString(status.counts.valued))}
@@ -468,7 +468,11 @@ let make = () => {
     startHaul(dispatch, String.trim(model.storeName))->Promise.ignore
 
   let onDone = (_event: ReactEvent.Mouse.t) => dispatch(AppState.DoneTapped)
-  let onNewHaul = (_event: ReactEvent.Mouse.t) => dispatch(AppState.NewHaul)
+  let onNewHaul = (_event: ReactEvent.Mouse.t) => {
+    dispatch(AppState.NewHaul)
+    // Forget the finished haul, or a reload would bring it back.
+    WebApi.idbDel(AppState.currentHaulKey)->Promise.ignore
+  }
 
   let onTakeHaulPhoto = (event: ReactEvent.Form.t) =>
     switch AppState.haulStatusOf(model.haul) {

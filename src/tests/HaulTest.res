@@ -225,6 +225,13 @@ let run = async () => {
     | None => false
     },
   )
+  TestKit.check(
+    "the stop reason shows dollars with two decimals",
+    switch Json.stringField(statusJson2, "stopReason") {
+    | Some(r) => RegExp.test(/budget reached: \$\d+\.\d\d of \$\d+\.\d\d$/, r)
+    | None => false
+    },
+  )
   TestKit.check("only the first scene was valued", Json.intField(countsOf(statusJson2), "valued") == Some(1))
   TestKit.check("the other two scenes stay queued", Json.intField(countsOf(statusJson2), "queued") == Some(2))
 

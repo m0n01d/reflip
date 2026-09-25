@@ -121,6 +121,11 @@ let haulStatusOf = (phase: haulPhase): option<Types.haulStatus> =>
 
 // 5 s, 15 s, then 60 s forever. A photo is never dropped, so there is no
 // final give-up tier.
+// The "uploaded" chip. The brain's scene count survives a reload, but it
+// lags a new upload by up to one poll, so the chip shows the larger count.
+let uploadedShown = (model: model, counts: Types.haulCounts): int =>
+  Math.Int.max(model.uploadedCount, counts.queued + counts.running + counts.valued + counts.failed)
+
 let retryDelayMs = (attempts: int): int =>
   switch attempts {
   | 1 => 5000

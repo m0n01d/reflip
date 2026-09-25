@@ -72,6 +72,11 @@ let run = () => {
   )
 
   TestKit.check(
+    "the cost shows cents in both bodies",
+    String.includes(digest.html, "cost $1.52") && String.includes(digest.text, "cost $1.52"),
+  )
+
+  TestKit.check(
     "a name with <b>& is escaped in the html body",
     String.includes(digest.html, "Weird &lt;b&gt;&amp; Thing"),
   )

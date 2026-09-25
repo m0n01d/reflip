@@ -48,6 +48,14 @@ let runHaul = () => {
   let h0 = AppState.initialModel
   TestKit.check("a fresh model has no haul", h0.haul == AppState.NoHaul)
   TestKit.check("a fresh model has an empty queue", h0.queue == [])
+  TestKit.check(
+    "after a reload the uploaded chip shows the brain's scene count",
+    AppState.uploadedShown(h0, {Types.queued: 1, running: 1, valued: 4, failed: 0}) == 6,
+  )
+  TestKit.check(
+    "the uploaded chip shows the local count while the brain lags",
+    AppState.uploadedShown({...h0, uploadedCount: 3}, {Types.queued: 0, running: 0, valued: 2, failed: 0}) == 3,
+  )
 
   // -- starting and restoring a haul --------------------------------------
   let h1 = AppState.update(h0, AppState.SetStoreName("Goodwill"))
