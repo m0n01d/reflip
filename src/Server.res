@@ -285,7 +285,7 @@ let handleScene = async (
   let serverStart = Date.now()
   let imageBase64 = Node.Buffer.toStringWithEncoding(body, "base64")
   let claudeStart = Date.now()
-  switch await ClaudeClient.call(~config, ~model, ~imageBase64) {
+  switch await ClaudeClient.call(~config, ~model, ~imageBase64, ~mode=ClaudeClient.Scene) {
   | Error(ClaudeClient.NoApiKey) =>
     jsonResponse(
       res,
@@ -307,6 +307,8 @@ let handleScene = async (
     }
   | Error(ClaudeClient.DecodeFailed(_)) =>
     jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
+  | Error(ClaudeClient.CutOff) =>
+    jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
   | Ok(decoded) => {
       let claudeMs = Date.now() -. claudeStart
       let ebayStart = Date.now()

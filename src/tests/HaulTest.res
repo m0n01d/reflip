@@ -86,10 +86,11 @@ let baseConfig = (~dataDir: string, ~fixtures: bool): Config.t => {
   haulGemMinUsd: 20.0,
 }
 
-// -- Claude fixture's per-scene cost, hand-computed against Pricing.res ----
-// 2450 input tok, 380 output tok, 2 web searches, on claude-sonnet-5:
-// 2450*2e-6 + 380*10e-6 + 2*0.01 = 0.0049 + 0.0038 + 0.02 = 0.0287.
-let fixtureSceneCostUsd = 0.0287
+// -- Claude haul fixture's per-scene cost, hand-computed against Pricing.res
+// (haul mode reads tests/fixtures/claude-haul.json, step 4). 2000 input
+// tok, 300 output tok, 1 web search, on claude-sonnet-5:
+// 2000*2e-6 + 300*10e-6 + 1*0.01 = 0.004 + 0.003 + 0.01 = 0.017.
+let fixtureSceneCostUsd = 0.017
 
 let run = async () => {
   // -- 1. FIXTURES=1 happy path ----------------------------------------------
@@ -139,17 +140,30 @@ let run = async () => {
 
   let (_status, statusJson1) = await getJson(base1 ++ "/api/hauls/" ++ haulId1)
   let gems1 = Json.arrayField(statusJson1, "gems")->Option.getOr([])
+  // The haul fixture lists 2 gems (>= the $20 default) and 1 sub-threshold
+  // item per scene; the third item proves the threshold is code, not the
+  // prompt (HaulStatus.gemsOf filters on estimateHighUsd, the prompt only
+  // asks the model to skip listing items below it).
   TestKit.check(
-    "gems: 3 items/scene x 3 scenes, the fixture's whole item list qualifies",
-    Array.length(gems1) == 9,
+    "gems: 2 items/scene clear the $20 threshold x 3 scenes",
+    Array.length(gems1) == 6,
   )
   let hasEbay = Array.every(gems1, g => Json.field(g, "ebay") != Some(JSON.Encode.null))
   TestKit.check("every gem got its eBay stats (fixture mode)", hasEbay)
+  let hasWhere = Array.every(gems1, g => Json.stringField(g, "where")->Option.isSome)
+  TestKit.check("every gem carries a where", hasWhere)
   TestKit.approx(
     "cost is 3 x the fixture's per-scene cost",
     Json.floatField(statusJson1, "costUsd")->Option.getOr(0.0),
     fixtureSceneCostUsd *. 3.0,
     ~eps=0.001,
+  )
+  // otherCount: each scene's own otherCount (12) plus the one sub-threshold
+  // find per scene that HaulStatus counts as "other" instead of a gem —
+  // 3 scenes x (12 + 1) = 39.
+  TestKit.check(
+    "status otherCount is 3 x (12 + 1)",
+    Json.intField(statusJson1, "otherCount") == Some(39),
   )
 
   let doneStatus = await postEmpty(base1 ++ "/api/hauls/" ++ haulId1 ++ "/done")

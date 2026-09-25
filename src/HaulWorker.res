@@ -108,12 +108,12 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
         fixture: t.config.fixtures,
         name: item.name,
         query: item.query,
-        where: None,
+        where: item.where,
         estimateLowUsd: item.estimateLowUsd,
         estimateHighUsd: item.estimateHighUsd,
         confidence: item.confidence,
         category: None,
-        promptVersion: SystemPrompt.promptVersion,
+        promptVersion: SystemPrompt.haulPromptVersion,
         ebayJson,
         paidUsd: None,
         soldUsd: None,
@@ -138,6 +138,7 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
   | ClaudeClient.Timeout(ms) =>
     "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
   | ClaudeClient.DecodeFailed(_) => "could not decode Claude's reply"
+  | ClaudeClient.CutOff => "reply cut off"
   }
 
 let runScene = async (t: t, scene: Store.scene): outcome =>
@@ -146,12 +147,23 @@ let runScene = async (t: t, scene: Store.scene): outcome =>
   | Some(imageBase64) => {
       let model = Shared.modelId(Shared.defaultModel)
       let claudeStart = Date.now()
-      switch await ClaudeClient.call(~config=t.config, ~model, ~imageBase64) {
+      switch await ClaudeClient.call(
+        ~config=t.config,
+        ~model,
+        ~imageBase64,
+        ~mode=ClaudeClient.Haul(t.config.haulGemMinUsd),
+      ) {
       | Ok(decoded) => {
           let claudeMs = Date.now() -. claudeStart
           let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
           await insertFinds(t, scene, decoded)
-          Store.finishScene(t.store, ~sceneId=scene.sceneId, ~costUsd, ~claudeMs, ~otherCount=None)
+          Store.finishScene(
+            t.store,
+            ~sceneId=scene.sceneId,
+            ~costUsd,
+            ~claudeMs,
+            ~otherCount=decoded.otherCount,
+          )
           Success(costUsd, claudeMs)
         }
       | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>

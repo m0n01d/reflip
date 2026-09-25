@@ -11,6 +11,7 @@ let run = () => {
   | Ok(decoded) => {
       TestKit.check("fixture has 3 items", Array.length(decoded.items) == 3)
       TestKit.check("fixture usage has 2 web searches", decoded.usage.webSearchRequests == 2)
+      TestKit.check("scene fixture has no otherCount", decoded.otherCount == None)
     }
   | Error(_) => TestKit.check("fixture decodes", false)
   }
@@ -45,5 +46,45 @@ let run = () => {
   | Ok(d) =>
     TestKit.check("brace-span fallback recovers an empty items array", Array.length(d.items) == 0)
   | Error(_) => TestKit.check("brace-span fallback should recover", false)
+  }
+
+  // Haul mode (step 4): the fixture's items each carry `where`, and the
+  // reply names its otherCount.
+  let haulFixturePath = Node.Path.join([Node.Process.cwd(), "tests/fixtures/claude-haul.json"])
+  let haulFixtureJson = JSON.parseOrThrow(Node.Fs.readFileUtf8(haulFixturePath, "utf8"))
+  switch ClaudeClient.decodeResponse(haulFixtureJson) {
+  | Ok(decoded) => {
+      TestKit.check("haul fixture has 3 items", Array.length(decoded.items) == 3)
+      TestKit.check(
+        "haul fixture's first item has a where",
+        Array.get(decoded.items, 0)->Option.flatMap(i => i.where)->Option.isSome,
+      )
+      TestKit.check("haul fixture otherCount is 12", decoded.otherCount == Some(12))
+    }
+  | Error(_) => TestKit.check("haul fixture decodes", false)
+  }
+
+  // A reply cut short by the token limit is a different callError, not a
+  // decode failure: parseClaudeJson checks stop_reason before it ever
+  // calls decodeResponse.
+  let maxTokensJson = Json.obj([
+    ("stop_reason", Json.str("max_tokens")),
+    (
+      "content",
+      Json.arr([
+        Json.obj([("type", Json.str("text")), ("text", Json.str("{\"items\": ["))]),
+      ]),
+    ),
+    ("usage", Json.obj([("input_tokens", Json.num(1.0)), ("output_tokens", Json.num(1.0))])),
+  ])
+  switch ClaudeClient.parseClaudeJson(maxTokensJson) {
+  | Error(ClaudeClient.CutOff) => TestKit.check("stop_reason max_tokens gives CutOff", true)
+  | _ => TestKit.check("stop_reason max_tokens should give CutOff", false)
+  }
+
+  switch ClaudeClient.parseClaudeJson(fixtureJson) {
+  | Ok(decoded) =>
+    TestKit.check("parseClaudeJson still decodes a normal reply", Array.length(decoded.items) == 3)
+  | Error(_) => TestKit.check("parseClaudeJson should decode a normal reply", false)
   }
 }

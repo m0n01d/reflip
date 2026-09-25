@@ -10,6 +10,9 @@ type claudeItem = {
   basis: string,
   confidence: float,
   sources: array<string>,
+  // Haul mode only (step 4): where the item sits in the photo. None for a
+  // scene-mode reply.
+  where: option<string>,
 }
 
 type ebayStats = {
