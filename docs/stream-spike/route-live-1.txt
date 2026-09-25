@@ -1,0 +1,26 @@
+# Live run 1 through POST /api/scene/stream and the tailnet, 2026-09-25 (search on, box last).
+# Printed by a Python client. It ended at the 180 s limit with 0 items.
+     62 ms HTTP 200 text/event-stream; charset=utf-8
+     80 ms photo-received {"bytes": 696835, "width": 1568, "height": 1176}
+   2147 ms claude-started {"inputTokens": 8595}
+   2147 ms thinking {}
+  22900 ms tool-run {"id": "srvtoolu_01Xb7gK4FsFxfunWRZ8hENHT", "name": "code_execution"}
+  23629 ms tool-run {"id": "srvtoolu_01MsdEXyKD953R5i4Kx6AYSe", "name": "code_execution"}
+  24272 ms tool-run {"id": "srvtoolu_01LxunvdEN1AZRhiTtvsyFUE", "name": "code_execution"}
+ 120447 ms tool-done {"id": "srvtoolu_01Xb7gK4FsFxfunWRZ8hENHT", "name": "code_execution", "status": "detection_timeout"}
+ 120447 ms search-started {"id": "srvtoolu_01EuCDXLkbGGAFa9qvT39Aeo", "query": "blue white transferware divided relish dish antique value"}
+ 120471 ms search-done {"id": "srvtoolu_01EuCDXLkbGGAFa9qvT39Aeo", "count": 10}
+ 120471 ms tool-done {"id": "srvtoolu_01MsdEXyKD953R5i4Kx6AYSe", "name": "code_execution", "status": null}
+ 120471 ms tool-done {"id": "srvtoolu_01LxunvdEN1AZRhiTtvsyFUE", "name": "code_execution", "status": "detection_timeout"}
+ 120471 ms thinking {}
+ 122847 ms tool-run {"id": "srvtoolu_01FGeN6s8WbFsEJyrgbzBR3b", "name": "code_execution"}
+ 127598 ms search-started {"id": "srvtoolu_01DcshZa4JB69ajt7Cm4DLaW", "query": "vintage blue white transferware bowl value"}
+ 127599 ms search-done {"id": "srvtoolu_01DcshZa4JB69ajt7Cm4DLaW", "count": 10}
+ 127599 ms tool-done {"id": "srvtoolu_01FGeN6s8WbFsEJyrgbzBR3b", "name": "code_execution", "status": null}
+ 127599 ms thinking {}
+ 128624 ms tool-run {"id": "srvtoolu_0183bkqoi2294RDfgtnMekBB", "name": "code_execution"}
+ 131250 ms tool-done {"id": "srvtoolu_0183bkqoi2294RDfgtnMekBB", "name": "code_execution", "status": null}
+ 131253 ms thinking {}
+ 179222 ms tool-run {"id": "srvtoolu_01QX7LzBGtYg3xFAzc4j4PCQ", "name": "code_execution"}
+ 180078 ms error {"message": "Claude took longer than 180 s"}
+ 180079 ms eof

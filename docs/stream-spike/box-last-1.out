@@ -1,0 +1,20 @@
+photo: /private/tmp/claude-501/-Users-dwight-code/884c8a85-ddf3-494b-8bae-c1feeecf9648/scratchpad/scene-5c0c5ba7/photo-1568x1176.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-last  search: on
+headers: 2006ms
+message_start: 2012ms  input_tokens=8595
+tool code_execution: start=21469ms done=117853ms status=-
+tool code_execution: start=22199ms done=117854ms status=detection_timeout
+tool code_execution: start=118980ms done=123782ms status=-
+search "ceramic lighted Christmas village church figurine thrift value used": start=117841ms done=117853ms count=9
+search "ceramic lighted Christmas village church figurine thrift resale value": start=123751ms done=123775ms count=9
+first text delta: 141422ms
+first box: 142871ms
+first item: 142871ms
+last item: 163334ms
+done: 163436ms
+items: 22
+usage: in=41373 out=6164 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.1644
+stop reason: end_turn
+items equal final decode: true
+outcome: completed
