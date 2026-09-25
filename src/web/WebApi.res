@@ -117,3 +117,23 @@ type idbValue
 
 let unknownToBlob = (v: idbValue): promise<blob> => responseOfUnknown(v)->responseBlob
 let unknownToText = (v: idbValue): promise<string> => responseOfUnknown(v)->responseText
+
+// An object URL for the resized photo blob, so the result view can show it
+// via <img src> with no re-read of the file. Created once per photo in
+// App.res's runPhotoFlow; revoked in onFileChange when a new photo replaces
+// it (see AppState.res's PhotoUrlReady and StartPhoto).
+@scope("URL") @val external createObjectURL: blob => string = "createObjectURL"
+@scope("URL") @val external revokeObjectURL: string => unit = "revokeObjectURL"
+
+// A generic DOM element, opaque like `formElement` above — used only for
+// the item-box view: the photo's on-screen rect (to convert a tap to photo
+// pixels), and scrolling a card or the photo into view on selection.
+type element
+type domRect = {left: float, top: float, width: float, height: float}
+@send external getBoundingClientRect: element => domRect = "getBoundingClientRect"
+type scrollIntoViewOptions = {behavior: string, block: string}
+@send external scrollIntoView: (element, scrollIntoViewOptions) => unit = "scrollIntoView"
+@send external getElementById: (document, string) => Nullable.t<element> = "getElementById"
+// The click target of a photo tap, read straight off the event — same
+// pattern as `eventTarget` above, for the other React event type.
+@get external mouseCurrentTarget: ReactEvent.Mouse.t => element = "currentTarget"

@@ -1,9 +1,11 @@
 // The phone page. Two flows share one page: the original M0 single-photo
 // flow (model picker, long-edge picker, take-photo button, status line,
-// item list, footer) and haul mode (docs/spec-haul-mode.md "Step 5:
-// phone"), which replaces that view once a haul is started. TEA via
-// useReducer — this file holds the view and the effect orchestrator;
-// AppState.res holds the pure model/msg/update.
+// photo with item boxes, item list, footer) and haul mode
+// (docs/spec-haul-mode.md "Step 5: phone"), which replaces that view once a
+// haul is started. TEA via useReducer — this file holds the view and the
+// effect orchestrator; AppState.res holds the pure model/msg/update.
+// BoxLayout.res holds the pure crop and hit-test math this file turns into
+// styles and taps.
 
 @send external toFixed: (float, int) => string = "toFixed"
 
@@ -17,8 +19,15 @@ let fmtOptMs = (n: option<float>): string =>
   | None => "—"
   }
 
+// left/top/width/height of a box as CSS percent, against the photo's own
+// pixel size — the box overlay on the photo and the crop math both start
+// from the same imageWidth/imageHeight the reply carries.
+let pct = (n: int, total: int): string => toFixed(Int.toFloat(n) /. Int.toFloat(total) *. 100.0, 2) ++ "%"
+
 // The side-effect edge: called from the file input's onChange, never from
 // update/view. Dispatches a msg after each step so `update` stays pure.
+// The object URL for the resized photo is created here too — it is a side
+// effect (WebApi.createObjectURL), not something `update` could do.
 let runPhotoFlow = async (
   dispatch: AppState.msg => unit,
   modelId: string,
@@ -31,6 +40,7 @@ let runPhotoFlow = async (
   | Ok((blob, resizeMs)) =>
     let uploadBytes = WebApi.blobSize(blob)
     dispatch(AppState.ResizeOk(resizeMs, uploadBytes))
+    dispatch(AppState.PhotoUrlReady(WebApi.createObjectURL(blob)))
     switch await Api.postScene(modelId, blob) {
     | Error(msg) => dispatch(AppState.UploadErr(msg))
     | Ok((reply, rttMs)) =>
@@ -51,6 +61,19 @@ let statusText = (status: AppState.status): string =>
   | Waiting => "waiting"
   | ErrorStatus(msg) => msg
   }
+
+// A card or the photo scrolling its counterpart into view on selection —
+// the DOM lookup by id is the simplest typed way to reach a node that
+// isn't the click target itself. See WebApi.res's getElementById/
+// scrollIntoView.
+let scrollIntoViewById = (id: string): unit =>
+  switch WebApi.getElementById(WebApi.document, id)->Nullable.toOption {
+  | Some(el) => WebApi.scrollIntoView(el, {WebApi.behavior: "smooth", block: "nearest"})
+  | None => ()
+  }
+
+let itemCardId = (i: int): string => "item-card-" ++ Int.toString(i)
+let photoWrapId = "reflip-photo"
 
 module EbayBlock = {
   @react.component
@@ -73,21 +96,83 @@ module EbayBlock = {
         </div>
       </div>
     | None => <div className="ebay ebay-missing"> {React.string("no eBay stats")} </div>
-    }
+  }
+}
+
+// The photo, shown once at the top at the width of the screen, with the
+// selected item's box drawn over it in percent (docs/spec-item-boxes.md
+// "How it works" #3). A tap anywhere on the photo runs the hit test.
+module PhotoView = {
+  @react.component
+  let make = (
+    ~photoUrl: string,
+    ~reply: Types.sceneReply,
+    ~selectedBox: option<Types.box>,
+    ~onPhotoTap: ReactEvent.Mouse.t => unit,
+  ) =>
+    <div id={photoWrapId} className="photo-wrap">
+      <img className="photo-img" src={photoUrl} onClick={onPhotoTap} />
+      {switch selectedBox {
+      | None => React.null
+      | Some(b) =>
+        <div
+          className="photo-box"
+          style={{
+            JsxDOMStyle.left: pct(b.x1, reply.imageWidth),
+            top: pct(b.y1, reply.imageHeight),
+            width: pct(b.x2 - b.x1, reply.imageWidth),
+            height: pct(b.y2 - b.y1, reply.imageHeight),
+          }}
+        />
+      }}
+    </div>
 }
 
 module ItemCard = {
   @react.component
-  let make = (~item: Types.replyItem) =>
-    <li className="item">
-      <div className="item-name"> {React.string(item.name)} </div>
-      <div className="item-range">
-        {React.string(fmtUsd(item.estimateLowUsd) ++ " – " ++ fmtUsd(item.estimateHighUsd))}
+  let make = (
+    ~item: Types.replyItem,
+    ~index: int,
+    ~photoUrl: string,
+    ~imageWidth: int,
+    ~imageHeight: int,
+    ~selected: bool,
+    ~onSelect: int => unit,
+  ) =>
+    <li
+      id={itemCardId(index)}
+      className={"item" ++ (selected ? " item-selected" : "")}
+      onClick={_ => onSelect(index)}>
+      <div className="item-top">
+        {switch item.box {
+        | None => <div className="item-crop item-crop-missing"> {React.string("no box")} </div>
+        | Some(box) =>
+          let crop = BoxLayout.cropOf(box, imageWidth, imageHeight)
+          <div
+            className="item-crop"
+            style={{
+              JsxDOMStyle.width: toFixed(crop.divWidth, 1) ++ "px",
+              height: toFixed(crop.divHeight, 1) ++ "px",
+              backgroundImage: "url(" ++ photoUrl ++ ")",
+              backgroundSize: toFixed(crop.bgWidth, 1) ++ "px " ++ toFixed(crop.bgHeight, 1) ++ "px",
+              backgroundPosition: "-" ++
+              toFixed(crop.bgX, 1) ++
+              "px -" ++
+              toFixed(crop.bgY, 1) ++ "px",
+            }}
+          />
+        }}
+        <div className="item-info">
+          <div className="item-name"> {React.string(item.name)} </div>
+          <div className="item-range">
+            {React.string(fmtUsd(item.estimateLowUsd) ++ " – " ++ fmtUsd(item.estimateHighUsd))}
+          </div>
+          <div className="item-confidence">
+            {React.string("confidence " ++ fmtPct(item.confidence))}
+          </div>
+          <div className="item-basis"> {React.string(item.basis)} </div>
+        </div>
       </div>
-      <div className="item-confidence">
-        {React.string("confidence " ++ fmtPct(item.confidence))}
-      </div>
-      <div className="item-basis"> {React.string(item.basis)} </div>
       {item.sources->Array.length > 0
         ? <ul className="item-sources">
             {item.sources
@@ -434,6 +519,12 @@ let make = () => {
         switch WebApi.fileListItem(files, 0)->Nullable.toOption {
         | None => ()
         | Some(file) =>
+          // A new photo replaces the old object URL — revoke it here,
+          // synchronously, before the async resize/upload flow starts.
+          switch model.photoUrl {
+          | Some(url) => WebApi.revokeObjectURL(url)
+          | None => ()
+          }
           runPhotoFlow(
             dispatch,
             Shared.modelId(model.selectedModel),
@@ -499,6 +590,44 @@ let make = () => {
       }
     }
 
+  // A tap on a card: select it, then scroll the photo into view so the
+  // item's box (drawn next render) is visible.
+  let onSelectCard = (i: int) => {
+    dispatch(AppState.SelectItem(i))
+    scrollIntoViewById(photoWrapId)
+  }
+
+  // A tap on the photo: convert the tap point to photo pixels using the
+  // tapped element's own on-screen rect (it is the <img>, sized to the
+  // photo's aspect ratio), then hit-test. A miss does nothing; a hit
+  // selects that item's card and scrolls it into view.
+  let onPhotoTap = (event: ReactEvent.Mouse.t) =>
+    switch model.reply {
+    | None => ()
+    | Some(reply) =>
+      let rect = WebApi.getBoundingClientRect(WebApi.mouseCurrentTarget(event))
+      let px =
+        (Int.toFloat(ReactEvent.Mouse.clientX(event)) -. rect.left) *.
+        Int.toFloat(reply.imageWidth) /.
+        rect.width
+      let py =
+        (Int.toFloat(ReactEvent.Mouse.clientY(event)) -. rect.top) *.
+        Int.toFloat(reply.imageHeight) /.
+        rect.height
+      let boxes = reply.items->Array.map(item => item.box)
+      switch BoxLayout.hitTest(boxes, px, py) {
+      | None => ()
+      | Some(i) =>
+        dispatch(AppState.SelectItem(i))
+        scrollIntoViewById(itemCardId(i))
+      }
+    }
+
+  let selectedBox =
+    model.selected
+    ->Option.flatMap(i => model.reply->Option.flatMap(reply => Array.get(reply.items, i)))
+    ->Option.flatMap(item => item.box)
+
   <div className="page">
     <h1> {React.string("reflip")} </h1>
     {switch model.haul {
@@ -554,14 +683,28 @@ let make = () => {
           {React.string("Take photo")}
         </label>
         <div className="status"> {React.string(statusText(model.status))} </div>
-        {switch model.reply {
-        | None => React.null
-        | Some(reply) =>
-          <ul className="items">
-            {reply.items
-            ->Array.mapWithIndex((item, i) => <ItemCard key={Int.toString(i)} item />)
-            ->React.array}
-          </ul>
+        {switch (model.reply, model.photoUrl) {
+        | (Some(reply), Some(photoUrl)) =>
+          <>
+            <PhotoView photoUrl reply selectedBox onPhotoTap />
+            <ul className="items">
+              {reply.items
+              ->Array.mapWithIndex((item, i) =>
+                <ItemCard
+                  key={Int.toString(i)}
+                  item
+                  index=i
+                  photoUrl
+                  imageWidth={reply.imageWidth}
+                  imageHeight={reply.imageHeight}
+                  selected={model.selected == Some(i)}
+                  onSelect=onSelectCard
+                />
+              )
+              ->React.array}
+            </ul>
+          </>
+        | _ => React.null
         }}
         {switch model.reply {
         | None => React.null

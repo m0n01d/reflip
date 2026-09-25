@@ -19,6 +19,19 @@ type requestInit = {
 
 @val external fetch: (string, ~init: requestInit=?) => promise<response> = "fetch"
 
+// A second typed binding for the same global `fetch`, for a binary
+// (Buffer) request body — Node's fetch (undici) accepts a Buffer as-is,
+// byte for byte, where a plain-string body would get re-encoded as UTF-8
+// and corrupt bytes over 0x7f. Tests use this to POST a real JPEG.
+type requestInitBuffer = {
+  method?: string,
+  headers?: dict<string>,
+  body?: Node.Buffer.t,
+  signal?: AbortSignal.t,
+}
+
+@val external fetchBuffer: (string, ~init: requestInitBuffer=?) => promise<response> = "fetch"
+
 @get external status: response => int = "status"
 @get external ok: response => bool = "ok"
 @send external text: response => promise<string> = "text"

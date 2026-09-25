@@ -3,6 +3,9 @@
 
 StatsTest.run()
 PricingTest.run()
+ImageSizeTest.run()
+JpegSizeTest.run()
+BoxTest.run()
 ClaudeDecodeTest.run()
 EbayDecodeTest.run()
 GuardTest.run()
@@ -10,6 +13,7 @@ StoreTest.run()
 AppStateTest.run()
 DigestTest.run()
 ThumbTest.run()
+BoxLayoutTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server, plus EmailTest's stream-transport

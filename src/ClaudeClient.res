@@ -19,10 +19,13 @@ type decoded = {
 
 type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int) | CutOff
 
-// Scene mode is the single-photo M0 endpoint. Haul(gemMinUsd) is the haul
+// Scene mode is the single-photo M0 endpoint. It carries the width and the
+// height of the sent photo, so the prompt can ask for a box per item in
+// pixels of that photo (docs/spec-item-boxes.md). Haul(gemMinUsd) is the haul
 // queue (step 4): a different prompt and schema, gated on the same $ floor
-// HaulStatus and HaulWorker use to decide what counts as a gem.
-type mode = Scene | Haul(float)
+// HaulStatus and HaulWorker use to decide what counts as a gem. The haul
+// prompt asks for no box, so it needs no size.
+type mode = Scene({width: int, height: int}) | Haul(float)
 
 let decodeUsage = (json: JSON.t): Types.usage => {
   let webSearchRequests =
@@ -75,6 +78,9 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       Json.arrayField(json, "sources")
       ->Option.map(arr => Array.filterMap(arr, JSON.Decode.string))
       ->Option.getOr([])
+    // Left raw here — Box.decode does the geometric validation, clamp, and
+    // rescale once the sent photo's size and the model's tier are known.
+    let box = Json.arrayField(json, "box")->Option.map(arr => Array.filterMap(arr, JSON.Decode.float))
     Ok({
       Types.name,
       maker,
@@ -85,6 +91,7 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       confidence,
       sources,
       where: Json.stringField(json, "where"),
+      box,
     })
   | _ => Error("item missing a required field")
   }
@@ -158,13 +165,13 @@ let parseClaudeJson = (json: JSON.t): result<decoded, callError> =>
 
 let systemTextFor = (mode: mode): string =>
   switch mode {
-  | Scene => SystemPrompt.text
+  | Scene(_) => SystemPrompt.text
   | Haul(gemMinUsd) => SystemPrompt.haulPrompt(~gemMinUsd)
   }
 
 let outputFormatFor = (mode: mode): JSON.t =>
   switch mode {
-  | Scene => SystemPrompt.outputFormat
+  | Scene(_) => SystemPrompt.outputFormat
   | Haul(_) => SystemPrompt.haulOutputFormat
   }
 
@@ -187,10 +194,15 @@ let buildRequestBody = (
       ]),
     ),
   ])
-  let textBlock = Json.obj([
-    ("type", Json.str("text")),
-    ("text", Json.str("Value the resellable items on this table.")),
-  ])
+  let text = switch mode {
+  | Scene({width, height}) =>
+    "This photo is " ++
+    Int.toString(width) ++
+    " pixels wide and " ++
+    Int.toString(height) ++ " pixels tall. Value the resellable items on this table."
+  | Haul(_) => "Value the resellable items on this table."
+  }
+  let textBlock = Json.obj([("type", Json.str("text")), ("text", Json.str(text))])
   let tool = Json.obj([
     ("type", Json.str(webSearchType)),
     ("name", Json.str("web_search")),
@@ -255,7 +267,7 @@ let send = async (
 ): result<decoded, callError> =>
   if config.fixtures {
     let fixtureFile = switch mode {
-    | Scene => "claude-scene.json"
+    | Scene(_) => "claude-scene.json"
     | Haul(_) => "claude-haul.json"
     }
     let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, fixtureFile]), "utf8")

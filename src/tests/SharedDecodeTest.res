@@ -24,12 +24,15 @@ let run = async () => {
   }
 
   let {Server.server, port} = await Server.start(config)
-  let resp = await Fetch.fetch(
+  // The size now comes off the real bytes (JpegSize.res), so this POSTs the
+  // real fixture photo — see ServerTest.res's comment for the same change.
+  let photo = Node.Fs.readFileBuffer(Node.Path.join([cwd, "tests/fixtures/table.jpg"]))
+  let resp = await Fetch.fetchBuffer(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg")]),
-      body: "fixture-mode-ignores-this-body",
+      body: photo,
     },
   )
   let json = await Fetch.json(resp)
@@ -44,6 +47,14 @@ let run = async () => {
       TestKit.check(
         "decoded items each have a sold-search URL",
         Array.every(reply.items, item => String.length(item.soldSearchUrl) > 0),
+      )
+      TestKit.check(
+        "decoded reply's imageWidth/imageHeight match the real fixture photo (64x48)",
+        reply.imageWidth == 64 && reply.imageHeight == 48,
+      )
+      TestKit.check(
+        "decoded items each have a box (the fixture gives all 3 one)",
+        Array.every(reply.items, item => item.box->Option.isSome),
       )
     }
   }
