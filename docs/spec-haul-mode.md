@@ -62,7 +62,7 @@ The haul prompt:
 
 - It is a haul variant of the text in `SystemPrompt.res`. It adds the gem threshold.
 - The schema gets three fields. `where` is a short phrase that locates the item in the photo, for example "top shelf, fourth spine from the left, red". `otherCount` is the number of items that are not gems. `box` is `[x1, y1, x2, y2]` in pixels of the sent photo, the same field the scene prompt asks for. The prompt states the width and the height of the sent photo.
-- This prompt is version `haul-2`.
+- This prompt is version `haul-3`.
 - The worker reads the width and the height of the photo with `JpegSize.res`, then checks each box with `Box.res`. `Box.res` drops a box that is bad, so the item keeps its other fields with no box.
 - If `stop_reason` is `max_tokens`, the scene fails with the error "reply cut off". The digest lists that photo.
 

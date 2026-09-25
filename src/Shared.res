@@ -100,6 +100,7 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       sources,
       ebay,
       soldSearchUrl,
+      size: Json.stringField(json, "size")->Option.getOr(""),
       box,
     })
   | _ => Error("item missing a required field")
@@ -176,6 +177,7 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
         timing,
         cost,
         ebayNote: Json.stringField(json, "ebayNote"),
+        quarterSeen: Json.boolField(json, "quarterSeen")->Option.getOr(false),
       })
     | (Error(e), _, _) | (_, Error(e), _) | (_, _, Error(e)) => Error(e)
     }
@@ -223,6 +225,7 @@ let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
       confidence,
       soldSearchUrl,
       ebay,
+      size: Json.stringField(json, "size")->Option.getOr(""),
     })
   | _ => Error("gem missing a required field")
   }

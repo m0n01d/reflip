@@ -27,6 +27,7 @@ let gemsOf = (finds: array<Store.find>, gemMinUsd: float): array<Types.haulGem> 
         | exception JsExn(_) => None
         }
       ),
+      size: f.size,
     })
   ->Array.toSorted((a, b) => Float.compare(b.Types.estimateLowUsd, a.Types.estimateLowUsd))
 

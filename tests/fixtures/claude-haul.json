@@ -10,7 +10,9 @@
       "type": "server_tool_use",
       "id": "srvtoolu_fixture_h01",
       "name": "web_search",
-      "input": {"query": "vintage brass table lamp value"}
+      "input": {
+        "query": "vintage brass table lamp value"
+      }
     },
     {
       "type": "web_search_tool_result",
@@ -27,7 +29,7 @@
     },
     {
       "type": "text",
-      "text": "{\"items\": [{\"name\": \"Brass table lamp\", \"maker\": \"\", \"query\": \"vintage brass table lamp working\", \"estimateLowUsd\": 30, \"estimateHighUsd\": 65, \"basis\": \"Working brass lamps sell steadily to vintage lighting buyers\", \"confidence\": 0.65, \"sources\": [\"https://example-collectibles.test/brass-lamps\"], \"where\": \"top shelf, left side, next to the books\", \"box\": [2, 4, 20, 30]}, {\"name\": \"Griswold cast iron skillet\", \"maker\": \"Griswold\", \"query\": \"Griswold cast iron skillet no. 8\", \"estimateLowUsd\": 25, \"estimateHighUsd\": 40, \"basis\": \"Marked Griswold pieces command a premium over unmarked ones\", \"confidence\": 0.6, \"sources\": [], \"where\": \"floor, front left, stacked with other pans\", \"box\": [50, 30, 46, 40]}, {\"name\": \"Costume jewelry brooch\", \"maker\": \"\", \"query\": \"vintage costume jewelry brooch\", \"estimateLowUsd\": 5, \"estimateHighUsd\": 15, \"basis\": \"Unsigned costume pieces sell low without a maker's mark\", \"confidence\": 0.4, \"sources\": [], \"where\": \"small box, front right corner\", \"box\": [44, 32, 60, 46]}], \"otherCount\": 12}"
+      "text": "{\"items\": [{\"name\": \"Brass table lamp\", \"maker\": \"\", \"query\": \"vintage brass table lamp working\", \"estimateLowUsd\": 30, \"estimateHighUsd\": 65, \"basis\": \"Working brass lamps sell steadily to vintage lighting buyers\", \"confidence\": 0.65, \"sources\": [\"https://example-collectibles.test/brass-lamps\"], \"where\": \"top shelf, left side, next to the books\", \"size\": \"\", \"box\": [2, 4, 20, 30]}, {\"name\": \"Griswold cast iron skillet\", \"maker\": \"Griswold\", \"query\": \"Griswold cast iron skillet no. 8\", \"estimateLowUsd\": 25, \"estimateHighUsd\": 40, \"basis\": \"Marked Griswold pieces command a premium over unmarked ones\", \"confidence\": 0.6, \"sources\": [], \"where\": \"floor, front left, stacked with other pans\", \"size\": \"No. 8\", \"box\": [50, 30, 46, 40]}, {\"name\": \"Costume jewelry brooch\", \"maker\": \"\", \"query\": \"vintage costume jewelry brooch\", \"estimateLowUsd\": 5, \"estimateHighUsd\": 15, \"basis\": \"Unsigned costume pieces sell low without a maker's mark\", \"confidence\": 0.4, \"sources\": [], \"where\": \"small box, front right corner\", \"box\": [44, 32, 60, 46]}], \"otherCount\": 12}"
     }
   ],
   "usage": {

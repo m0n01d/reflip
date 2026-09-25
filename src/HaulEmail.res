@@ -123,6 +123,7 @@ let digestGemsOf = (
             | exception JsExn(_) => None
             }
           ),
+          size: f.size,
           crop: image->Option.map(((img, width, height)) => {
             Digest.cid: img.cid,
             width,
