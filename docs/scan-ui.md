@@ -143,8 +143,10 @@ both, but wave 2 owns their edits.
 
 ## 6. Hand-off
 
-- Status on 2026-09-25: waves 1 and 2 are merged on `claude/scan-ui` at `288738f`. The build and all tests pass.
-- A demo run in a headless browser worked end to end. It showed 22 items, the item sheet, Stop, and a forced drop that reconnected with `?from=3`. The shots are `docs/shots/scan-ui/logic-demo-*.png`. The page has no styles yet.
-- In progress: the design pass on `claude/scan-ui-view`, the spot pass on `claude/scan-ui-spot`, and a review of the merged code.
-- Next step: merge those two branches, fix the review findings, then run the smoke test in Safari on an iPhone 16 Simulator.
-- Merge: this track merges to `main` after `claude/stall-fix` merges (decision 4).
+- Status on 2026-09-25 at 17:30 UTC: `claude/scan-ui` is at `60920ed`. It holds waves 1 and 2, the edge fixes (`c273691`) and the spot pass (`29c902e`). The build and all tests pass.
+- Before shots: `docs/shots/scan-ui/before-*.png` (`6bbf04e`). The Simulator camera gives no photo, so the result shot comes from headless Chromium.
+- In progress: the design shots and view fixes on `claude/scan-ui-view`, and the brain review fixes on `claude/scan-ui-fix-brain`.
+- Next step: merge both branches. Then fix two view items. Show "not priced" only after `end`, and show "Reconnecting" from `ScanState.connectionState`.
+- Then run the smoke test in Safari on the iPhone 16e Simulator. Pick the photo from the library, because the camera input gives no photo there.
+- The edge-fix agent did not run its browser checks. The smoke test must cover a reconnect, a new photo during a scan, and a failed first upload.
+- Merge: this track merges to `main` after `claude/stream-merge` merges (decision 4).
