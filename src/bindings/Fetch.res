@@ -12,6 +12,15 @@ module AbortSignal = {
   @val @scope("AbortSignal") external any: array<t> => t = "any"
 
   @get external aborted: t => bool = "aborted"
+
+  // FixtureReplay.res's sleep(): listens for the one-shot "abort" event so
+  // an in-flight setTimeout can be cleared early, instead of only noticing
+  // `stop` the next time something already checks `aborted`. `listener` is
+  // typed `unit => unit`, not the DOM Event -- every caller here ignores
+  // the event object, so there is nothing to decode from it.
+  @send external addEventListener: (t, string, unit => unit) => unit = "addEventListener"
+  @send
+  external removeEventListener: (t, string, unit => unit) => unit = "removeEventListener"
 }
 
 type requestInit = {

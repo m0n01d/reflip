@@ -61,8 +61,22 @@ module Os = {
 // is short (`haulRetryMs`) and only ever set on a path that itself required
 // this exact timer to fire before the worker can look at that haul again,
 // so nothing needs to cancel it early.
+// The global timer. `setTimeout` (no handle) is used by HaulWorker.res to
+// retry after a 429/529 without blocking the queue (`setTimeout(kick,
+// retryMs)` in docs/spec-haul-mode.md "Step 3: brain queue") -- that retry
+// is short and only ever set on a path that itself required this exact
+// timer to fire before the worker can look at that haul again, so nothing
+// needs to cancel it early. `setTimeoutHandle` / `clearTimeout` are a
+// second typed view of the same global setTimeout (the `fetch` /
+// `fetchBuffer` split in Fetch.res is the same idea), for
+// FixtureReplay.res's sleep(), which does need to cancel an in-flight wait
+// early on an abort mid-gap.
 module Timer = {
   @val external setTimeout: (unit => unit, int) => unit = "setTimeout"
+
+  type t
+  @val external setTimeoutHandle: (unit => unit, int) => t = "setTimeout"
+  @val external clearTimeout: t => unit = "clearTimeout"
 }
 
 module Url = {
