@@ -41,7 +41,7 @@ What this means for reflip:
 - The page draws the box as a `div` over the `<img>`, placed in percent: `left` is `x1 / imageWidth`, and so on. The crop is a `div` with the photo as its `background-image`, and `background-size` and `background-position` come from the box. Neither needs a canvas.
 - TEA: `AppState.res` gets `selected: option<int>` and the msg `SelectItem(int)`. The view stays a pure function of the model.
 - The fixture reply in `tests/fixtures/` gets a box for each of its 3 items, on the fixture JPEG. Fixture mode then shows boxes too.
-- Haul mode: the `finds` table gets the box columns. The haul view loads the photo from a new route, `GET /api/scenes/:id/photo`, because the brain keeps it as `data/photos/<sceneId>.jpg`.
+- Haul mode: the `finds` table gets the box columns. The haul view loads the photo from a new route, `GET /api/scenes/:id/photo`, because the brain keeps it as `data/photos/<sceneId>.jpg`. Done 2026-09-25: each gem card in the haul view shows its crop. A tap on the card shows the box on the full photo. See `docs/spec-haul-mode.md`, Shape.
 
 ## Spike first
 
