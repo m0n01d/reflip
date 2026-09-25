@@ -20,6 +20,11 @@ type outcome =
   | TimedOut(SceneStream.model, int)
   | HttpFailed(int, string)
   | NoApiKey
+  // Any other exception runLive's try/catch below did not already name:
+  // a "fetch failed" from a dead connection, or the connection dropping
+  // mid-stream. Carries the model built up so far, same as TimedOut and
+  // Stopped do, plus the exception's own message.
+  | StreamError(SceneStream.model, string)
 
 // Same three headers ClaudeClient.postToClaude sends. Never logged —
 // CLAUDE.md hard rule 3, secrets come from the environment only and never
@@ -239,6 +244,15 @@ let runLive = async (
   | JsExn(e) if JsExn.name(e) == Some("AbortError") =>
       await safeCancel()
       Stopped(modelRef.contents)
+  // Anything else: a "fetch failed" from a dead connection, or the
+  // connection dropping mid-read (chunk.done never true, no clean end).
+  // This used to fall through uncaught and reject runLive's promise —
+  // after the caller (StreamRoute.handle) had already sent its 200 SSE
+  // headers, so the rejection reached Server.res's server-level handler
+  // too late to answer anything but a crash (ERR_HTTP_HEADERS_SENT).
+  | JsExn(e) =>
+      await safeCancel()
+      StreamError(modelRef.contents, JsExn.message(e)->Option.getOr("stream failed"))
   }
 }
 

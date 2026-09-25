@@ -89,6 +89,9 @@ type haulGem = {
   confidence: float,
   soldSearchUrl: string,
   ebay: option<ebayStats>,
+  box: option<box>,
+  imageWidth: option<int>,
+  imageHeight: option<int>,
   size: string,
 }
 
@@ -247,6 +250,27 @@ let encodeHaulGem = (g: haulGem): JSON.t =>
       "ebay",
       switch g.ebay {
       | Some(s) => encodeEbayStats(s)
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "box",
+      switch g.box {
+      | Some(b) => encodeBox(b)
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "imageWidth",
+      switch g.imageWidth {
+      | Some(w) => Json.num(Int.toFloat(w))
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "imageHeight",
+      switch g.imageHeight {
+      | Some(h) => Json.num(Int.toFloat(h))
       | None => JSON.Encode.null
       },
     ),

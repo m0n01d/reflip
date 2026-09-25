@@ -40,29 +40,7 @@ type model = {
 type msg = Event(ClaudeEvents.t)
 
 module ItemDecode = {
-  let claudeItem: D.t<Types.claudeItem> = D.object(field => {
-      let maker = field.optional("maker", D.string)->Option.flatMap(m => m == "" ? None : Some(m))
-      let sources = field.optional("sources", D.array(D.string))->Option.getOr([])
-      {
-        Types.name: field.required("name", D.string),
-        maker,
-        query: field.required("query", D.string),
-        estimateLowUsd: field.required("estimateLowUsd", D.float),
-        estimateHighUsd: field.required("estimateHighUsd", D.float),
-        basis: field.required("basis", D.string),
-        confidence: field.required("confidence", D.float),
-        sources,
-        where: field.optional("where", D.string),
-        size: field.optional("size", D.string)->Option.getOr(""),
-        box: field.optional("box", D.array(D.float)),
-      }
-    })
-
   let query: D.t<option<string>> = D.object(field => field.optional("query", D.string))
-
-  let quarterSeen: D.t<bool> = D.object(field =>
-    field.optional("quarterSeen", D.bool)->Option.getOr(false)
-  )
 }
 
 let extractQueryFromJson = (json: JSON.t): option<string> =>
@@ -99,19 +77,24 @@ let items = (model: model): array<Types.claudeItem> => model.items
 let usage = (model: model): Types.usage => model.usage
 let finalText = (model: model): string => model.text
 
-// The full structured-output JSON is the text of the last (uninterrupted)
-// text block — see docs/stream-spike.md §2: with search on, Claude writes
-// no JSON until its last code step ends, so no later tool call resets
-// model.text out from under it. Defaults to false on a parse miss, same
-// posture as extractQueryFromText.
+// The top-level quarterSeen the final text's JSON carries, read the same
+// way ClaudeClient.decodeResponse reads it from the non-streaming reply:
+// try the whole text, then Json.firstJsonObjectSpan on it, both through
+// Json.boolField with the same false fallback. False when neither parse
+// finds it, such as a scene that stopped before quarterSeen ever
+// streamed.
 let quarterSeen = (model: model): bool =>
-  switch JsonCombinators.Json.parse(model.text) {
-  | Ok(json) =>
-      switch JsonCombinators.Json.decode(json, ItemDecode.quarterSeen) {
-      | Ok(qs) => qs
-      | Error(_) => false
+  switch JSON.parseOrThrow(model.text) {
+  | parsed => Json.boolField(parsed, "quarterSeen")->Option.getOr(false)
+  | exception JsExn(_) =>
+    switch Json.firstJsonObjectSpan(model.text) {
+    | None => false
+    | Some(span) =>
+      switch JSON.parseOrThrow(span) {
+      | parsed2 => Json.boolField(parsed2, "quarterSeen")->Option.getOr(false)
+      | exception JsExn(_) => false
       }
-  | Error(_) => false
+    }
   }
 
 let findOpenBlock = (openBlocks: array<(int, openBlock)>, index: int): option<openBlock> =>
@@ -138,7 +121,11 @@ let applyFound = (model: model, found: ItemScanner.found): (model, array<logEven
       [BoxFound({index, box})],
     )
   | ItemScanner.ItemClosed({index, json}) =>
-      switch JsonCombinators.Json.decode(json, ItemDecode.claudeItem) {
+      // Reuse ClaudeClient.decodeItem, the non-streaming route's own item
+      // decoder, instead of a second, hand-rolled copy of the same field
+      // list. One place knows what an item's JSON looks like, size
+      // included.
+      switch ClaudeClient.decodeItem(json) {
       | Ok(claudeItem) =>
           let (_, model2) = takeBoxFor(model, index)
           (

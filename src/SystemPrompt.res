@@ -51,6 +51,13 @@ let itemSchema: JSON.t = Json.obj([
     "properties",
     Json.obj([
       ("name", Json.obj([("type", Json.str("string"))])),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
       ("maker", Json.obj([("type", Json.str("string"))])),
       ("query", Json.obj([("type", Json.str("string"))])),
       ("estimateLowUsd", Json.obj([("type", Json.str("number"))])),
@@ -65,13 +72,6 @@ let itemSchema: JSON.t = Json.obj([
         ]),
       ),
       ("size", Json.obj([("type", Json.str("string"))])),
-      (
-        "box",
-        Json.obj([
-          ("type", Json.str("array")),
-          ("items", Json.obj([("type", Json.str("integer"))])),
-        ]),
-      ),
     ]),
   ),
   (
@@ -115,7 +115,7 @@ let outputFormat: JSON.t = Json.obj([
 // Stamped on every find row (Store.find.promptVersion), so a later prompt
 // change never scrambles history. POST /api/scene uses this one; haul mode
 // uses haulPromptVersion below.
-let promptVersion = "scene-3"
+let promptVersion = "scene-4"
 
 // Haul mode's own words: only list items worth the trip to sell, name
 // where each one sits in the photo, and count the rest instead of
@@ -144,6 +144,11 @@ For each listed item, report:
 - size: the item's size, when size changes what it is or what it sells
   for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
   size matters, put it in the query too.
+- box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
+  in the photo, in integer pixel coordinates. x1 and y1 are the pixel
+  position of the top-left corner. x2 and y2 are the pixel position of the
+  bottom-right corner. The photo's width and height in pixels are given
+  below.
 
 A single US quarter (24.26 mm across) can lie next to the items as a scale
 reference. If you see one, use it to measure the items near it. Do not
@@ -182,6 +187,13 @@ let haulItemSchema: JSON.t = Json.obj([
       ),
       ("where", Json.obj([("type", Json.str("string"))])),
       ("size", Json.obj([("type", Json.str("string"))])),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
     ]),
   ),
   (
@@ -197,6 +209,7 @@ let haulItemSchema: JSON.t = Json.obj([
       Json.str("sources"),
       Json.str("where"),
       Json.str("size"),
+      Json.str("box"),
     ]),
   ),
   ("additionalProperties", Json.boolJ(false)),
@@ -221,7 +234,7 @@ let haulOutputFormat: JSON.t = Json.obj([
   ("schema", haulResponseSchema),
 ])
 
-let haulPromptVersion = "haul-2"
+let haulPromptVersion = "haul-3"
 
 let spotPrompt = `You are a fast item spotter for Flip Scout, a personal resale
 scanner. You will receive one photo of items on a table, shelf, or floor.

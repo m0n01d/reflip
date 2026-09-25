@@ -58,6 +58,7 @@ let recordLive = async (~width: int, ~height: int, ~imageBase64: string): unit =
   | SpotPass.HttpFailed(status, text) => "http_failed " ++ Int.toString(status) ++ " " ++ text
   | SpotPass.NoApiKey => "no_api_key"
   | SpotPass.NoFixture(msg) => "no_fixture " ++ msg
+  | SpotPass.StreamError(_, msg) => "stream_error " ++ msg
   }
   Console.log("outcome: " ++ outcomeTag)
   Console.log("events written to: " ++ outPath)

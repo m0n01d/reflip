@@ -30,6 +30,8 @@ type scene = {
   claudeMs: option<float>,
   otherCount: option<int>,
   createdAt: string,
+  imageWidth: option<int>,
+  imageHeight: option<int>,
 }
 
 type find = {
@@ -52,6 +54,7 @@ type find = {
   soldWhere: option<string>,
   createdAt: string,
   size: string,
+  box: option<Types.box>,
 }
 
 type counts = {
@@ -147,6 +150,8 @@ let decodeScene = (json: JSON.t): option<scene> =>
       claudeMs: Json.floatField(json, "claudeMs"),
       otherCount: Json.intField(json, "otherCount"),
       createdAt,
+      imageWidth: Json.intField(json, "imageWidth"),
+      imageHeight: Json.intField(json, "imageHeight"),
     })
   | _ => None
   }
@@ -178,6 +183,18 @@ let decodeFind = (json: JSON.t): option<find> =>
       Some(promptVersion),
       Some(createdAt),
     ) =>
+    // All four box columns present means the find was stored with a valid
+    // box (Box.decode already dropped a degenerate one before insertFind);
+    // any other combination, including a pre-migration row, is None.
+    let box = switch (
+      Json.intField(json, "boxX1"),
+      Json.intField(json, "boxY1"),
+      Json.intField(json, "boxX2"),
+      Json.intField(json, "boxY2"),
+    ) {
+    | (Some(x1), Some(y1), Some(x2), Some(y2)) => Some({Types.x1, y1, x2, y2})
+    | _ => None
+    }
     Some({
       findId,
       sceneId,
@@ -198,6 +215,7 @@ let decodeFind = (json: JSON.t): option<find> =>
       soldWhere: Json.stringField(json, "soldWhere"),
       createdAt,
       size: Json.stringField(json, "size")->Option.getOr(""),
+      box,
     })
   | _ => None
   }
@@ -234,6 +252,8 @@ let openAt = (path: string): t => {
       claudeMs REAL,
       otherCount INTEGER,
       createdAt TEXT NOT NULL,
+      imageWidth INTEGER,
+      imageHeight INTEGER,
       UNIQUE (haulId, clientId)
     )`,
   )
@@ -260,17 +280,53 @@ let openAt = (path: string): t => {
       soldOn TEXT,
       soldWhere TEXT,
       createdAt TEXT NOT NULL,
-      size TEXT
+      size TEXT,
+      boxX1 INTEGER,
+      boxY1 INTEGER,
+      boxX2 INTEGER,
+      boxY2 INTEGER
     )`,
   )
   Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
 
-  // CREATE TABLE IF NOT EXISTS does not add a column to a finds table that
-  // predates it, so check for it and migrate an old database in place.
-  let columnInfo = Sqlite.all(Sqlite.prepare(db, "PRAGMA table_info(finds)"), [])
-  let hasSizeColumn = Array.some(columnInfo, row => Json.stringField(row, "name") == Some("size"))
-  if !hasSizeColumn {
-    Sqlite.exec(db, "ALTER TABLE finds ADD COLUMN size TEXT")
+  // A DB from before item boxes or the size field has a `finds` table
+  // missing those columns. CREATE TABLE IF NOT EXISTS above is a no-op on
+  // an existing table, so check PRAGMA table_info and add any column it
+  // doesn't already list.
+  let findsCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(finds)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasCol = (name: string): bool => Array.some(findsCols, c => c == name)
+  if !hasCol("size") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN size TEXT`)
+  }
+  if !hasCol("boxX1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX1 INTEGER`)
+  }
+  if !hasCol("boxY1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY1 INTEGER`)
+  }
+  if !hasCol("boxX2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX2 INTEGER`)
+  }
+  if !hasCol("boxY2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY2 INTEGER`)
+  }
+
+  // A DB from before the scene photo size (docs/spec-item-boxes.md /
+  // docs/spec-haul-mode.md, 2026-09-25) has a `scenes` table with no size
+  // columns. Same PRAGMA table_info check as the finds migration above.
+  let scenesCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(scenes)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasScenesCol = (name: string): bool => Array.some(scenesCols, c => c == name)
+  if !hasScenesCol("imageWidth") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageWidth INTEGER`)
+  }
+  if !hasScenesCol("imageHeight") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageHeight INTEGER`)
   }
 
   db
@@ -348,13 +404,15 @@ let addScene = (
   ~sceneId: string,
   ~photoPath: string,
   ~now: string,
+  ~imageWidth: option<int>,
+  ~imageHeight: option<int>,
 ): scene =>
   switch sceneByClient(db, ~haulId, ~clientId) {
   | Some(existing) => existing
   | None => {
       let stmt = Sqlite.prepare(
         db,
-        "INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt) VALUES (?, ?, ?, 'queued', ?, ?)",
+        "INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt, imageWidth, imageHeight) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)",
       )
       Sqlite.run(
         stmt,
@@ -364,6 +422,8 @@ let addScene = (
           Sqlite.Text(clientId),
           Sqlite.Text(photoPath),
           Sqlite.Text(now),
+          optInt(imageWidth),
+          optInt(imageHeight),
         ],
       )->ignore
       {
@@ -377,6 +437,8 @@ let addScene = (
         claudeMs: None,
         otherCount: None,
         createdAt: now,
+        imageWidth,
+        imageHeight,
       }
     }
   }
@@ -468,8 +530,9 @@ let insertFind = (db: t, find: find): unit => {
     `INSERT INTO finds (
       findId, sceneId, model, fixture, name, query, "where",
       estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
-      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size,
+      boxX1, boxY1, boxX2, boxY2
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   Sqlite.run(
     stmt,
@@ -493,6 +556,10 @@ let insertFind = (db: t, find: find): unit => {
       optText(find.soldWhere),
       Sqlite.Text(find.createdAt),
       Sqlite.Text(find.size),
+      optInt(find.box->Option.map(b => b.x1)),
+      optInt(find.box->Option.map(b => b.y1)),
+      optInt(find.box->Option.map(b => b.x2)),
+      optInt(find.box->Option.map(b => b.y2)),
     ],
   )->ignore
 }

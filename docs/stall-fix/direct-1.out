@@ -1,0 +1,19 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=direct parallel=default
+headers: 10150ms
+message_start: 10178ms  input_tokens=5447
+search "blue white transferware scalloped bowl antique value": start=21000ms done=24134ms count=10
+search "ceramic lit Christmas village church figurine vintage resale value": start=21335ms done=24142ms count=10
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: 49073ms
+first box: 49359ms
+first item: 51275ms
+last item: 74997ms
+done: 75049ms
+items: 25
+usage: in=39952 out=6711 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.1670
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

@@ -12,6 +12,11 @@ module Buffer = {
   @send external readUInt16BE: (t, int) => int = "readUInt16BE"
 
   @val @scope("Buffer") external fromString: (string, string) => t = "from"
+
+  // For a fetch response body read with `.arrayBuffer()` (Fetch.res) —
+  // opaque on this side, since nothing here inspects it, only converts it.
+  type arrayBufferLike
+  @val @scope("Buffer") external fromArrayBuffer: arrayBufferLike => t = "from"
 }
 
 module Fs = {
@@ -30,6 +35,10 @@ module Fs = {
   @module("node:fs") external mkdirSync: (string, mkdirOptions) => unit = "mkdirSync"
 
   @module("node:fs") external copyFileSync: (string, string) => unit = "copyFileSync"
+  // Removes the intermediate crop file Crop.res writes next to its dest.
+  @module("node:fs") external unlinkSync: string => unit = "unlinkSync"
+  // Used by CropTest.res to prove the intermediate crop file is gone.
+  @module("node:fs") external readdirSync: string => array<string> = "readdirSync"
 }
 
 module Path = {
@@ -107,6 +116,15 @@ module HttpServer = {
   @send external write: (response, string) => unit = "write"
   @send external flushHeaders: response => unit = "flushHeaders"
   @get external writableEnded: response => bool = "writableEnded"
+  // Server.res's server-level error handler: once StreamRoute.handle has
+  // already sent the SSE 200 headers, a later uncaught rejection must not
+  // call writeHead again (Node throws ERR_HTTP_HEADERS_SENT for that). This
+  // says whether the headers already went out.
+  @get external headersSent: response => bool = "headersSent"
+  // Test-only: StreamRouteTest.res's stub Claude server uses this to
+  // simulate a connection dropping mid-stream — a plain "end" is a clean
+  // finish, not the failure that test needs.
+  @send external destroy: response => unit = "destroy"
   // Fires on a premature disconnect (checked via writableEnded above) and
   // also once normally after our own "end" finishes flushing — the caller
   // tells the two apart. A no-op "error" listener too: Node treats an

@@ -69,16 +69,20 @@ let run = () => {
     ~model="claude-sonnet-5",
     ~imageBase64="ZmFrZQ==",
     ~structuredOutput=true,
-    ~mode=ClaudeClient.Haul(20.0),
+    ~mode=ClaudeClient.Haul({gemMinUsd: 20.0, width: 800, height: 600}),
   )
   let haulSerialized = JSON.stringify(haulRequestJson)
-  // Only the scene request states the photo size; the haul prompt asks for
-  // no box, so its request stays as it was before item boxes.
+  // The haul prompt now asks for a box too (docs/spec-item-boxes.mds
+  // follow-up), so its request states the photo size exactly like the scene
+  // request does.
   TestKit.check(
     "scene request states the photo size",
     String.includes(serialized, "800 pixels wide and 600 pixels tall"),
   )
-  TestKit.check("haul request states no photo size", !String.includes(haulSerialized, "pixels wide"))
+  TestKit.check(
+    "haul request states the photo size",
+    String.includes(haulSerialized, "800 pixels wide and 600 pixels tall"),
+  )
 
   Array.forEach(titles, title =>
     TestKit.check(
@@ -99,5 +103,38 @@ let run = () => {
   TestKit.check(
     "haul system text names the $20 gem threshold",
     String.includes(haulSerialized, "$20"),
+  )
+
+  // Stall fix (docs/stall-fix.md): the web_search tool searches directly,
+  // never from a code step, on both the scene and the haul request.
+  let checkWebSearchTool = (label: string, body: JSON.t) => {
+    let tool = Json.arrayField(body, "tools")->Option.getOr([])->Array.get(0)
+    let callers =
+      tool
+      ->Option.flatMap(t => Json.arrayField(t, "allowed_callers"))
+      ->Option.getOr([])
+      ->Array.filterMap(JSON.Decode.string)
+    let blocked =
+      tool
+      ->Option.flatMap(t => Json.arrayField(t, "blocked_domains"))
+      ->Option.getOr([])
+      ->Array.filterMap(JSON.Decode.string)
+    TestKit.check(label ++ " web_search tool allows only direct callers", callers == ["direct"])
+    TestKit.check(label ++ " web_search tool blocks ebay.com", blocked == ["ebay.com"])
+  }
+  checkWebSearchTool("scene", requestJson)
+  checkWebSearchTool("haul", haulRequestJson)
+
+  // Item schema (docs/stream-spike.md, recommendation 7): box comes right
+  // after name, so each box streams about 1 s before the rest of its item.
+  let itemSchemaKeys =
+    SystemPrompt.itemSchema
+    ->Json.field("properties")
+    ->Option.flatMap(JSON.Decode.object)
+    ->Option.map(Dict.keysToArray)
+    ->Option.getOr([])
+  TestKit.check(
+    "item schema properties start with name, then box",
+    Array.get(itemSchemaKeys, 0) == Some("name") && Array.get(itemSchemaKeys, 1) == Some("box"),
   )
 }

@@ -77,10 +77,13 @@ let run = () => {
         "haul fixture's brooch has no size key, decoded as an empty string",
         Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
       )
-      // The haul prompt asks for no box, so a haul item decodes with None.
+      // The haul prompt now asks for a box too (haul-3), so every item
+      // decodes a raw box array here — Box.decode's validity check (the
+      // skillet's is degenerate, tests/fixtures/README.md) happens later,
+      // once the sent photo's size is known, not in this raw decode.
       TestKit.check(
-        "haul fixture items have no box",
-        Array.every(decoded.items, i => i.box == None),
+        "haul fixture items each carry a raw box",
+        Array.every(decoded.items, i => i.box->Option.isSome),
       )
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)

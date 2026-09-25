@@ -141,6 +141,9 @@ type outcome =
   // analogous "missing fixture" case, because claude-stream.sse always
   // ships in the repo.
   | NoFixture(string)
+  // Any other exception runLive's try/catch did not already name, same as
+  // ClaudeStream.StreamError: the model so far, plus the message.
+  | StreamError(model, string)
 
 let applyEvent = (
   modelRef: ref<model>,
@@ -325,6 +328,13 @@ let runLive = async (
   | JsExn(e) if JsExn.name(e) == Some("AbortError") =>
     await safeCancel()
     Stopped(modelRef.contents)
+  // Anything else: a "fetch failed" from a dead connection, or the
+  // connection dropping mid-read. Same catch-all as ClaudeStream.runLive:
+  // a rejection here would go unhandled while StreamRoute.handle still
+  // awaits the priced pass, and crash the process.
+  | JsExn(e) =>
+    await safeCancel()
+    StreamError(modelRef.contents, JsExn.message(e)->Option.getOr("spot stream failed"))
   }
 }
 

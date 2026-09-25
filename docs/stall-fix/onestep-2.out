@@ -1,0 +1,24 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=onestep tool=web_search_20260209 callers=default parallel=default
+headers: 2284ms
+message_start: 2289ms  input_tokens=8628
+tool code_execution: start=25547ms done=34241ms status=-
+tool code_execution: start=34681ms done=38011ms status=-
+tool code_execution: start=39065ms done=41390ms status=-
+tool code_execution: start=72016ms done=74775ms status=-
+search "vintage ceramic lighted village church figurine resale value": start=33923ms done=34030ms count=10
+search "antique milk glass bud vase value": start=34042ms done=34047ms count=10
+search "vintage blue and white transferware bowl value": start=34047ms done=34231ms count=10
+code steps: 4  detection_timeout: 0  longest step: 8694ms
+first text delta: 74776ms
+first box: 75390ms
+first item: 76487ms
+last item: 98447ms
+done: 98500ms
+items: 23
+usage: in=59682 out=9380 cacheRead=0 cacheWrite=0 webSearch=3
+usd: $0.2432
+stop reason: end_turn
+items equal final decode: true
+outcome: completed
