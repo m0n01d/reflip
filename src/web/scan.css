@@ -1,0 +1,1390 @@
+/* Scan UI — design pass. Source of truth: docs/design/scan-ui/Main.dc.html
+   and the boards in docs/shots/design/. Self-hosted fonts (npm, both 5.3.0):
+   @fontsource-variable/bricolage-grotesque, @fontsource/ibm-plex-mono. */
+
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+:root {
+  --scan-bg: #F3EFE6;
+  --scan-ink: #1B1813;
+  --scan-muted: #6B6357;
+  --scan-muted-2: #4A443B;
+  --scan-card: #FFFCF5;
+  --scan-card-border: #E3DBCB;
+  --scan-radius: 12px;
+  --scan-orange: #FF6A13;
+  --scan-fill: #E9E2D3;
+  --scan-dash: #D5CCBA;
+  --scan-dash-2: #DDD5C5;
+  --scan-highlight: #FFE8D6;
+  --scan-photo-bg: #2A251E;
+  --scan-link: #2B55C8;
+  --scan-mode-track: #E6DECD;
+  --scan-dotted: #B9AE98;
+  --scan-font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
+  --scan-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+/* Break the shell out of .page's 16/16/48 padding box (app.css) so the
+   design's own per-section 16px margins are the only inset. */
+.scan-shell {
+  margin: -16px -16px -48px;
+  background-color: var(--scan-bg);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-display);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scan mode's own background must fill the whole page, not just the shell's
+   own box — otherwise app.css's grey body shows around the 480px column and
+   below a board shorter than the viewport (e.g. Midway's card). */
+body:has(.scan-shell) {
+  background: var(--scan-bg);
+}
+
+/* -- Header (shared shape, Ready and Run both render their own) --------- */
+
+.scan-header {
+  height: 56px;
+  padding: 0 6px 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scan-header-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.scan-header-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  box-shadow: 0 0 0 2px var(--scan-ink);
+}
+
+.scan-header-word {
+  font-size: 23px;
+  font-weight: 800;
+  font-stretch: 85%;
+  letter-spacing: -0.02em;
+}
+
+.scan-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scan-icon-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background-color: transparent;
+  color: var(--scan-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.scan-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .1em;
+}
+
+@keyframes scan-live-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0.3; }
+}
+
+.scan-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  box-shadow: 0 0 0 1.5px var(--scan-ink);
+  animation: scan-live-blink 1.2s steps(1) infinite;
+}
+
+.scan-pill-btn {
+  height: 44px;
+  padding: 0 18px;
+  border: 1.5px solid var(--scan-ink);
+  border-radius: 999px;
+  background-color: transparent;
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* -- Mode switch (Scan / Haul) ------------------------------------------- */
+
+.scan-mode-switch {
+  margin: 2px 16px 0;
+  padding: 4px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  background-color: var(--scan-mode-track);
+  border-radius: 14px;
+}
+
+.scan-mode-btn {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .2s, color .2s;
+  background-color: transparent;
+  color: var(--scan-muted-2);
+}
+
+.scan-mode-btn-active {
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+}
+
+/* -- Ready screen --------------------------------------------------------- */
+
+.scan-ready {
+  min-height: calc(100vh - 56px - 2px);
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  background-image: radial-gradient(circle, #E4DCCB 0 2px, transparent 2.6px);
+  background-size: 22px 22px;
+}
+
+.scan-ready-title {
+  margin: 30px 0 0;
+  font-size: 54px;
+  line-height: 0.92;
+  font-weight: 800;
+  font-stretch: 78%;
+  letter-spacing: -0.025em;
+}
+
+.scan-ready-sub {
+  margin: 14px 0 0;
+  max-width: 310px;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--scan-muted-2);
+}
+
+.scan-ready-actions {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.scan-snap-btn {
+  position: relative;
+  width: 212px;
+  height: 212px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: inherit;
+  transform: rotate(-7deg);
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18), 0 16px 32px rgba(27, 24, 19, .22);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.scan-snap-ring {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  right: 9px;
+  bottom: 9px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .5);
+  pointer-events: none;
+}
+
+.scan-snap-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.scan-snap-label {
+  font-size: 23px;
+  font-weight: 750;
+  font-stretch: 85%;
+  letter-spacing: -0.01em;
+}
+
+.scan-pick-link {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  background-color: transparent;
+  color: var(--scan-muted-2);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.scan-file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Not on any board: AppState.ErrorStatus fires if the photo resize itself
+   fails, before a scan ever starts. Kept simple and out of the way. */
+.scan-ready-error {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: 10px;
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.scan-settings-chip-row {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 26px;
+}
+
+.scan-settings-chip {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 999px;
+  background-color: var(--scan-card);
+  color: var(--scan-muted-2);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+/* -- Bottom sheets (item sheet + settings sheet) -------------------------- */
+
+.scan-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background-color: rgba(27, 24, 19, .45);
+  cursor: pointer;
+  z-index: 20;
+}
+
+.scan-sheet-panel {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  max-width: 480px;
+  transform: translate(-50%, 0);
+  box-sizing: border-box;
+  border-radius: 22px 22px 0 0;
+  background-color: var(--scan-card);
+  box-shadow: 0 -10px 30px rgba(27, 24, 19, .2);
+  overflow-y: auto;
+  max-height: 92vh;
+  z-index: 21;
+}
+
+.scan-sheet-grabber-row {
+  display: flex;
+  justify-content: center;
+  padding: 2px 0 4px;
+}
+
+.scan-sheet-grabber {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: var(--scan-dash);
+}
+
+/* -- Settings sheet -------------------------------------------------------- */
+
+.scan-settings-sheet {
+  padding: 8px 16px 24px;
+}
+
+.scan-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scan-settings-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 750;
+  font-stretch: 85%;
+}
+
+.scan-settings-done {
+  min-height: 44px;
+  padding: 0 2px 0 14px;
+  border: 0;
+  background-color: transparent;
+  color: var(--scan-link);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scan-fieldset {
+  margin: 16px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.scan-fieldset:first-of-type {
+  margin-top: 8px;
+}
+
+.scan-legend {
+  padding: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.scan-option {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--scan-dash-2);
+  cursor: pointer;
+}
+
+.scan-option-radio {
+  margin: 2px 0 0;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--scan-ink);
+}
+
+.scan-option-label {
+  display: block;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.scan-option-desc {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--scan-muted-2);
+}
+
+/* -- Run screen: photo + pins ---------------------------------------------- */
+
+.scan-run {
+  padding-bottom: 40px;
+}
+
+.scan-photo-frame {
+  position: relative;
+  margin: 2px 16px 0;
+  width: auto;
+  border-radius: 14px;
+  overflow: hidden;
+  background-color: var(--scan-photo-bg);
+  box-shadow: 0 1px 0 rgba(27, 24, 19, .08), 0 8px 22px rgba(27, 24, 19, .14);
+}
+
+.scan-photo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.scan-pin {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.scan-pin-badge-gem {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 26px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 3px 8px rgba(27, 24, 19, .45);
+  transition: transform .5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.scan-pin-badge-gem-top {
+  z-index: 5;
+}
+
+.scan-pin-badge-plain {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--scan-card);
+  box-shadow: 0 0 0 2px var(--scan-ink), 0 2px 5px rgba(27, 24, 19, .4);
+  transition: transform .5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* The most-recently-landed sticker: raised above its neighbors and scaled
+   up a touch, with its callout shown (see .scan-pin-callout below). */
+.scan-pin-latest {
+  z-index: 6;
+}
+
+.scan-pin-badge-latest {
+  transform: scale(1.32);
+}
+
+.scan-pin-callout {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  margin-bottom: 6px;
+  transform: translateX(-50%);
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity .3s, transform .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+/* -- Run screen: status card ------------------------------------------------ */
+
+.scan-card-shadow {
+  margin: 14px 16px 0;
+  filter: drop-shadow(0 1px 0 rgba(27, 24, 19, .10)) drop-shadow(0 6px 12px rgba(27, 24, 19, .07));
+}
+
+.scan-card {
+  padding: 14px 16px 24px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-card);
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+}
+
+.scan-card-top-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scan-headline {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 750;
+  font-stretch: 82%;
+  letter-spacing: -0.01em;
+}
+
+.scan-clock {
+  flex-shrink: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.scan-sub {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--scan-muted-2);
+}
+
+/* -- Track (progress strip) -------------------------------------------------- */
+
+.scan-track {
+  position: relative;
+  height: 36px;
+  margin-top: 12px;
+}
+
+.scan-track-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.scan-track-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .1s linear;
+}
+
+.scan-track-usual-tick {
+  position: absolute;
+  left: 26.17%;
+  top: 0;
+  width: 2px;
+  height: 18px;
+  margin-left: -1px;
+  background-color: var(--scan-muted);
+}
+
+.scan-track-usual-label {
+  position: absolute;
+  left: 26.17%;
+  top: 21px;
+  transform: translateX(-50%);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.scan-track-limit-label {
+  position: absolute;
+  right: 0;
+  top: 21px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.scan-track-thumb {
+  position: absolute;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background-color: var(--scan-ink);
+  box-shadow: 0 0 0 2px var(--scan-card);
+  transition: left .1s linear;
+}
+
+.scan-track-mark-search {
+  position: absolute;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background-color: var(--scan-link);
+  box-shadow: 0 0 0 2px var(--scan-card);
+}
+
+.scan-track-mark-gem {
+  position: absolute;
+  top: 3px;
+  width: 3px;
+  height: 12px;
+  margin-left: -1.5px;
+  border-radius: 1px;
+  background-color: var(--scan-orange);
+}
+
+.scan-track-mark-plain {
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 8px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background-color: var(--scan-card);
+}
+
+/* -- Log lines --------------------------------------------------------------- */
+
+.scan-log-tail {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--scan-dash);
+  min-height: 60px;
+}
+
+.scan-log-line {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 8px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--scan-muted-2);
+}
+
+.scan-log-line-latest {
+  color: var(--scan-ink);
+}
+
+.scan-log-time {
+  color: var(--scan-muted);
+}
+
+.scan-log-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scan-log-right {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* -- Totals / retry / no-eBay / empty --------------------------------------- */
+
+.scan-totals {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--scan-dash);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.scan-totals-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scan-totals-row-all {
+  color: var(--scan-muted-2);
+}
+
+.scan-retry-btn {
+  margin-top: 12px;
+  width: 100%;
+  height: 48px;
+  border: 0;
+  border-radius: 12px;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.scan-noebay {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background-color: var(--scan-bg);
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.scan-noebay-icon {
+  margin-top: 1px;
+}
+
+.scan-noebay-title {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 20px;
+}
+
+.scan-noebay-note {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--scan-muted);
+  overflow-wrap: anywhere;
+}
+
+.scan-log-toggle {
+  margin-top: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 650;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+}
+
+.scan-log-toggle-chevron {
+  transition: transform .25s;
+}
+
+.scan-log-toggle-chevron-open {
+  transform: rotate(180deg);
+}
+
+.scan-log-full {
+  padding-top: 2px;
+}
+
+.scan-empty {
+  margin: 18px 16px 0;
+  padding: 22px 18px;
+  border: 2px dashed var(--scan-dash);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.scan-empty-title {
+  font-size: 17px;
+  font-weight: 650;
+}
+
+.scan-empty-sub {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--scan-muted);
+}
+
+/* -- Worth a look / Also seen ------------------------------------------------- */
+
+.scan-gems {
+  margin: 22px 16px 0;
+}
+
+.scan-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scan-section-title {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.scan-section-count {
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.scan-section-sub {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--scan-muted);
+}
+
+.scan-rows-card {
+  margin-top: 10px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  overflow: hidden;
+  background-color: var(--scan-card);
+}
+
+.scan-gem-row {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 0;
+  border-top: 1px dashed var(--scan-dash-2);
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-family: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+  transition: background-color 1.4s;
+}
+
+.scan-gem-row:first-child {
+  border-top: 0;
+}
+
+.scan-gem-row-latest {
+  background-color: var(--scan-highlight);
+}
+
+.scan-gem-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 1px 3px rgba(27, 24, 19, .35);
+}
+
+.scan-gem-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.scan-gem-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.scan-gem-price {
+  font-family: var(--scan-font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scan-gem-conf {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.scan-also {
+  margin: 14px 16px 0;
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  overflow: hidden;
+  background-color: var(--scan-card);
+}
+
+.scan-also-toggle {
+  width: 100%;
+  min-height: 64px;
+  padding: 12px 14px;
+  border: 0;
+  background-color: transparent;
+  color: var(--scan-ink);
+  font-family: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.scan-also-title-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scan-also-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.scan-also-preview {
+  font-size: 13px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scan-also-chevron {
+  transition: transform .25s;
+}
+
+.scan-also-row {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 14px;
+  border: 0;
+  border-top: 1px dashed var(--scan-dash-2);
+  background-color: transparent;
+  color: var(--scan-ink);
+  font-family: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.scan-also-row-latest {
+  background-color: var(--scan-highlight);
+}
+
+.scan-also-dot {
+  justify-self: center;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--scan-card);
+  box-shadow: 0 0 0 2px var(--scan-ink);
+}
+
+.scan-also-name {
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.scan-also-price {
+  font-family: var(--scan-font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--scan-muted-2);
+  white-space: nowrap;
+}
+
+/* -- Run receipt --------------------------------------------------------------- */
+
+.scan-receipt {
+  margin: 26px 16px 0;
+  padding-bottom: 32px;
+}
+
+.scan-receipt-label {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.scan-receipt-rows {
+  margin-top: 8px;
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.scan-receipt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.scan-receipt-key {
+  white-space: nowrap;
+  color: var(--scan-muted-2);
+}
+
+.scan-receipt-dots {
+  flex-grow: 1;
+  min-width: 12px;
+  border-bottom: 1.5px dotted var(--scan-dotted);
+}
+
+.scan-receipt-val {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.scan-snap-another {
+  margin-top: 18px;
+  width: 100%;
+  height: 56px;
+  border: 0;
+  border-radius: 14px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18);
+}
+
+/* -- Item sheet ------------------------------------------------------------------ */
+
+.scan-sheet-content {
+  padding: 0 16px 28px;
+}
+
+.scan-sheet-kicker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scan-sheet-kicker {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.scan-sheet-close {
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  color: var(--scan-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.scan-sheet-crop {
+  position: relative;
+  margin-top: 4px;
+  width: 100%;
+  height: 184px;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--scan-photo-bg);
+}
+
+.scan-sheet-crop-img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+
+.scan-sheet-crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--scan-orange);
+  border-radius: 6px;
+  box-shadow: 0 0 0 999px rgba(27, 24, 19, .28);
+}
+
+.scan-sheet-name-row {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.scan-sheet-badge-gem {
+  margin-top: 1px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 30px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 2px 5px rgba(27, 24, 19, .35);
+  transform: rotate(-6deg);
+}
+
+.scan-sheet-badge-plain {
+  margin: 9px 0 0 9px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: var(--scan-card);
+  box-shadow: 0 0 0 2px var(--scan-ink);
+}
+
+.scan-sheet-name {
+  margin: 0;
+  font-size: 25px;
+  line-height: 1.08;
+  font-weight: 750;
+  font-stretch: 85%;
+  letter-spacing: -0.01em;
+}
+
+.scan-sheet-price-row {
+  margin-top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.scan-sheet-price {
+  font-family: var(--scan-font-mono);
+  font-size: 36px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.scan-sheet-price-label {
+  font-size: 14px;
+  color: var(--scan-muted);
+}
+
+.scan-sheet-conf-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scan-sheet-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.scan-sheet-dot {
+  width: 9px;
+  height: 9px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--scan-ink);
+  background-color: transparent;
+}
+
+.scan-sheet-dot-filled {
+  background-color: var(--scan-ink);
+}
+
+.scan-sheet-conf-word {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.scan-sheet-conf-num {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  color: var(--scan-muted);
+}
+
+.scan-sheet-basis {
+  margin: 12px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--scan-muted-2);
+}
+
+.scan-sheet-not-priced {
+  margin-top: 12px;
+  font-size: 16px;
+  color: var(--scan-muted);
+}
+
+/* -- eBay block ------------------------------------------------------------------- */
+
+.scan-ebay {
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  background-color: var(--scan-bg);
+}
+
+.scan-ebay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.scan-ebay-label {
+  font-size: 13px;
+  font-weight: 750;
+  letter-spacing: .02em;
+}
+
+.scan-ebay-flag {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+}
+
+.scan-ebay-title {
+  margin-top: 6px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.scan-ebay-note {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--scan-muted);
+  overflow-wrap: anywhere;
+}
+
+.scan-ebay-stats {
+  margin-top: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  color: var(--scan-muted);
+}
+
+.scan-ebay-median {
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--scan-ink);
+}
+
+.scan-ebay-searched-row {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.scan-ebay-searched-label {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+}
+
+.scan-ebay-query {
+  padding: 3px 8px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 6px;
+  background-color: var(--scan-card);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+}
+
+.scan-ebay-sold-btn {
+  margin-top: 12px;
+  min-height: 48px;
+  border-radius: 10px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.scan-sources {
+  margin-top: 14px;
+}
+
+.scan-sources-label {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.scan-source-link {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--scan-link);
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

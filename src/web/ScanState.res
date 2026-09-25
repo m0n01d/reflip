@@ -368,7 +368,7 @@ let mb = (bytes: int): string => {
 
 let usd0 = (v: float): string => Int.toString(Float.toInt(Math.round(v)))
 
-let moneyRange = (lo: float, hi: float): string => "$" ++ usd0(lo) ++ "-" ++ usd0(hi)
+let moneyRange = (lo: float, hi: float): string => "$" ++ usd0(lo) ++ "–" ++ usd0(hi)
 
 let confidenceWord = (c: float): string =>
   c >= 0.7 ? "confident" : c >= 0.4 ? "fair guess" : "rough guess"
@@ -581,7 +581,7 @@ type receipt = {
 
 let receipt = (m: model): option<receipt> =>
   m.doneInfo->Option.map(d => {
-    modelLabel: Shared.modelId(m.selectedModel),
+    modelLabel: Shared.modelLabel(m.selectedModel),
     photoSize: Int.toString(m.sentWidth) ++ " x " ++ Int.toString(m.sentHeight),
     claude: mss(d.claudeMs),
     tokens: Int.toString(d.inputTokens) ++ " in, " ++ Int.toString(d.outputTokens) ++ " out",

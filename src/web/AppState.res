@@ -30,7 +30,13 @@ type haulPhase =
   | Starting
   | Active(Types.haulStatus)
   | Finishing(Types.haulStatus) // Done tapped: draining the queue, then POST done
-  | Finished(Types.haulStatus) // brain confirmed done; polling continues until emailedAt
+  | Finished(Types.haulStatus)
+
+// The Scan/Haul chrome switch (docs/design/scan-ui/Main.dc.html) — display
+// only, independent of haulPhase above. NoHaul + HaulTab shows the existing
+// haul-start entry form; NoHaul + ScanTab shows the restyled scan Ready
+// screen. Any other haulPhase always shows HaulView regardless of this.
+type tab = ScanTab | HaulTab // brain confirmed done; polling continues until emailedAt
 
 type model = {
   selectedModel: Shared.model,
@@ -57,6 +63,10 @@ type model = {
   // The new streaming scan flow (docs/scan-ui.md): ScanState owns its own
   // model/msg/update, folded in here through the Scan msg below.
   scan: ScanState.model,
+  // Scan/Haul chrome switch + the Settings sheet (Model, Photo size) — both
+  // display-only, read by ScanShell.res.
+  activeTab: tab,
+  settingsOpen: bool,
 }
 
 type msg =
@@ -93,6 +103,8 @@ type msg =
   | NewHaul // start over once the haul is emailed
   | SelectItem(int)
   | Scan(ScanState.msg)
+  | SetActiveTab(tab)
+  | SetSettingsOpen(bool)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -111,6 +123,8 @@ let initialModel: model = {
   photoUrl: None,
   selected: None,
   scan: ScanState.initialModel,
+  activeTab: ScanTab,
+  settingsOpen: false,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -260,4 +274,6 @@ let update = (model: model, msg: msg): model =>
     }
   | SelectItem(i) => {...model, selected: Some(i)}
   | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
+  | SetActiveTab(t) => {...model, activeTab: t}
+  | SetSettingsOpen(open_) => {...model, settingsOpen: open_}
   }
