@@ -842,6 +842,10 @@ let runSpike = async (~args: args, ~buf: Node.Buffer.t, ~width: int, ~height: in
       Console.log("no ANTHROPIC_API_KEY configured (and FIXTURES is not set)")
       (None, "no_api_key")
     }
+  | ClaudeStream.StreamError(model, msg) => {
+      Console.log("stream failed: " ++ msg)
+      (Some(model), "stream_error")
+    }
   }
 
   let items = modelOpt->Option.map(SceneStream.items)->Option.getOr([])

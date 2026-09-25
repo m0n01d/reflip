@@ -107,6 +107,15 @@ module HttpServer = {
   @send external write: (response, string) => unit = "write"
   @send external flushHeaders: response => unit = "flushHeaders"
   @get external writableEnded: response => bool = "writableEnded"
+  // Server.res's server-level error handler: once StreamRoute.handle has
+  // already sent the SSE 200 headers, a later uncaught rejection must not
+  // call writeHead again (Node throws ERR_HTTP_HEADERS_SENT for that). This
+  // says whether the headers already went out.
+  @get external headersSent: response => bool = "headersSent"
+  // Test-only: StreamRouteTest.res's stub Claude server uses this to
+  // simulate a connection dropping mid-stream — a plain "end" is a clean
+  // finish, not the failure that test needs.
+  @send external destroy: response => unit = "destroy"
   // Fires on a premature disconnect (checked via writableEnded above) and
   // also once normally after our own "end" finishes flushing — the caller
   // tells the two apart. A no-op "error" listener too: Node treats an

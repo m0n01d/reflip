@@ -576,7 +576,18 @@ let start = (config: Config.t): promise<startResult> =>
       ->Promise.catch(
         err => {
           Console.error2("reflip: unhandled error", err)
-          textResponse(res, 500, "text/plain", "internal error")
+          // StreamRoute.handle can already have sent the SSE 200 headers
+          // before a rejection like this one arrives — once that happened,
+          // writeHead (inside textResponse) throws ERR_HTTP_HEADERS_SENT
+          // instead of answering, and that used to crash the process. All
+          // that is left to do at that point is end the response.
+          if Node.HttpServer.headersSent(res) {
+            if !Node.HttpServer.writableEnded(res) {
+              Node.HttpServer.endWithBody(res, "")
+            }
+          } else {
+            textResponse(res, 500, "text/plain", "internal error")
+          }
           Promise.resolve()
         },
       )
