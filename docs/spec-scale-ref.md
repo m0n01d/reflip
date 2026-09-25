@@ -22,7 +22,7 @@ Both prompts in `SystemPrompt.res` get this text, in our own words:
 
 The scene prompt also asks for `quarterSeen`: true if a quarter is in the photo, else false.
 
-The prompt versions change to `scene-2` and `haul-2`. A find row then shows which prompt made it.
+The prompt versions change to `scene-2` and `haul-3`. A find row then shows which prompt made it.
 
 ## Schema and types
 
@@ -50,7 +50,7 @@ In the haul email, `Digest.gemText` and `Digest.gemHtml` show the size after the
 ## Tests
 
 1. Both prompts contain "24.26 mm". Both item schemas require `size`. Only the scene schema requires `quarterSeen`.
-2. The prompt versions are `scene-2` and `haul-2`.
+2. The prompt versions are `scene-2` and `haul-3`.
 3. The Claude decode gives `""` for a missing `size` and `false` for a missing `quarterSeen`.
 4. `encodeSceneReply` and `decodeSceneReply` keep `size` and `quarterSeen` on a round trip.
 5. `Store` opens a database with the old `finds` table, adds the column, and keeps a find with its size. A second open does not fail.

@@ -43,16 +43,20 @@ let run = () => {
     ~model="claude-sonnet-5",
     ~imageBase64="ZmFrZQ==",
     ~structuredOutput=true,
-    ~mode=ClaudeClient.Haul(20.0),
+    ~mode=ClaudeClient.Haul({gemMinUsd: 20.0, width: 800, height: 600}),
   )
   let haulSerialized = JSON.stringify(haulRequestJson)
-  // Only the scene request states the photo size; the haul prompt asks for
-  // no box, so its request stays as it was before item boxes.
+  // The haul prompt now asks for a box too (docs/spec-item-boxes.mds
+  // follow-up), so its request states the photo size exactly like the scene
+  // request does.
   TestKit.check(
     "scene request states the photo size",
     String.includes(serialized, "800 pixels wide and 600 pixels tall"),
   )
-  TestKit.check("haul request states no photo size", !String.includes(haulSerialized, "pixels wide"))
+  TestKit.check(
+    "haul request states the photo size",
+    String.includes(haulSerialized, "800 pixels wide and 600 pixels tall"),
+  )
 
   Array.forEach(titles, title =>
     TestKit.check(
