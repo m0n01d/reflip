@@ -38,7 +38,7 @@ let run = () => {
     !Array.some(requiredNames(SystemPrompt.haulResponseSchema), n => n == "quarterSeen"),
   )
 
-  TestKit.check("the scene prompt version is scene-2", SystemPrompt.promptVersion == "scene-2")
+  TestKit.check("the scene prompt version is scene-3", SystemPrompt.promptVersion == "scene-3")
   TestKit.check("the haul prompt version is haul-2", SystemPrompt.haulPromptVersion == "haul-2")
 
   TestKit.section("ScaleRef: encodeSceneReply / decodeSceneReply round trip")

@@ -63,7 +63,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.
 - `src/SceneLog.res`: appends one JSON line per scene to `data/scenes.jsonl`, and writes the raw Claude response to `data/raw/<sceneId>.json`. `data/` is gitignored.
-- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/stream`, `POST /api/scene/:id/rtt`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`.
+- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/stream`, `POST /api/scene/:id/rtt`, `POST /api/scene/:id/stop`, `GET /api/scene/:id/events`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`. `POST /api/scene/:id/stop` ends a running scene on purpose. `GET /api/scene/:id/events?from=<n>` replays a scene's buffered events and then follows it live, through `SceneRegistry`.
 - `src/Main.res`: the entry point `npm start` runs.
 - Haul mode, per `docs/spec-haul-mode.md`: `Config.res` reads the environment. `Store.res` is the SQLite store in `data/reflip.db`. `HaulWorker.res` runs the Claude calls in the background. `HaulStatus.res` builds the reply of `GET /api/hauls/:id`.
 - The haul email: `Digest.res` builds the subject and the bodies. `Thumb.res` makes the thumbnails with `sips`. `Email.res` builds the MIME message and sends it through Gmail SMTP with `nodemailer`. `HaulEmail.res` chooses between a send and the outbox. `EmailCheck.res` is `npm run email:check`, which logs in and sends nothing.
@@ -124,8 +124,13 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 
 `tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Nothing there came from a real API call.
 
+## Live keys
+
+`~/.config/reflip/env` has all five secrets since 2026-09-25. The first live haul ran that day: 3 photos, $0.42 in Claude, one email sent. `EbayClient.statsFor` returned live eBay stats for the three fixture items the same day.
+
+The eBay keys must come from the Production keyset on developer.ebay.com. The App ID contains `-PRD-` and the Cert ID starts with `PRD-`. `api.ebay.com` gives a 401 `invalid_client` to a Sandbox key (`SBX`). It also gives that 401 to a new Production keyset until you opt out of marketplace account deletion notifications. reflip keeps no eBay user data, so the opt-out applies.
+
 ## What is not built yet
 
-- eBay keys. `~/.config/reflip/env` has `ANTHROPIC_API_KEY`, `GMAIL_USER` and `GMAIL_APP_PASSWORD`, but no eBay keys. The first live haul ran on 2026-09-25: 3 photos, $0.42 in Claude, one email sent.
 - The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, and a way to keep the brain running.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.

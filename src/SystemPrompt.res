@@ -2,11 +2,17 @@
 // This is original text: Flip Scout reuses ideas from wesbos/yard-sale, not
 // its code or its prompt text (see reflip's CLAUDE.md, Origin).
 
+// A dense table (43 items, 2026-09-25) filled most of max_tokens with item
+// JSON, about 120 output tokens per item. The cap keeps a scene well inside
+// ClaudeClient.maxTokens, with room left for adaptive thinking.
+let maxSceneItems = 30
+
 let text = `You are the valuation brain for Flip Scout, a personal resale scanner.
 You will receive one photo of items on a table, shelf, or floor.
 
-Find every distinct sellable item in the photo. Skip clutter, trash, and
-anything that is not resellable.
+Find the distinct sellable items in the photo. Skip clutter, trash, and
+anything that is not resellable. List at most ${Int.toString(maxSceneItems)} items. If the photo
+has more, list the ${Int.toString(maxSceneItems)} with the highest resale value.
 
 For each item, report:
 - name: a short name for the item
@@ -109,7 +115,7 @@ let outputFormat: JSON.t = Json.obj([
 // Stamped on every find row (Store.find.promptVersion), so a later prompt
 // change never scrambles history. POST /api/scene uses this one; haul mode
 // uses haulPromptVersion below.
-let promptVersion = "scene-2"
+let promptVersion = "scene-3"
 
 // Haul mode's own words: only list items worth the trip to sell, name
 // where each one sits in the photo, and count the rest instead of

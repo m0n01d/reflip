@@ -1,0 +1,48 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=vintage+unmarked+cast+iron+skillet+10+inch&limit=50",
+  "total": 5,
+  "limit": 50,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|fixture-1-1|0",
+      "title": "Vintage Unmarked Cast Iron Skillet 10 Inch",
+      "price": {"value": "22.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-1-1",
+      "shippingOptions": [{"shippingCost": {"value": "14.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-1-2|0",
+      "title": "Old Cast Iron Frying Pan No Markings 10in",
+      "price": {"value": "18.50", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-1-2",
+      "shippingOptions": [{"shippingCost": {"value": "13.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-1-3|0",
+      "title": "Unbranded Cast Iron Skillet Vintage Kitchen",
+      "price": {"value": "26.99", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-1-3",
+      "shippingOptions": [{"shippingCost": {"value": "15.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-1-4|0",
+      "title": "Cast Iron Skillet 10 Inch No Name Vintage",
+      "price": {"value": "15.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-1-4",
+      "shippingOptions": [{"shippingCost": {"value": "12.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-1-5|0",
+      "title": "Vintage Unmarked Skillet 10in Well Seasoned",
+      "price": {"value": "31.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-1-5",
+      "shippingOptions": [{"shippingCost": {"value": "14.50", "currency": "USD"}}]
+    }
+  ]
+}

@@ -133,7 +133,7 @@ let run = () => {
     ("usage", Json.obj([("input_tokens", Json.num(1.0)), ("output_tokens", Json.num(1.0))])),
   ])
   switch ClaudeClient.parseClaudeJson(maxTokensJson) {
-  | Error(ClaudeClient.CutOff) => TestKit.check("stop_reason max_tokens gives CutOff", true)
+  | Error(ClaudeClient.CutOff(_)) => TestKit.check("stop_reason max_tokens gives CutOff", true)
   | _ => TestKit.check("stop_reason max_tokens should give CutOff", false)
   }
 
