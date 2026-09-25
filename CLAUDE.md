@@ -122,6 +122,22 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 
 `tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Nothing there came from a real API call.
 
+`scripts/haul-smoke.mjs` is a repeatable smoke test of the phone haul view. It uses fixture mode and drives the page with dev-browser. The script builds the app, then starts the server on a free port. The server gets a throwaway data directory and no live secrets. It starts a haul, adds the fixture photo five times, and waits for the haul to finish. Then it opens, switches, and closes each gem card, and taps one sold link. The script blocks ebay.com, so that tap never reaches the network.
+
+The script never sends an email. It writes the digest to a throwaway outbox instead, because `FIXTURES=1` always uses the outbox. The flags are:
+
+- `--n <count>`: the number of photos. Default: 5.
+- `--out <dir>`: the output directory. Default: `data/smoke/<UTC stamp>/`.
+- `--skip-build`: skip the build step.
+- `--headed`: show the browser window. Default: headless.
+- `--timeout <seconds>`: the dev-browser time limit. Default: 180.
+
+The script prints one JSON result line and puts its screenshots in the output directory. It exits with 0 only when every step passes. It uses its own dev-browser instance, `reflip-smoke`, and closes its pages at the end, also after a failure. It needs `dev-browser` on the machine (`npm install -g dev-browser`, then `dev-browser install`).
+
+```sh
+node scripts/haul-smoke.mjs
+```
+
 ## What is not built yet
 
 - eBay keys. `~/.config/reflip/env` has `ANTHROPIC_API_KEY`, `GMAIL_USER` and `GMAIL_APP_PASSWORD`, but no eBay keys. The first live haul ran on 2026-09-25: 3 photos, $0.42 in Claude, one email sent.
