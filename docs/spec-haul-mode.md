@@ -92,6 +92,7 @@ The first experiment measured a median of $0.152 and 47.1 s in Claude for each s
 
 - A haul of 60 photos costs about $9.
 - With 4 calls at a time, the brain values about 5 photos a minute. The brain values photos while Dwight walks, so the digest comes a few minutes after Done.
+- A live haul with boxes on 2026-09-25 valued 3 photos (s01 to s03) for $0.50 on Sonnet 5. The same 3 photos cost $0.42 before the prompt asked for boxes. Claude took 73 s, 80 s and 135 s for the photos. The longest call is 45 s under the 180 s timeout.
 - Four calls at a time read about 225,000 input tokens a minute. The rate-limit page lists 1,000 requests and 2,000,000 input tokens a minute for Claude Sonnet 5 (platform.claude.com/docs/en/api/rate-limits, read 2026-09-24). Cost, not the rate limit, sets the size of a haul.
 
 ## Decisions
