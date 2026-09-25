@@ -152,7 +152,7 @@ let runHappyPath = async () => {
 }
 
 let runStopPath = async () => {
-  TestKit.section("StreamRoute: client abort stops the upstream Claude request")
+  TestKit.section("StreamRoute: a client abort alone no longer stops the upstream Claude request")
 
   let sseText = Node.Fs.readFileUtf8(
     Node.Path.join([cwd, "tests/fixtures/claude-stream.sse"]),
@@ -215,6 +215,7 @@ let runStopPath = async () => {
   )
   TestKit.check("POST /api/scene/stream (stub) responds 200", Fetch.status(resp) == 200)
 
+  let sceneIdRef = ref("")
   switch Fetch.body(resp) {
   | None => TestKit.check("response had a body to read", false)
   | Some(stream) => {
@@ -232,6 +233,14 @@ let runStopPath = async () => {
               let text = TextDecoder.decodeStream(decoder, bytes, {stream: true})
               let (state2, events) = Sse.feed(sseStateRef.contents, text)
               sseStateRef := state2
+              switch Array.find(events, e => e.event == "photo-received") {
+              | Some(e) =>
+                switch JsonCombinators.Json.parse(e.data) {
+                | Ok(json) => sceneIdRef := Json.stringField(json, "sceneId")->Option.getOr("")
+                | Error(_) => ()
+                }
+              | None => ()
+              }
               switch Array.find(events, e => e.event == "item") {
               | Some(_) => Fetch.AbortController.abort(testController)
               | None => await readUntilItem()
@@ -244,6 +253,21 @@ let runStopPath = async () => {
     }
   }
 
+  // docs/scan-ui.md §1 decision 3: a dropped phone connection must not
+  // stop the scene by itself. Give the stub a moment it could have used
+  // to see a close, then confirm it never did.
+  await ClaudeStream.sleep(300)
+  TestKit.check(
+    "a client abort alone leaves the upstream Claude request running",
+    !stubClosedRef.contents,
+  )
+
+  // Stop is now its own request, apart from the stream connection. This
+  // test runs in the same process as the server under test, so call
+  // SceneRegistry directly the way POST /api/scene/:id/stop does, and
+  // confirm that DOES abort the call.
+  SceneRegistry.requestStop(sceneIdRef.contents)->ignore
+
   // Give every wait a time limit: poll for up to 2 s, per the brief.
   let deadline = Date.now() +. 2000.0
   let rec waitForStubClose = async (): unit =>
@@ -254,7 +278,7 @@ let runStopPath = async () => {
       await waitForStubClose()
     }
   await waitForStubClose()
-  TestKit.check("the stub sees its request closed within 2 s", stubClosedRef.contents)
+  TestKit.check("requestStop aborts the upstream Claude request within 2 s", stubClosedRef.contents)
 
   // The scene-log append is a synchronous fs write in the same reaction
   // chain that closes the upstream connection to the stub; this is slack

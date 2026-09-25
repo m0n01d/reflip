@@ -115,6 +115,13 @@ module HttpServer = {
   @send external onClose: (response, string, unit => unit) => unit = "on"
   @send external onResponseError: (response, string, unit => unit) => unit = "on"
 
+  // Test-only escape hatch: STREAM_DROP_AFTER_MS (StreamRoute.res) destroys
+  // the raw TCP socket under a response to simulate an abrupt client drop,
+  // instead of waiting on a real network failure.
+  type socket
+  @get external socket: response => socket = "socket"
+  @send external destroySocket: socket => unit = "destroy"
+
   @module("node:http")
   external createServer: ((request, response) => unit) => server = "createServer"
   @send external listen: (server, int, string, unit => unit) => unit = "listen"
