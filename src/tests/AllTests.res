@@ -7,6 +7,9 @@ ClaudeDecodeTest.run()
 EbayDecodeTest.run()
 GuardTest.run()
 AppStateTest.run()
+SseTest.run()
+ItemScannerTest.run()
+SceneStreamTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server): a rejection here fails the process

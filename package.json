@@ -12,6 +12,7 @@
     "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs"
   },
   "dependencies": {
+    "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
