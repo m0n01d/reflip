@@ -167,25 +167,45 @@ let run = async () => {
     }
   }
 
-  // -- exactly one Content-ID per gem scene: both scenes have gems (the haul
-  // fixture puts 2 items above the $20 default per scene), and
-  // HaulEmail.inlineImagesFor dedups by sceneId, so 2 scenes give exactly 2
-  // Content-IDs, one per scene.
+  // -- one whole-photo Content-ID per gem scene, plus one crop Content-ID
+  // per gem that has a box. Both scenes have gems (the haul fixture puts 2
+  // items above the $20 default per scene: the lamp and the skillet; the
+  // brooch's estimateHighUsd is 15, under the threshold, so it is not a
+  // gem). tests/fixtures/README.md: the fixture's third item (the brooch)
+  // has a degenerate box that Box.decode drops — but the brooch is not a
+  // gem either way, so both gems that ARE above threshold (lamp, skillet)
+  // keep their box (checked directly above: "every lamp/skillet find
+  // stores the fixture's box"). So the inline image count is
+  // (photos with gems: 2) + (gems with a box: 2 scenes x 2 gems = 4) = 6.
+  // Store.findsOf orders by createdAt then rowid, and insertFinds writes
+  // one scene's items in claude-haul.json order in a single loop, so
+  // within each scene the lamp is always find #1 and the skillet #2 —
+  // HaulEmail.gemCidFor's `n` follows that same per-scene order.
   TestKit.check(
-    "the first scene's Content-ID is present",
+    "the first scene's whole-photo Content-ID is present",
     String.includes(eml, "Content-ID: <scene-" ++ sceneId1 ++ "@reflip>"),
   )
   TestKit.check(
-    "the second scene's Content-ID is present",
+    "the second scene's whole-photo Content-ID is present",
     String.includes(eml, "Content-ID: <scene-" ++ sceneId2 ++ "@reflip>"),
   )
   TestKit.check(
-    "exactly 2 inline images, one per gem scene",
-    countOccurrences(eml, "Content-ID: <") == 2,
+    "the first scene's two gem crops (lamp, skillet) have Content-IDs",
+    String.includes(eml, "Content-ID: <gem-" ++ sceneId1 ++ "-1@reflip>") &&
+      String.includes(eml, "Content-ID: <gem-" ++ sceneId1 ++ "-2@reflip>"),
+  )
+  TestKit.check(
+    "the second scene's two gem crops (lamp, skillet) have Content-IDs",
+    String.includes(eml, "Content-ID: <gem-" ++ sceneId2 ++ "-1@reflip>") &&
+      String.includes(eml, "Content-ID: <gem-" ++ sceneId2 ++ "-2@reflip>"),
+  )
+  TestKit.check(
+    "exactly 6 inline images: 2 whole photos + 4 gem crops",
+    countOccurrences(eml, "Content-ID: <") == 6,
   )
   TestKit.check(
     "each inline image is an inline image/jpeg part",
-    countOccurrences(eml, "Content-Type: image/jpeg") == 2,
+    countOccurrences(eml, "Content-Type: image/jpeg") == 6,
   )
 
   // -- a text part and an html part, per the multipart/alternative Email.res
