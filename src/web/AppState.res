@@ -54,6 +54,9 @@ type model = {
   // The index into reply.items of the tapped card, or the item whose box
   // holds a tapped point on the photo. A new photo clears it.
   selected: option<int>,
+  // The new streaming scan flow (docs/scan-ui.md): ScanState owns its own
+  // model/msg/update, folded in here through the Scan msg below.
+  scan: ScanState.model,
 }
 
 type msg =
@@ -89,6 +92,7 @@ type msg =
   | DoneFailed(string)
   | NewHaul // start over once the haul is emailed
   | SelectItem(int)
+  | Scan(ScanState.msg)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -106,6 +110,7 @@ let initialModel: model = {
   haulError: None,
   photoUrl: None,
   selected: None,
+  scan: ScanState.initialModel,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -254,4 +259,5 @@ let update = (model: model, msg: msg): model =>
       haulError: None,
     }
   | SelectItem(i) => {...model, selected: Some(i)}
+  | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
   }

@@ -137,3 +137,55 @@ type scrollIntoViewOptions = {behavior: string, block: string}
 // The click target of a photo tap, read straight off the event — same
 // pattern as `eventTarget` above, for the other React event type.
 @get external mouseCurrentTarget: ReactEvent.Mouse.t => element = "currentTarget"
+
+// -- Streaming scan (docs/scan-ui.md) --------------------------------------
+// ScanApi.res's typed bindings: an abortable fetch (POST with a body, and a
+// plain GET, for the reconnect), a stream reader, and a TextDecoder in
+// "stream" mode — the same shapes as src/bindings/Fetch.res and
+// src/bindings/TextDecoder.res, but bound fresh here against the browser's
+// own fetch/TextDecoder globals rather than reused from src/bindings (that
+// folder is Node-only, per its own header comments).
+
+type abortController
+type abortSignal
+@new external makeAbortController: unit => abortController = "AbortController"
+@get external abortSignalOf: abortController => abortSignal = "signal"
+@send external abortControllerAbort: abortController => unit = "abort"
+
+type requestInitBlobSignal = {method: string, headers: Dict.t<string>, body: blob, signal: abortSignal}
+@val external fetchBlobSignal: (string, requestInitBlobSignal) => promise<response> = "fetch"
+
+type requestInitSignal = {signal: abortSignal}
+@val external fetchGetSignal: (string, requestInitSignal) => promise<response> = "fetch"
+
+// Opaque: a chunk is only ever handed to TextDecoder.decode, never
+// inspected byte by byte — same convention as src/bindings/Fetch.res.
+type byteChunk
+type readableStream
+type readableStreamReader
+@get external streamBodyRaw: response => Nullable.t<readableStream> = "body"
+let streamBody = (resp: response): option<readableStream> => Nullable.toOption(streamBodyRaw(resp))
+@send external getReader: readableStream => readableStreamReader = "getReader"
+// `value` is absent (not just empty) on the final `{done: true}` chunk in
+// some engines, so it is an optional field, not a plain byteChunk.
+type readResult = {done: bool, value?: byteChunk}
+@send external read: readableStreamReader => promise<readResult> = "read"
+
+type textDecoder
+@new external makeTextDecoder: unit => textDecoder = "TextDecoder"
+type decodeOptions = {stream: bool}
+@send external decodeStream: (textDecoder, byteChunk, decodeOptions) => string = "decode"
+
+// A delay as a promise, for the reconnect backoff — same
+// `Promise.make`-over-`setTimeout` shape as src/web/Resize.res.
+let delay = (ms: int): promise<unit> =>
+  Promise.make((resolve, _reject) => setTimeout(() => resolve(), ms)->ignore)
+
+// visibilitychange / online: so ScanApi can retry the moment the tab wakes
+// up or the network comes back, instead of waiting out the backoff.
+@get external documentVisibilityState: document => string = "visibilityState"
+@send
+external addDocumentListener: (document, string, unit => unit) => unit = "addEventListener"
+type windowLike
+@val external windowGlobal: windowLike = "window"
+@send external addWindowListener: (windowLike, string, unit => unit) => unit = "addEventListener"
