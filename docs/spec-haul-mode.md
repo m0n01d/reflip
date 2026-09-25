@@ -32,27 +32,28 @@ The phone page:
 
 - A haul view: Start haul, Take photo, Add photos, the counts, the gems so far, and Done.
 - Add photos is `<input type="file" multiple accept="image/*">` with no `capture` attribute, so iOS opens the photo library.
-- The photo queue lives in IndexedDB, through `idb-keyval`. `WebApi.res` gets typed bindings for `get`, `set`, `del` and `keys`. Each entry holds the resized JPEG blob, the haul ID and a client ID from `crypto.randomUUID`.
+- The photo queue lives in IndexedDB, through `idb-keyval`. `WebApi.res` gets typed bindings for `get`, `set`, `del` and `keys`. The key of each entry is `q|<haulId>|<clientId>`, and its value is the resized JPEG blob. The client ID comes from `crypto.randomUUID`.
+- The key `haul` holds the ID of the current haul. After a reload, the page reads it and shows that haul again.
 - The page deletes an entry only after the brain answers 202 for it. If the page reloads, the queue starts again from IndexedDB.
 - The page uploads one photo at a time. If an upload fails, the page waits 5 s, then 15 s, then 60 s, and tries again. It never drops a photo.
 - The page stays TEA: new `msg` variants in `AppState.res`, effects in `App.res`.
 
 The brain:
 
-- Store: SQLite through `node:sqlite`, in `data/reflip.db`, as M1 decided. `src/bindings/` gets typed externals for the `DatabaseSync` calls that the store uses. Each row decode returns an option.
-- Table `hauls`: `haulId`, `name`, `startedAt`, `doneAt`, `emailedAt`, `costUsd`.
-- Table `scenes`: `sceneId`, `haulId`, `clientId`, `status` (queued, running, done, failed), `photoPath`, `error`, `costUsd`, `claudeMs`, `createdAt`.
-- Table `finds`: the M1 table with the M1 column names. Haul mode writes one row for each item in the reply. It adds the columns `sceneId` and `where`. M1 adds the paid and sold entries later.
+- Store: SQLite through `node:sqlite`, in `data/reflip.db`, as M1 decided. The `DATA_DIR` variable moves the `data/` folder, for example to a temp folder for a test. `src/bindings/` gets typed externals for the `DatabaseSync` calls that the store uses. Each row decode returns an option.
+- Table `hauls`: `haulId`, `name`, `startedAt`, `doneAt`, `emailedAt`, `costUsd`, `stopReason`, `emailNote`. `stopReason` tells why the worker stopped the haul. `emailNote` tells where the digest went, or why it did not go.
+- Table `scenes`: `sceneId`, `haulId`, `clientId`, `status` (queued, running, done, failed), `photoPath`, `error`, `costUsd`, `claudeMs`, `otherCount`, `createdAt`. The pair `haulId` and `clientId` is unique.
+- Table `finds`: the M1 table with the M1 column names. Haul mode writes one row for each item in the reply. It fills `sceneId`, which M1 already had, and adds the columns `query`, `where` and `ebayJson`. `query` is the eBay search text from Claude. `ebayJson` holds the eBay stats for that find, or null. M1 adds the paid and sold entries later.
 - Photos: `data/photos/<sceneId>.jpg`. `data/` is gitignored.
 - The worker is a queue inside the brain process. It runs at most `HAUL_CONCURRENCY` Claude calls at a time, 4 by default. When the brain starts, it sets each `running` scene back to `queued`. A restart then loses no photo.
-- If Claude returns a 429 or a 529, the worker waits and keeps the scene queued. It stops the haul after 3 failures in a row and records why.
-- Budget: when the cost of a haul reaches `HAUL_MAX_USD`, $10 by default, the worker stops that haul. The page and the digest say so.
+- If Claude returns a 429 or a 529, the worker waits and keeps the scene queued. It stops the haul after 3 failures in a row and records why in `stopReason`. A 429 or a 529 counts toward those 3 failures. A success sets the count back to 0.
+- Budget: when the cost of a haul reaches `HAUL_MAX_USD`, $10 by default, the worker stops that haul. The page and the digest say so. The worker adds the cost of a scene only when that scene finishes. Thus the cost can go over the budget by up to `HAUL_CONCURRENCY - 1` scenes that were in flight.
 - eBay: no change. Hard rule 1 holds. If the eBay keys exist, each gem gets its eBay stats after the Claude call, as in M0.
 
 The routes:
 
-- `POST /api/hauls` starts a haul and returns its ID.
-- `POST /api/hauls/:id/scenes` takes one JPEG and a client ID. It saves the photo, queues the scene and answers 202 with the scene ID. If the same client ID comes again, the route returns the same scene ID. A retried upload then costs nothing.
+- `POST /api/hauls` starts a haul and returns its ID. Outside fixture mode, if `ANTHROPIC_API_KEY` is not set, it answers 503 and starts no haul.
+- `POST /api/hauls/:id/scenes` takes one JPEG as the body and a client ID in the `x-client-id` header. The client ID is 1 to 64 characters of `[A-Za-z0-9-]`, or the route answers 400. It saves the photo, queues the scene and answers 202 with the scene ID. If the same client ID comes again, the route returns the same scene ID. A retried upload then costs nothing.
 - `GET /api/hauls/:id` returns the counts, the cost so far and the gems so far.
 - `POST /api/hauls/:id/done` closes the haul.
 - `POST /api/scene` stays as it is, so the single-photo flow keeps working.
@@ -69,7 +70,9 @@ The digest and the email:
 - `Email.res` is a copy of dippa's `src/worker/Email.res`, with the two fixes that `flip-scout.md` in app-ideas names. It encodes UTF-8 correctly, and it decodes the token response with no `%identity` cast.
 - The email goes through the Gmail API with an OAuth refresh token. The secrets are `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` and `EMAIL_TO`, in `~/.config/reflip/env`. Dwight writes them himself.
 - Each gem thumbnail is an inline attachment (`cid:`), 480px on the long edge. Gmail cannot load images from the tailnet.
+- The brain makes each thumbnail with `/usr/bin/sips` on macOS, in `Thumb.res`. It never makes a photo larger. If the photo is 480px or smaller on the long edge, `Thumb.res` copies it unchanged. If `sips` fails, the email uses the original photo.
 - With `FIXTURES=1`, the brain writes the email to `data/outbox/<haulId>.eml` and sends nothing. A missing Gmail secret outside fixture mode does the same, and the page tells why.
+- `HaulEmail.res` makes this choice and writes `emailNote`. For example, in fixture mode the note is "written to data/outbox/<haulId>.eml because FIXTURES=1". If a send fails, the brain writes the `.eml` file and the note gives the error.
 
 ## Cost and time
 
