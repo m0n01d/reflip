@@ -6,6 +6,13 @@
 let cwd = Node.Process.cwd()
 let fixturesDir = Node.Path.join([cwd, "tests/fixtures"])
 
+// A haul scene's photo goes through HaulWorker.runScene, which reads its
+// width and height with JpegSize.dimensions before ever calling Claude
+// (Server.res's handleScene does the same for the M0 flow). A placeholder
+// string body isn't a real JPEG, so any scene that must reach "valued"
+// posts or writes these real bytes instead.
+let tablePhotoBuffer = Node.Fs.readFileBuffer(Node.Path.join([fixturesDir, "table.jpg"]))
+
 let tmpDataDir = (): string =>
   Node.Path.join([Node.Os.tmpdir(), "reflip-haul-test-" ++ Node.Crypto.randomUUID()])
 
@@ -54,12 +61,12 @@ let postEmpty = async (url: string): int => {
 }
 
 let postScene = async (base: string, haulId: string, clientId: string): (int, JSON.t) => {
-  let resp = await Fetch.fetch(
+  let resp = await Fetch.fetchBuffer(
     base ++ "/api/hauls/" ++ haulId ++ "/scenes",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg"), ("x-client-id", clientId)]),
-      body: "fake-jpeg-bytes",
+      body: tablePhotoBuffer,
     },
   )
   (Fetch.status(resp), await Fetch.json(resp))
@@ -132,6 +139,39 @@ let run = async () => {
     Node.Fs.existsSync(Node.Path.join([dataDir1, "photos", sceneId1 ++ ".jpg"])),
   )
 
+  // The upload read the real fixture JPEG's size (table.jpg is 64x48) and
+  // stored it on the scene row — docs/spec-haul-mode.md "The routes",
+  // GET /api/hauls/:id/scenes.
+  switch Store.sceneByClient(store1, ~haulId=haulId1, ~clientId="client-a") {
+  | Some(s) =>
+    TestKit.check(
+      "the upload stores the photo's size on the scene",
+      s.imageWidth == Some(64) && s.imageHeight == Some(48),
+    )
+  | None => TestKit.check("sceneByClient found the uploaded scene", false)
+  }
+
+  // GET /api/scenes/:id/photo serves the same bytes back, with the two
+  // headers the spec asks for.
+  let photoResp = await Fetch.fetch(base1 ++ "/api/scenes/" ++ sceneId1 ++ "/photo")
+  TestKit.check("GET the scene's photo responds 200", Fetch.status(photoResp) == 200)
+  TestKit.check(
+    "the photo response is image/jpeg",
+    Fetch.getHeader(Fetch.responseHeaders(photoResp), "content-type")->Nullable.toOption ==
+      Some("image/jpeg"),
+  )
+  TestKit.check(
+    "the photo response is cacheable, private and immutable",
+    Fetch.getHeader(Fetch.responseHeaders(photoResp), "cache-control")->Nullable.toOption ==
+      Some("private, max-age=31536000, immutable"),
+  )
+  let photoBuf = Node.Buffer.fromArrayBuffer(await Fetch.arrayBuffer(photoResp))
+  TestKit.check(
+    "the photo bytes match what was uploaded",
+    Node.Buffer.toStringWithEncoding(photoBuf, "base64") ==
+      Node.Buffer.toStringWithEncoding(tablePhotoBuffer, "base64"),
+  )
+
   let reachedValued3 = await pollUntil(~timeoutMs=5000, async () => {
     let (_status, json) = await getJson(base1 ++ "/api/hauls/" ++ haulId1)
     valuedCount(json) == Some(3)
@@ -152,6 +192,36 @@ let run = async () => {
   TestKit.check("every gem got its eBay stats (fixture mode)", hasEbay)
   let hasWhere = Array.every(gems1, g => Json.stringField(g, "where")->Option.isSome)
   TestKit.check("every gem carries a where", hasWhere)
+
+  // Each gem's status JSON carries its find's box, and the size of the
+  // photo it came from (table.jpg is 64x48 — table.jpg's own README, and
+  // ServerTest.res's own check of the M0 /api/scene reply against it).
+  let gemByName = (gems: array<JSON.t>, name: string): option<JSON.t> =>
+    Array.find(gems, g => Json.stringField(g, "name") == Some(name))
+
+  switch gemByName(gems1, "Brass table lamp") {
+  | Some(g) => {
+      let box = Json.field(g, "box")->Option.flatMap(Shared.decodeBox)
+      TestKit.check(
+        "the lamp gem's status JSON carries the fixture's box",
+        box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      )
+      TestKit.check(
+        "the lamp gem's status JSON carries the photo size",
+        Json.intField(g, "imageWidth") == Some(64) && Json.intField(g, "imageHeight") == Some(48),
+      )
+    }
+  | None => TestKit.check("found the lamp gem in the status JSON", false)
+  }
+  switch gemByName(gems1, "Griswold cast iron skillet") {
+  | Some(g) =>
+    TestKit.check(
+      "the skillet gem's status JSON has a null box, its fixture box was degenerate",
+      Json.field(g, "box") == Some(JSON.Encode.null),
+    )
+  | None => TestKit.check("found the skillet gem in the status JSON", false)
+  }
+
   TestKit.approx(
     "cost is 3 x the fixture's per-scene cost",
     Json.floatField(statusJson1, "costUsd")->Option.getOr(0.0),
@@ -164,6 +234,33 @@ let run = async () => {
   TestKit.check(
     "status otherCount is 3 x (12 + 1)",
     Json.intField(statusJson1, "otherCount") == Some(39),
+  )
+
+  // Each scene's 3 finds come from the same claude-haul.json fixture: the
+  // lamp and the brooch each carry a box in table.jpg's 64x48 pixels
+  // (Box.decode passes them through unchanged, since the high tier doesn't
+  // resize a photo that small). The skillet's box is degenerate on purpose
+  // (x2 <= x1), so Box.decode drops it and that find stores no box — the
+  // skillet is a gem (its estimateHighUsd is above the $20 threshold), so
+  // this is the fixture that proves a gem with no box works end to end.
+  let finds1 = Store.findsOf(store1, haulId1)
+  TestKit.check("all 9 finds (3 scenes x 3 items) were stored", Array.length(finds1) == 9)
+  let lampFinds = Array.filter(finds1, f => f.name == "Brass table lamp")
+  let skilletFinds = Array.filter(finds1, f => f.name == "Griswold cast iron skillet")
+  let broochFinds = Array.filter(finds1, f => f.name == "Costume jewelry brooch")
+  TestKit.check(
+    "every lamp find stores the fixture's box",
+    Array.length(lampFinds) == 3 &&
+      Array.every(lampFinds, f => f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30})),
+  )
+  TestKit.check(
+    "every skillet find has no box, its fixture box is degenerate",
+    Array.length(skilletFinds) == 3 && Array.every(skilletFinds, f => f.box == None),
+  )
+  TestKit.check(
+    "every brooch find stores the fixture's box",
+    Array.length(broochFinds) == 3 &&
+      Array.every(broochFinds, f => f.box == Some({Types.x1: 44, y1: 32, x2: 60, y2: 46})),
   )
 
   let doneStatus = await postEmpty(base1 ++ "/api/hauls/" ++ haulId1 ++ "/done")
@@ -455,7 +552,7 @@ let run = async () => {
   Store.createHaul(preStore, ~haulId=haulId5, ~name=None, ~now="2026-09-24T00:00:00.000Z")->ignore
   Node.Fs.mkdirSync(Node.Path.join([dataDir5, "photos"]), {recursive: true})
   let photoPath5 = Node.Path.join([dataDir5, "photos", "scene-restart.jpg"])
-  Node.Fs.writeFileSync(photoPath5, "fake-jpeg-bytes")
+  Node.Fs.writeFileBuffer(photoPath5, tablePhotoBuffer)
   let scene5 = Store.addScene(
     preStore,
     ~haulId=haulId5,
@@ -463,6 +560,8 @@ let run = async () => {
     ~sceneId="scene-restart",
     ~photoPath=photoPath5,
     ~now="2026-09-24T00:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   Store.setStatus(preStore, ~sceneId=scene5.sceneId, Store.Running)
   Store.close(preStore)

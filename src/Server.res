@@ -119,7 +119,7 @@ let handleRtt = (
 
 // -- Haul mode routes (docs/spec-haul-mode.md "The routes") -----------------
 
-type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string)
+type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string)
 
 let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
   let parts = pathname->String.split("/")->Array.filter(s => s != "")
@@ -150,6 +150,13 @@ let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
       let b = Array.getUnsafe(parts, 1)
       let id = Array.getUnsafe(parts, 2)
       a == "api" && b == "hauls" ? Some(GetHaul(id)) : None
+    }
+  | ("GET", 4) => {
+      let a = Array.getUnsafe(parts, 0)
+      let b = Array.getUnsafe(parts, 1)
+      let id = Array.getUnsafe(parts, 2)
+      let c = Array.getUnsafe(parts, 3)
+      a == "api" && b == "scenes" && c == "photo" ? Some(ScenePhoto(id)) : None
     }
   | _ => None
   }
@@ -315,7 +322,22 @@ let handleAddScene = async (
               let photoPath = Node.Path.join([config.dataDir, "photos", sceneId ++ ".jpg"])
               Node.Fs.writeFileBuffer(photoPath, body)
               let now = Date.toISOString(Date.make())
-              Store.addScene(store, ~haulId, ~clientId, ~sceneId, ~photoPath, ~now)->ignore
+              // A bad or unreadable JPEG never blocks the upload — both sizes
+              // just stay None, same as any other pre-2026-09-25 scene.
+              let (imageWidth, imageHeight) = switch JpegSize.dimensions(body) {
+              | Some((w, h)) => (Some(w), Some(h))
+              | None => (None, None)
+              }
+              Store.addScene(
+                store,
+                ~haulId,
+                ~clientId,
+                ~sceneId,
+                ~photoPath,
+                ~now,
+                ~imageWidth,
+                ~imageHeight,
+              )->ignore
               HaulWorker.kick(worker)
               jsonResponse(res, 202, Json.obj([("sceneId", Json.str(sceneId))]))
             }
@@ -331,6 +353,33 @@ let handleGetHaul = (
   haulId: string,
   res: Node.HttpServer.response,
 ): unit => haulStatusResponse(config, store, haulId, 200, res)
+
+// The stored photo of a scene (docs/spec-haul-mode.md "The routes"). The id
+// gets the same 1-to-64-of-[A-Za-z0-9-] check as a client id, then the path
+// is joined and checked the same way handleStatic checks dist/: resolve it,
+// then make sure the result still starts inside photosDir before ever
+// touching the filesystem. The photo never changes once it lands on disk,
+// so the reply is cacheable for a year.
+let handleScenePhoto = (config: Config.t, id: string, res: Node.HttpServer.response): unit =>
+  if !isValidClientId(id) {
+    errorJson(res, 400, "scene id must be 1 to 64 characters of [A-Za-z0-9-]")
+  } else {
+    let photosDir = Node.Path.join([config.dataDir, "photos"])
+    let resolved = Node.Path.join([photosDir, id ++ ".jpg"])
+    if String.startsWith(resolved, photosDir ++ "/") && Node.Fs.existsSync(resolved) {
+      Node.HttpServer.writeHead(
+        res,
+        200,
+        Dict.fromArray([
+          ("Content-Type", "image/jpeg"),
+          ("Cache-Control", "private, max-age=31536000, immutable"),
+        ]),
+      )
+      endWithBuffer(res, Node.Fs.readFileBuffer(resolved))
+    } else {
+      errorJson(res, 404, "not found")
+    }
+  }
 
 let handleMarkDone = (
   config: Config.t,
@@ -480,6 +529,7 @@ let route = async (
   | Some(AddScene(haulId)) => await handleAddScene(config, store, worker, haulId, req, res)
   | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)
   | Some(MarkDone(haulId)) => handleMarkDone(config, store, worker, haulId, res)
+  | Some(ScenePhoto(sceneId)) => handleScenePhoto(config, sceneId, res)
   | None =>
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)

@@ -64,10 +64,10 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.
 - `src/SceneLog.res`: appends one JSON line per scene to `data/scenes.jsonl`, and writes the raw Claude response to `data/raw/<sceneId>.json`. `data/` is gitignored.
-- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/stream`, `POST /api/scene/:id/rtt`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`.
+- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/stream`, `POST /api/scene/:id/rtt`, `GET /api/scenes/:id/photo`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`. The photo route serves the stored JPEG for one scene, guarded the same way as the `dist/` files.
 - `src/Main.res`: the entry point `npm start` runs.
 - Haul mode, per `docs/spec-haul-mode.md`: `Config.res` reads the environment. `Store.res` is the SQLite store in `data/reflip.db`. `HaulWorker.res` runs the Claude calls in the background. `HaulStatus.res` builds the reply of `GET /api/hauls/:id`.
-- The haul email: `Digest.res` builds the subject and the bodies. `Thumb.res` makes the thumbnails with `sips`. `Email.res` builds the MIME message and sends it through Gmail SMTP with `nodemailer`. `HaulEmail.res` chooses between a send and the outbox. `EmailCheck.res` is `npm run email:check`, which logs in and sends nothing.
+- The haul email: `Digest.res` builds the subject and the bodies. `Thumb.res` makes the thumbnails with `sips`. `Crop.res` crops one gem from its photo with `sips`, with a 10% margin, at most 240 px on the long edge. The digest has one section for each photo: the photo once, then a crop for each gem. `scripts/eml-preview.py` turns an outbox `.eml` into one HTML file, for a look in a browser. `Email.res` builds the MIME message and sends it through Gmail SMTP with `nodemailer`. `HaulEmail.res` chooses between a send and the outbox. `EmailCheck.res` is `npm run email:check`, which logs in and sends nothing.
 - `src/stream/`: the streaming scene route, per `docs/stream-spike.md`. `Sse.res` parses and encodes SSE. `ItemScanner.res` finds each item in the partial JSON. `ClaudeEvents.res` decodes each Claude stream event. `SceneStream.res` is the model and `update` from Claude events to log events. `ClaudeStream.res` is the network edge, with Stop and the time limit. `StreamRoute.res` is `POST /api/scene/stream`.
 - `src/spike/StreamSpike.res`: the measurement runner, `npm run spike:stream`. It writes to `data/spike/`.
 - `src/web/`: the phone page. `Index.res` mounts it. `App.res` holds the view and the side effects. `AppState.res` holds the pure model, the `msg` type, and `update`. `Resize.res` scales and encodes the photo on a canvas. `Api.res` calls `/api/scene` and posts the round-trip time. `WebApi.res` holds the typed DOM and canvas bindings.
@@ -124,6 +124,22 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 `npm test` builds, then runs `src/tests/AllTests.res.mjs`. Each test file uses `node:assert` through `src/tests/TestKit.res`, the same shape as dippa's own test kit. A failing assertion throws, so a red test fails the process exit code.
 
 `tests/fixtures/` holds the recorded shapes: a Claude Messages API response with three items, one eBay Browse API response per item, and a small generated JPEG. See that folder's own `README.md`. Nothing there came from a real API call.
+
+`scripts/haul-smoke.mjs` is a repeatable smoke test of the phone haul view. It uses fixture mode and drives the page with dev-browser. The script builds the app, then starts the server on a free port. The server gets a throwaway data directory and no live secrets. It starts a haul, adds the fixture photo five times, and waits for the haul to finish. Then it opens, switches, and closes each gem card, and taps one sold link. The script blocks ebay.com, so that tap never reaches the network.
+
+The script never sends an email. It writes the digest to a throwaway outbox instead, because `FIXTURES=1` always uses the outbox. The flags are:
+
+- `--n <count>`: the number of photos. Default: 5.
+- `--out <dir>`: the output directory. Default: `data/smoke/<UTC stamp>/`.
+- `--skip-build`: skip the build step.
+- `--headed`: show the browser window. Default: headless.
+- `--timeout <seconds>`: the dev-browser time limit. Default: 180.
+
+The script prints one JSON result line and puts its screenshots in the output directory. It exits with 0 only when every step passes. It uses its own dev-browser instance, `reflip-smoke`, and closes its pages at the end, also after a failure. It needs `dev-browser` on the machine (`npm install -g dev-browser`, then `dev-browser install`).
+
+```sh
+node scripts/haul-smoke.mjs
+```
 
 ## Live keys
 

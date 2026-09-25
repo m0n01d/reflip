@@ -39,7 +39,7 @@ let run = () => {
   )
 
   TestKit.check("the scene prompt version is scene-4", SystemPrompt.promptVersion == "scene-4")
-  TestKit.check("the haul prompt version is haul-2", SystemPrompt.haulPromptVersion == "haul-2")
+  TestKit.check("the haul prompt version is haul-3", SystemPrompt.haulPromptVersion == "haul-3")
 
   TestKit.section("ScaleRef: encodeSceneReply / decodeSceneReply round trip")
 

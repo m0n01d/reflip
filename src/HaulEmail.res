@@ -19,68 +19,157 @@ let outboxNoteName = (haulId: string): string => "data/outbox/" ++ haulId ++ ".e
 
 let cidFor = (sceneId: string): string => "scene-" ++ sceneId ++ "@reflip"
 
+// A gem's box-crop cid, one per gem that has a box. `n` is 1-based and
+// resets per scene, so the second gem on a photo is "gem-<sceneId>-2".
+let gemCidFor = (sceneId: string, n: int): string =>
+  "gem-" ++ sceneId ++ "-" ++ Int.toString(n) ++ "@reflip"
+
 // Concatenates `parts` with ", " between them, without relying on an
 // unverified Array.join in the ReScript 12 stdlib (same reasoning as
 // Digest.res's `concatAll`).
 let joinComma = (parts: array<string>): string =>
   Array.reduceWithIndex(parts, "", (acc, part, i) => i == 0 ? part : acc ++ ", " ++ part)
 
+// Crops `f`'s box out of its photo with Crop.make, into the same temp
+// place inlineImagesFor's whole-photo thumbnails go. None (no image, and
+// Digest.gemHtml then shows "no box") when the find has no box, its photo
+// is missing from photoPaths, sips can't read the photo's dimensions, or
+// Crop.make itself fails.
+let cropFor = (
+  config: Config.t,
+  photoPaths: Dict.t<string>,
+  f: Store.find,
+  n: int,
+): option<(Email.inlineImage, int, int)> =>
+  switch f.box {
+  | None => None
+  | Some(box) =>
+    switch Dict.get(photoPaths, f.sceneId) {
+    | None => None
+    | Some(photoPath) =>
+      switch Thumb.readDimensions(photoPath) {
+      | Error(_) => None
+      | Ok((width, height)) => {
+          let thumbDir = Node.Path.join([config.dataDir, "thumbs"])
+          Node.Fs.mkdirSync(thumbDir, {recursive: true})
+          let filename = f.sceneId ++ "-" ++ Int.toString(n) ++ "-crop.jpg"
+          let cropPath = Node.Path.join([thumbDir, filename])
+          switch Crop.make(~src=photoPath, ~dest=cropPath, ~box, ~width, ~height) {
+          | Error(_) => None
+          | Ok() =>
+            Node.Fs.existsSync(cropPath)
+              ? switch Thumb.readDimensions(cropPath) {
+                | Error(_) => None
+                | Ok((cropWidth, cropHeight)) =>
+                  Some((
+                    {
+                      Email.cid: gemCidFor(f.sceneId, n),
+                      filename,
+                      jpeg: Node.Fs.readFileBuffer(cropPath),
+                    },
+                    cropWidth,
+                    cropHeight,
+                  ))
+                }
+              : None
+          }
+        }
+      }
+    }
+  }
+
 // Same gem rule as HaulStatus.gemsOf (estimateHighUsd >= the threshold),
 // built for Digest.res's gem shape instead of Types.haulGem: it wants only
 // the eBay median, not the full stats blob.
-let digestGemsOf = (finds: array<Store.find>, gemMinUsd: float): array<Digest.gem> =>
-  finds
-  ->Array.filter(f => f.estimateHighUsd >= gemMinUsd)
-  ->Array.map(f => {
-      Digest.name: f.name,
-      where: f.where,
-      estimateLowUsd: f.estimateLowUsd,
-      estimateHighUsd: f.estimateHighUsd,
-      confidence: f.confidence,
-      soldSearchUrl: EbayClient.soldSearchUrl(f.query),
-      sceneId: f.sceneId,
-      ebayMedianUsd: f.ebayJson->Option.flatMap(text =>
-        switch JSON.parseOrThrow(text) {
-        | json =>
-          switch Shared.decodeEbayStats(json) {
-          | Ok(stats) => Some(stats.medianUsd)
-          | Error(_) => None
-          }
-        | exception JsExn(_) => None
+//
+// Builds the Digest.gem rows and their box-crop inline images in the same
+// pass: a gem's crop has to name the same cid (and real pixel size) as its
+// crop image, and `n` resets per scene, so both come from one place rather
+// than two that could drift apart.
+let digestGemsOf = (
+  config: Config.t,
+  finds: array<Store.find>,
+  gemMinUsd: float,
+  photoPaths: Dict.t<string>,
+): (array<Digest.gem>, array<Email.inlineImage>) => {
+  let perScene: Dict.t<int> = Dict.make()
+  let images: array<Email.inlineImage> = []
+  let gems =
+    finds
+    ->Array.filter(f => f.estimateHighUsd >= gemMinUsd)
+    ->Array.map(f => {
+        let n = Dict.get(perScene, f.sceneId)->Option.getOr(0) + 1
+        Dict.set(perScene, f.sceneId, n)
+        let image = cropFor(config, photoPaths, f, n)
+        switch image {
+        | Some((img, _, _)) => Array.push(images, img)
+        | None => ()
         }
-      ),
-      size: f.size,
-    })
+        {
+          Digest.name: f.name,
+          where: f.where,
+          estimateLowUsd: f.estimateLowUsd,
+          estimateHighUsd: f.estimateHighUsd,
+          confidence: f.confidence,
+          soldSearchUrl: EbayClient.soldSearchUrl(f.query),
+          sceneId: f.sceneId,
+          ebayMedianUsd: f.ebayJson->Option.flatMap(text =>
+            switch JSON.parseOrThrow(text) {
+            | json =>
+              switch Shared.decodeEbayStats(json) {
+              | Ok(stats) => Some(stats.medianUsd)
+              | Error(_) => None
+              }
+            | exception JsExn(_) => None
+            }
+          ),
+          size: f.size,
+          crop: image->Option.map(((img, width, height)) => {
+            Digest.cid: img.cid,
+            width,
+            height,
+          }),
+        }
+      })
+  (gems, images)
+}
 
 let digestFailedOf = (scenes: array<Store.scene>): array<Digest.failedPhoto> =>
   scenes
   ->Array.filter(s => s.status == Store.Failed)
   ->Array.map(s => {Digest.sceneId: s.sceneId, error: s.error->Option.getOr("unknown error")})
 
+// Returns the Digest.input alongside the gem-crop inline images
+// digestGemsOf built while making it — `send` still needs to add the
+// whole-photo thumbnails (inlineImagesFor) to get the full image list.
 let digestInputOf = (
   config: Config.t,
   haul: Store.haul,
   scenes: array<Store.scene>,
   finds: array<Store.find>,
   counts: Store.counts,
-): Digest.input => {
-  let gems = digestGemsOf(finds, config.haulGemMinUsd)
+  photoPaths: Dict.t<string>,
+): (Digest.input, array<Email.inlineImage>) => {
+  let (gems, gemImages) = digestGemsOf(config, finds, config.haulGemMinUsd, photoPaths)
   // Other items: finds below the gem threshold, plus each scene's own
   // otherCount — the same rule HaulStatus.build uses for the status reply.
   let otherFinds = Array.length(finds) - Array.length(gems)
   let otherFromScenes = Array.reduce(scenes, 0, (acc, s) => acc + s.otherCount->Option.getOr(0))
-  {
-    Digest.haulId: haul.haulId,
-    name: haul.name,
-    startedAt: haul.startedAt,
-    costUsd: haul.costUsd,
-    stopReason: haul.stopReason,
-    gemMinUsd: config.haulGemMinUsd,
-    gems,
-    otherCount: otherFinds + otherFromScenes,
-    valuedCount: counts.done,
-    failed: digestFailedOf(scenes),
-  }
+  (
+    {
+      Digest.haulId: haul.haulId,
+      name: haul.name,
+      startedAt: haul.startedAt,
+      costUsd: haul.costUsd,
+      stopReason: haul.stopReason,
+      gemMinUsd: config.haulGemMinUsd,
+      gems,
+      otherCount: otherFinds + otherFromScenes,
+      valuedCount: counts.done,
+      failed: digestFailedOf(scenes),
+    },
+    gemImages,
+  )
 }
 
 let photoPathOf = (scenes: array<Store.scene>): Dict.t<string> => {
@@ -89,10 +178,12 @@ let photoPathOf = (scenes: array<Store.scene>): Dict.t<string> => {
   d
 }
 
-// One inline image per distinct scene that holds a gem: a 480px-long-edge
-// thumbnail made with Thumb.make, or the original photo when Thumb.make
-// fails (a missing /usr/bin/sips, say). A scene whose photo is gone from
-// disk is skipped rather than failing the whole digest.
+// One whole-photo inline image per distinct scene that holds a gem: a
+// 640px-long-edge thumbnail made with Thumb.make (per Dwight's ask after
+// the first live haul — big enough to read, one per photo instead of one
+// repeated per gem), or the original photo when Thumb.make fails (a
+// missing /usr/bin/sips, say). A scene whose photo is gone from disk is
+// skipped rather than failing the whole digest.
 let inlineImagesFor = (
   config: Config.t,
   gems: array<Digest.gem>,
@@ -110,7 +201,7 @@ let inlineImagesFor = (
           let thumbDir = Node.Path.join([config.dataDir, "thumbs"])
           Node.Fs.mkdirSync(thumbDir, {recursive: true})
           let thumbPath = Node.Path.join([thumbDir, g.sceneId ++ ".jpg"])
-          let srcPath = switch Thumb.make(~src=photoPath, ~dest=thumbPath, ~longEdge=480) {
+          let srcPath = switch Thumb.make(~src=photoPath, ~dest=thumbPath, ~longEdge=640) {
           | Ok() => thumbPath
           | Error(_) => photoPath
           }
@@ -139,8 +230,10 @@ let send = async (config: Config.t, store: Store.t, haulId: string): unit =>
       let scenes = Store.scenesOf(store, haulId)
       let finds = Store.findsOf(store, haulId)
       let counts = Store.counts(store, haulId)
-      let input = digestInputOf(config, haul, scenes, finds, counts)
-      let images = inlineImagesFor(config, input.gems, photoPathOf(scenes))
+      let photoPaths = photoPathOf(scenes)
+      let (input, cropImages) = digestInputOf(config, haul, scenes, finds, counts, photoPaths)
+      let photoImages = inlineImagesFor(config, input.gems, photoPaths)
+      let images = Array.concat(photoImages, cropImages)
       let digest = Digest.make(input, ~cidFor)
       let gmailUser = Config.getEnv("GMAIL_USER")
       let msg: Email.message = {

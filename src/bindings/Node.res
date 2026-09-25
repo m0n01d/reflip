@@ -12,6 +12,11 @@ module Buffer = {
   @send external readUInt16BE: (t, int) => int = "readUInt16BE"
 
   @val @scope("Buffer") external fromString: (string, string) => t = "from"
+
+  // For a fetch response body read with `.arrayBuffer()` (Fetch.res) —
+  // opaque on this side, since nothing here inspects it, only converts it.
+  type arrayBufferLike
+  @val @scope("Buffer") external fromArrayBuffer: arrayBufferLike => t = "from"
 }
 
 module Fs = {
@@ -30,6 +35,10 @@ module Fs = {
   @module("node:fs") external mkdirSync: (string, mkdirOptions) => unit = "mkdirSync"
 
   @module("node:fs") external copyFileSync: (string, string) => unit = "copyFileSync"
+  // Removes the intermediate crop file Crop.res writes next to its dest.
+  @module("node:fs") external unlinkSync: string => unit = "unlinkSync"
+  // Used by CropTest.res to prove the intermediate crop file is gone.
+  @module("node:fs") external readdirSync: string => array<string> = "readdirSync"
 }
 
 module Path = {

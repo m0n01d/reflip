@@ -3,6 +3,12 @@
 // DigestTest.res. See docs/spec-haul-mode.md, "Gems" and "The digest and
 // the email".
 
+type gemCrop = {
+  cid: string,
+  width: int,
+  height: int,
+}
+
 type gem = {
   name: string,
   where: option<string>,
@@ -13,9 +19,22 @@ type gem = {
   sceneId: string,
   ebayMedianUsd: option<float>,
   size: string,
+  // This gem's box crop: its mail Content-ID and its real pixel size, e.g.
+  // cid "gem-<sceneId>-<n>@reflip" (HaulEmail.gemCidFor). None when the
+  // find has no box, or when the crop itself failed to build — either
+  // way the card shows "no box" text and adds no image.
+  crop: option<gemCrop>,
 }
 
 type failedPhoto = {sceneId: string, error: string}
+
+// One photo (scene) that has at least one gem: its full-photo image is
+// cidFor(sceneId), and its gems are in sortGems order. A photo with no
+// gems never becomes a section — see `sections` below.
+type section = {
+  sceneId: string,
+  gems: array<gem>,
+}
 
 type input = {
   haulId: string,
@@ -76,6 +95,36 @@ let sortGems = (gems: array<gem>): array<gem> =>
       : Float.compare(b.estimateHighUsd, a.estimateHighUsd)
   )
 
+// -- grouping by photo --------------------------------------------------------------
+
+// Groups sortedGems by sceneId. A section's rank is its first gem's rank in
+// sortedGems (the first sceneId seen becomes the first section), and each
+// section's own gems stay in sortedGems order too — one pass, in order, is
+// enough for both. A photo that owns no gem never appears: there is nothing
+// in `gems` to put it there.
+let sections = (sortedGems: array<gem>): array<section> => {
+  let order: array<string> = []
+  let bySceneId: Dict.t<array<gem>> = Dict.make()
+  Array.forEach(sortedGems, g =>
+    switch Dict.get(bySceneId, g.sceneId) {
+    | Some(existing) => Array.push(existing, g)
+    | None => {
+        Dict.set(bySceneId, g.sceneId, [g])
+        Array.push(order, g.sceneId)
+      }
+    }
+  )
+  Array.map(order, sceneId => {sceneId, gems: Dict.get(bySceneId, sceneId)->Option.getOr([])})
+}
+
+// e.g. "Photo 2 · 3 gems". `n` is the section's 1-based position in the
+// sections array (its display order), not a scene-capture index — Digest
+// never sees the full list of photos, only the ones with a gem.
+let sectionHeading = (n: int, gemCount: int): string => {
+  let word = gemCount == 1 ? "gem" : "gems"
+  "Photo " ++ Int.toString(n) ++ " · " ++ Int.toString(gemCount) ++ " " ++ word
+}
+
 // -- subject --------------------------------------------------------------
 
 let storeSuffix = (name: option<string>): string =>
@@ -106,7 +155,25 @@ let subjectLine = (sortedGems: array<gem>, name: option<string>): string =>
 
 // -- HTML body --------------------------------------------------------------
 
-let gemHtml = (g: gem, cidFor: string => string): string => {
+// One gem's card: its box crop (or "no box" when there is none), then name,
+// range, where, confidence, eBay line and sold link — same text and
+// escaping as before, just without the whole-photo image (the section now
+// carries that once, above every card).
+let gemHtml = (g: gem): string => {
+  let cropHtml = switch g.crop {
+  | Some(crop) =>
+    "<img src=\"cid:" ++
+    crop.cid ++
+    "\" width=\"" ++
+    Int.toString(crop.width) ++
+    "\" height=\"" ++
+    Int.toString(crop.height) ++
+    "\" style=\"display:block;max-width:100%;height:auto;margin:0 0 8px 0\" alt=\"" ++
+    escapeHtml(g.name) ++
+    "\">"
+  | None =>
+    "<div style=\"margin:0 0 8px 0;color:#888888;font-style:italic\">no box</div>"
+  }
   let whereLine = switch g.where {
   | Some(w) if w != "" =>
     "<div style=\"margin:2px 0;color:#555555\">" ++ escapeHtml(w) ++ "</div>"
@@ -118,11 +185,7 @@ let gemHtml = (g: gem, cidFor: string => string): string => {
   }
   let sizeSuffix = g.size == "" ? "" : " (" ++ escapeHtml(g.size) ++ ")"
   "<div style=\"margin:0 0 20px 0;padding-bottom:16px;border-bottom:1px solid #dddddd\">" ++
-  "<img src=\"cid:" ++
-  cidFor(g.sceneId) ++
-  "\" width=\"240\" style=\"display:block;width:240px;max-width:100%;height:auto;margin:0 0 8px 0\" alt=\"" ++
-  escapeHtml(g.name) ++
-  "\">" ++
+  cropHtml ++
   "<div style=\"font-weight:bold;font-size:16px;margin:0 0 4px 0\">" ++
   escapeHtml(g.name) ++
   sizeSuffix ++
@@ -140,6 +203,25 @@ let gemHtml = (g: gem, cidFor: string => string): string => {
   "<div style=\"margin:6px 0 0 0\"><a href=\"" ++
   escapeHtml(g.soldSearchUrl) ++
   "\">Sold listings</a></div>" ++
+  "</div>"
+}
+
+// One photo section: a heading, the full photo once, then one card per
+// gem, in that order.
+let sectionHtml = (n: int, s: section, ~cidFor: string => string): string => {
+  let heading = sectionHeading(n, Array.length(s.gems))
+  let photoHtml =
+    "<img src=\"cid:" ++
+    cidFor(s.sceneId) ++
+    "\" width=\"100%\" style=\"display:block;width:100%;max-width:640px;height:auto;margin:0 0 12px 0\" alt=\"" ++
+    escapeHtml(heading) ++
+    "\">"
+  "<div style=\"margin:0 0 28px 0\">" ++
+  "<h2 style=\"font-size:15px;margin:0 0 8px 0;color:#333333\">" ++
+  escapeHtml(heading) ++
+  "</h2>" ++
+  photoHtml ++
+  concatAll(Array.map(s.gems, gemHtml)) ++
   "</div>"
 }
 
@@ -169,7 +251,7 @@ let htmlBody = (input: input, sortedGems: array<gem>, subject: string, ~cidFor: 
   let gemsSection = if Array.length(sortedGems) == 0 {
     "<p style=\"margin:0 0 16px 0\">No gems this haul.</p>"
   } else {
-    concatAll(Array.map(sortedGems, g => gemHtml(g, cidFor)))
+    concatAll(Array.mapWithIndex(sections(sortedGems), (s, i) => sectionHtml(i + 1, s, ~cidFor)))
   }
   let otherWord = input.otherCount == 1 ? "item" : "items"
   let otherLine =
@@ -225,6 +307,11 @@ let gemText = (g: gem): string => {
   "\n\n"
 }
 
+// One photo section: a heading line, then its gems, no image lines (the
+// text body never had any).
+let sectionText = (n: int, s: section): string =>
+  sectionHeading(n, Array.length(s.gems)) ++ "\n" ++ concatAll(Array.map(s.gems, gemText))
+
 let failedText = (failed: array<failedPhoto>): string =>
   if Array.length(failed) == 0 {
     ""
@@ -243,7 +330,7 @@ let textBody = (input: input, sortedGems: array<gem>, subject: string): string =
   let gemsSection = if Array.length(sortedGems) == 0 {
     "No gems this haul.\n\n"
   } else {
-    concatAll(Array.map(sortedGems, gemText))
+    concatAll(Array.mapWithIndex(sections(sortedGems), (s, i) => sectionText(i + 1, s)))
   }
   let otherWord = input.otherCount == 1 ? "item" : "items"
   subject ++
