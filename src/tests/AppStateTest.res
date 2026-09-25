@@ -1,5 +1,6 @@
 // AppState.update: each msg against the expected model. Both pickers, a
-// reply, an error, and a second photo clearing the previous one.
+// reply, an error, and a second photo clearing the previous one. Then haul
+// mode's own reducer logic (docs/spec-haul-mode.md "Step 5: phone").
 
 let sampleReply: Types.sceneReply = {
   Types.sceneId: "test-scene",
@@ -17,6 +18,164 @@ let sampleReply: Types.sceneReply = {
     webSearches: 0,
   },
   ebayNote: None,
+}
+
+let sampleHaulStatus: Types.haulStatus = {
+  Types.haulId: "haul-1",
+  name: Some("Goodwill"),
+  startedAt: "2026-09-24T00:00:00.000Z",
+  doneAt: None,
+  emailedAt: None,
+  costUsd: 0.3,
+  maxUsd: 10.0,
+  gemMinUsd: 20.0,
+  stopReason: None,
+  emailNote: None,
+  counts: {Types.queued: 1, running: 0, valued: 2, failed: 0},
+  gems: [],
+  otherCount: 5,
+  failed: [],
+}
+
+// A real Blob (Node's own global, not a cast) so queue items can hold one —
+// see WebApi.res's header comment on idbValue for why this file never
+// asserts its way to a blob.
+let testBlob = (): WebApi.blob => WebApi.makeBlobWithType([], {WebApi.type_: "image/jpeg"})
+
+let runHaul = () => {
+  TestKit.section("AppState.update — haul mode")
+
+  let h0 = AppState.initialModel
+  TestKit.check("a fresh model has no haul", h0.haul == AppState.NoHaul)
+  TestKit.check("a fresh model has an empty queue", h0.queue == [])
+
+  // -- starting and restoring a haul --------------------------------------
+  let h1 = AppState.update(h0, AppState.SetStoreName("Goodwill"))
+  TestKit.check("SetStoreName sets the typed name", h1.storeName == "Goodwill")
+
+  let h2 = AppState.update(h1, AppState.StartHaul)
+  TestKit.check("StartHaul moves to Starting", h2.haul == AppState.Starting)
+
+  let h3 = AppState.update(h2, AppState.HaulStarted(sampleHaulStatus))
+  TestKit.check(
+    "HaulStarted moves to Active with the status",
+    h3.haul == AppState.Active(sampleHaulStatus),
+  )
+  TestKit.check(
+    "haulStatusOf reads the status back out of Active",
+    AppState.haulStatusOf(h3.haul) == Some(sampleHaulStatus),
+  )
+
+  let h3b = AppState.update(h2, AppState.HaulStartFailed("could not reach the server"))
+  TestKit.check("a failed start falls back to NoHaul", h3b.haul == AppState.NoHaul)
+  TestKit.check(
+    "a failed start records the error",
+    h3b.haulError == Some("could not reach the server"),
+  )
+
+  // -- the IndexedDB key layout, as pure string logic ---------------------
+  TestKit.check(
+    "queueKey builds q|<haulId>|<clientId>",
+    AppState.queueKey("haul-1", "client-a") == "q|haul-1|client-a",
+  )
+  TestKit.check(
+    "parseQueueKey is queueKey's inverse",
+    AppState.parseQueueKey("q|haul-1|client-a") == Some(("haul-1", "client-a")),
+  )
+  TestKit.check("parseQueueKey rejects a non-queue key", AppState.parseQueueKey("haul") == None)
+
+  // -- queuing a photo, and never queuing the same client id twice -------
+  let blobA = testBlob()
+  let blobB = testBlob()
+  let h4 = AppState.update(h3, AppState.PhotoQueued("client-a", blobA))
+  TestKit.check("a queued photo is added to the queue", Array.length(h4.queue) == 1)
+  TestKit.check(
+    "a queued photo starts as QueuedLocal with no attempts",
+    switch h4.queue {
+    | [item] => item.status == AppState.QueuedLocal && item.attempts == 0
+    | _ => false
+    },
+  )
+  let h4b = AppState.update(h4, AppState.PhotoQueued("client-a", blobB))
+  TestKit.check("a duplicate client id is not queued twice", Array.length(h4b.queue) == 1)
+
+  // -- restoring the queue from IndexedDB on load --------------------------
+  let h5 = AppState.update(h3, AppState.QueueRestored([("client-a", blobA), ("client-b", blobB)]))
+  TestKit.check("QueueRestored adds every restored item", Array.length(h5.queue) == 2)
+
+  // -- uploading: started, ok, failed, retried -----------------------------
+  let h6 = AppState.update(h5, AppState.UploadStarted("client-a"))
+  TestKit.check(
+    "UploadStarted marks that one item SendingNow, and no other",
+    switch Array.find(h6.queue, i => i.clientId == "client-a") {
+    | Some(item) => item.status == AppState.SendingNow
+    | None => false
+    } &&
+      switch Array.find(h6.queue, i => i.clientId == "client-b") {
+      | Some(item) => item.status == AppState.QueuedLocal
+      | None => false
+      },
+  )
+
+  let h7 = AppState.update(h6, AppState.HaulUploadOk("client-a", "scene-1"))
+  TestKit.check("a successful upload removes the item", Array.length(h7.queue) == 1)
+  TestKit.check("a successful upload counts as uploaded", h7.uploadedCount == 1)
+
+  let h8 = AppState.update(h6, AppState.HaulUploadFailed("client-a", "could not reach the server"))
+  TestKit.check(
+    "a failed upload keeps the item, waiting to retry",
+    switch Array.find(h8.queue, i => i.clientId == "client-a") {
+    | Some(item) => item.status == AppState.WaitingRetry && item.attempts == 1
+    | None => false
+    },
+  )
+  TestKit.check(
+    "a failed upload records the error",
+    h8.haulError == Some("could not reach the server"),
+  )
+
+  let h9 = AppState.update(h8, AppState.RetryDue("client-a"))
+  TestKit.check(
+    "the retry timer puts the item back in the queue, attempts kept",
+    switch Array.find(h9.queue, i => i.clientId == "client-a") {
+    | Some(item) => item.status == AppState.QueuedLocal && item.attempts == 1
+    | None => false
+    },
+  )
+
+  TestKit.check(
+    "the backoff is 5s, then 15s, then 60s forever",
+    AppState.retryDelayMs(1) == 5000 &&
+      AppState.retryDelayMs(2) == 15000 &&
+      AppState.retryDelayMs(3) == 60000 &&
+      AppState.retryDelayMs(9) == 60000,
+  )
+
+  // -- status polling and done ---------------------------------------------
+  let h10 = AppState.update(h3, AppState.PollTick)
+  TestKit.check("PollTick counts polls", h10.pollCount == 1)
+
+  let updatedStatus = {...sampleHaulStatus, costUsd: 1.2}
+  let h11 = AppState.update(h3, AppState.StatusLoaded(updatedStatus))
+  TestKit.check(
+    "StatusLoaded refreshes the status while Active",
+    h11.haul == AppState.Active(updatedStatus),
+  )
+
+  let h12 = AppState.update(h3, AppState.DoneTapped)
+  TestKit.check(
+    "DoneTapped moves Active to Finishing",
+    h12.haul == AppState.Finishing(sampleHaulStatus),
+  )
+
+  let doneStatus = {...sampleHaulStatus, doneAt: Some("2026-09-24T01:00:00.000Z")}
+  let h13 = AppState.update(h12, AppState.DoneSent(doneStatus))
+  TestKit.check("DoneSent moves Finishing to Finished", h13.haul == AppState.Finished(doneStatus))
+
+  let h14 = AppState.update(h13, AppState.NewHaul)
+  TestKit.check("NewHaul resets back to NoHaul", h14.haul == AppState.NoHaul)
+  TestKit.check("NewHaul clears the queue", h14.queue == [])
+  TestKit.check("NewHaul clears the store name", h14.storeName == "")
 }
 
 let run = () => {
@@ -63,4 +222,6 @@ let run = () => {
     "a second photo keeps the chosen model",
     m5.selectedModel == withReply.selectedModel,
   )
+
+  runHaul()
 }

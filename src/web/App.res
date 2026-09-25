@@ -1,7 +1,9 @@
-// The phone page. Top to bottom: model picker, long-edge picker, take-photo
-// button, status line, item list, footer. TEA via useReducer — this file
-// holds the view and the effect orchestrator; AppState.res holds the pure
-// model/msg/update.
+// The phone page. Two flows share one page: the original M0 single-photo
+// flow (model picker, long-edge picker, take-photo button, status line,
+// item list, footer) and haul mode (docs/spec-haul-mode.md "Step 5:
+// phone"), which replaces that view once a haul is started. TEA via
+// useReducer — this file holds the view and the effect orchestrator;
+// AppState.res holds the pure model/msg/update.
 
 @send external toFixed: (float, int) => string = "toFixed"
 
@@ -141,9 +143,287 @@ module Footer = {
     </footer>
 }
 
+// -- Haul mode (docs/spec-haul-mode.md "Step 5: phone") ---------------------
+// Every function below is a side-effect edge, same shape as runPhotoFlow
+// above: it dispatches a msg at each step and never returns state directly.
+
+// No long-edge picker in haul mode (the plan keeps that view plain) — this
+// matches M0's own default.
+let haulLongEdge = 1568
+
+let queuePhoto = async (dispatch: AppState.msg => unit, haulId: string, file: WebApi.blob) =>
+  switch await Resize.resizeToJpeg(file, haulLongEdge) {
+  | Error(msg) => dispatch(AppState.PhotoQueueErr(msg))
+  | Ok((blob, _resizeMs)) =>
+    let clientId = WebApi.randomUUID()
+    await WebApi.idbSetBlob(AppState.queueKey(haulId, clientId), blob)
+    dispatch(AppState.PhotoQueued(clientId, blob))
+  }
+
+let queuePhotos = async (
+  dispatch: AppState.msg => unit,
+  haulId: string,
+  files: array<WebApi.blob>,
+) => {
+  dispatch(AppState.PhotosPicked(Array.length(files)))
+  let _ = await Promise.all(Array.map(files, file => queuePhoto(dispatch, haulId, file)))
+}
+
+let startHaul = async (dispatch: AppState.msg => unit, storeName: string) => {
+  dispatch(AppState.StartHaul)
+  switch await Api.postHaul(storeName) {
+  | Ok(status) =>
+    await WebApi.idbSetString(AppState.currentHaulKey, status.haulId)
+    dispatch(AppState.HaulStarted(status))
+  | Error(msg) => dispatch(AppState.HaulStartFailed(msg))
+  }
+}
+
+// Re-reads every queued-but-unsent photo for one haul back out of
+// IndexedDB. Called once, right after a haul is restored on load.
+let restoreQueueFor = async (dispatch: AppState.msg => unit, haulId: string) => {
+  let keys = await WebApi.idbKeysUnknown()
+  let keyTexts = await Promise.all(Array.map(keys, WebApi.unknownToText))
+  let matches =
+    keyTexts
+    ->Array.filterMap(AppState.parseQueueKey)
+    ->Array.filter(((kHaulId, _clientId)) => kHaulId == haulId)
+  let items = await Promise.all(
+    Array.map(matches, async ((kHaulId, clientId)) =>
+      switch (await WebApi.idbGetUnknown(AppState.queueKey(kHaulId, clientId)))->Nullable.toOption {
+      | Some(v) =>
+        let blob = await WebApi.unknownToBlob(v)
+        Some((clientId, blob))
+      | None => None
+      }
+    ),
+  )
+  dispatch(AppState.QueueRestored(items->Array.filterMap(x => x)))
+}
+
+// On load: is there a haul in progress? IndexedDB survives a reload, so a
+// haul the page never got to close keeps its queue.
+let restoreHaul = async (dispatch: AppState.msg => unit) =>
+  switch (await WebApi.idbGetUnknown(AppState.currentHaulKey))->Nullable.toOption {
+  | None => ()
+  | Some(v) =>
+    let haulId = await WebApi.unknownToText(v)
+    switch await Api.getHaulStatus(haulId) {
+    | Ok(status) =>
+      dispatch(AppState.HaulStarted(status))
+      await restoreQueueFor(dispatch, haulId)
+    | Error(msg) =>
+      await WebApi.idbDel(AppState.currentHaulKey)
+      dispatch(AppState.HaulStartFailed(msg))
+    }
+  }
+
+// One upload at a time, per the plan. On success the IndexedDB entry is
+// deleted; on failure the photo stays queued and a backoff timer retries
+// it — it is never dropped.
+let uploadOne = async (dispatch: AppState.msg => unit, haulId: string, item: AppState.queueItem) => {
+  dispatch(AppState.UploadStarted(item.clientId))
+  switch await Api.postHaulScene(haulId, item.clientId, item.blob) {
+  | Ok((sceneId, _duplicate)) =>
+    await WebApi.idbDel(AppState.queueKey(haulId, item.clientId))
+    dispatch(AppState.HaulUploadOk(item.clientId, sceneId))
+  | Error(errMsg) =>
+    let delay = AppState.retryDelayMs(item.attempts + 1)
+    dispatch(AppState.HaulUploadFailed(item.clientId, errMsg))
+    WebApi.setTimeout(() => dispatch(AppState.RetryDue(item.clientId)), delay)->ignore
+  }
+}
+
+let pollHaul = async (dispatch: AppState.msg => unit, haulId: string) => {
+  dispatch(AppState.PollTick)
+  switch await Api.getHaulStatus(haulId) {
+  | Ok(status) => dispatch(AppState.StatusLoaded(status))
+  | Error(msg) => dispatch(AppState.StatusLoadFailed(msg))
+  }
+}
+
+let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
+  switch await Api.postHaulDone(haulId) {
+  | Ok(status) => dispatch(AppState.DoneSent(status))
+  | Error(msg) => dispatch(AppState.DoneFailed(msg))
+  }
+
+module GemCard = {
+  @react.component
+  let make = (~gem: Types.haulGem) =>
+    <li className="item">
+      <div className="item-name"> {React.string(gem.name)} </div>
+      <div className="item-range">
+        {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
+      </div>
+      {switch gem.where {
+      | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+      | None => React.null
+      }}
+      <div className="item-confidence">
+        {React.string("confidence " ++ fmtPct(gem.confidence))}
+      </div>
+      <EbayBlock ebay={gem.ebay} />
+      <a className="sold-link" href={gem.soldSearchUrl} target="_blank" rel="noreferrer">
+        {React.string("Sold listings")}
+      </a>
+    </li>
+}
+
+module HaulView = {
+  @react.component
+  let make = (
+    ~model: AppState.model,
+    ~phase: AppState.haulPhase,
+    ~status: Types.haulStatus,
+    ~onTakePhoto: ReactEvent.Form.t => unit,
+    ~onAddPhotos: ReactEvent.Form.t => unit,
+    ~onDone: ReactEvent.Mouse.t => unit,
+    ~onNewHaul: ReactEvent.Mouse.t => unit,
+  ) => {
+    let onPhone = Array.length(model.queue)
+    <div className="haul-view">
+      <h2> {React.string(status.name->Option.getOr("Haul"))} </h2>
+      <div className="counts">
+        <div className="count">
+          {React.string("on phone " ++ Int.toString(onPhone))}
+        </div>
+        <div className="count">
+          {React.string("uploaded " ++ Int.toString(model.uploadedCount))}
+        </div>
+        <div className="count">
+          {React.string("valued " ++ Int.toString(status.counts.valued))}
+        </div>
+        <div className="count">
+          {React.string("failed " ++ Int.toString(status.counts.failed))}
+        </div>
+      </div>
+      <div className="cost-line">
+        {React.string(fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd) ++ " budget")}
+      </div>
+      {switch status.stopReason {
+      | Some(reason) => <div className="stop-reason"> {React.string(reason)} </div>
+      | None => React.null
+      }}
+      {switch model.haulError {
+      | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
+      | None => React.null
+      }}
+      {switch phase {
+      | Finished(_) =>
+        <>
+          <div className="status">
+            {React.string(status.emailNote->Option.getOr("done — waiting for the digest"))}
+          </div>
+          {status.emailedAt->Option.isSome
+            ? <button className="take-photo" onClick={onNewHaul}>
+                {React.string("Start a new haul")}
+              </button>
+            : React.null}
+        </>
+      | Finishing(_) =>
+        <div className="status"> {React.string("finishing — uploading what's left")} </div>
+      | _ =>
+        <div className="haul-buttons">
+          <label className="take-photo">
+            <input
+              className="visually-hidden"
+              type_="file"
+              accept="image/*"
+              capture=#environment
+              onChange={onTakePhoto}
+            />
+            {React.string("Take photo")}
+          </label>
+          <label className="take-photo">
+            <input
+              className="visually-hidden"
+              type_="file"
+              accept="image/*"
+              multiple=true
+              onChange={onAddPhotos}
+            />
+            {React.string("Add photos")}
+          </label>
+          <button className="take-photo" onClick={onDone}>
+            {React.string("Done")}
+          </button>
+        </div>
+      }}
+      {Array.length(status.gems) > 0
+        ? <ul className="items">
+            {status.gems->Array.map(gem => <GemCard key={gem.findId} gem />)->React.array}
+          </ul>
+        : React.null}
+      {status.otherCount > 0
+        ? <div className="status">
+            {React.string(Int.toString(status.otherCount) ++ " other items seen, not gems")}
+          </div>
+        : React.null}
+      {Array.length(status.failed) > 0
+        ? <ul className="items">
+            {status.failed
+            ->Array.map(f =>
+              <li className="item" key={f.sceneId}> {React.string(f.error)} </li>
+            )
+            ->React.array}
+          </ul>
+        : React.null}
+    </div>
+  }
+}
+
 @react.component
 let make = () => {
   let (model, dispatch) = React.useReducer(AppState.update, AppState.initialModel)
+
+  // -- mount: restore a haul in progress from IndexedDB ---------------------
+  React.useEffect0(() => {
+    restoreHaul(dispatch)->Promise.ignore
+    None
+  })
+
+  // -- background queue pump: one upload in flight at a time ----------------
+  React.useEffect2(() => {
+    switch model.haul {
+    | Active(status) | Finishing(status) =>
+      let sending =
+        Array.find(model.queue, item => item.status == AppState.SendingNow)->Option.isSome
+      if !sending {
+        switch Array.find(model.queue, item => item.status == AppState.QueuedLocal) {
+        | Some(item) => uploadOne(dispatch, status.haulId, item)->Promise.ignore
+        | None => ()
+        }
+      }
+    | _ => ()
+    }
+    None
+  }, (model.queue, model.haul))
+
+  // -- Done: once the local queue is drained, tell the brain ----------------
+  React.useEffect2(() => {
+    switch model.haul {
+    | Finishing(status) if Array.length(model.queue) == 0 =>
+      finishHaul(dispatch, status.haulId)->Promise.ignore
+    | _ => ()
+    }
+    None
+  }, (model.queue, model.haul))
+
+  // -- poll the brain while the haul is open or not yet emailed -------------
+  let pollHaulId = AppState.haulStatusOf(model.haul)->Option.map(s => s.haulId)->Option.getOr("")
+  let pollActive = switch AppState.haulStatusOf(model.haul) {
+  | Some(status) => status.doneAt == None || status.emailedAt == None
+  | None => false
+  }
+  React.useEffect2(() => {
+    if pollActive && pollHaulId != "" {
+      let id = WebApi.setInterval(() => pollHaul(dispatch, pollHaulId)->Promise.ignore, 5000)
+      Some(() => WebApi.clearInterval(id))
+    } else {
+      None
+    }
+  }, (pollHaulId, pollActive))
 
   let onFileChange = (event: ReactEvent.Form.t) => {
     let target = WebApi.eventTarget(event)
@@ -181,52 +461,120 @@ let make = () => {
     }
   }
 
+  let onStoreNameChange = (event: ReactEvent.Form.t) =>
+    dispatch(AppState.SetStoreName(WebApi.targetValue(WebApi.eventTarget(event))))
+
+  let onStartHaul = (_event: ReactEvent.Mouse.t) =>
+    startHaul(dispatch, String.trim(model.storeName))->Promise.ignore
+
+  let onDone = (_event: ReactEvent.Mouse.t) => dispatch(AppState.DoneTapped)
+  let onNewHaul = (_event: ReactEvent.Mouse.t) => dispatch(AppState.NewHaul)
+
+  let onTakeHaulPhoto = (event: ReactEvent.Form.t) =>
+    switch AppState.haulStatusOf(model.haul) {
+    | None => ()
+    | Some(status) =>
+      switch WebApi.targetFiles(WebApi.eventTarget(event))->Nullable.toOption {
+      | None => ()
+      | Some(files) =>
+        switch WebApi.fileListItem(files, 0)->Nullable.toOption {
+        | None => ()
+        | Some(file) => queuePhoto(dispatch, status.haulId, file)->Promise.ignore
+        }
+      }
+    }
+
+  let onAddHaulPhotos = (event: ReactEvent.Form.t) =>
+    switch AppState.haulStatusOf(model.haul) {
+    | None => ()
+    | Some(status) =>
+      switch WebApi.targetFiles(WebApi.eventTarget(event))->Nullable.toOption {
+      | None => ()
+      | Some(files) =>
+        queuePhotos(dispatch, status.haulId, WebApi.fileListToArray(files))->Promise.ignore
+      }
+    }
+
   <div className="page">
     <h1> {React.string("reflip")} </h1>
-    <div className="pickers">
-      <label className="picker">
-        {React.string("Model")}
-        <select value={Shared.modelId(model.selectedModel)} onChange={onModelChange}>
-          {Shared.allModels
-          ->Array.map(m =>
-            <option key={Shared.modelId(m)} value={Shared.modelId(m)}>
-              {React.string(Shared.modelLabel(m))}
-            </option>
-          )
-          ->React.array}
-        </select>
-      </label>
-      <label className="picker">
-        {React.string("Long edge")}
-        <select value={Int.toString(model.longEdge)} onChange={onLongEdgeChange}>
-          <option value="1568"> {React.string("1568 px (default)")} </option>
-          <option value="2576"> {React.string("2576 px")} </option>
-        </select>
-      </label>
-    </div>
-    <label className="take-photo">
-      <input
-        className="visually-hidden"
-        type_="file"
-        accept="image/*"
-        capture=#environment
-        onChange={onFileChange}
+    {switch model.haul {
+    | NoHaul =>
+      <>
+        <section className="haul-start">
+          <h2> {React.string("Haul mode")} </h2>
+          <input
+            className="store-name"
+            type_="text"
+            placeholder="Store name (optional)"
+            value={model.storeName}
+            onChange={onStoreNameChange}
+          />
+          <button className="take-photo" onClick={onStartHaul}>
+            {React.string("Start haul")}
+          </button>
+          {switch model.haulError {
+          | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
+          | None => React.null
+          }}
+        </section>
+        <hr />
+        <div className="pickers">
+          <label className="picker">
+            {React.string("Model")}
+            <select value={Shared.modelId(model.selectedModel)} onChange={onModelChange}>
+              {Shared.allModels
+              ->Array.map(m =>
+                <option key={Shared.modelId(m)} value={Shared.modelId(m)}>
+                  {React.string(Shared.modelLabel(m))}
+                </option>
+              )
+              ->React.array}
+            </select>
+          </label>
+          <label className="picker">
+            {React.string("Long edge")}
+            <select value={Int.toString(model.longEdge)} onChange={onLongEdgeChange}>
+              <option value="1568"> {React.string("1568 px (default)")} </option>
+              <option value="2576"> {React.string("2576 px")} </option>
+            </select>
+          </label>
+        </div>
+        <label className="take-photo">
+          <input
+            className="visually-hidden"
+            type_="file"
+            accept="image/*"
+            capture=#environment
+            onChange={onFileChange}
+          />
+          {React.string("Take photo")}
+        </label>
+        <div className="status"> {React.string(statusText(model.status))} </div>
+        {switch model.reply {
+        | None => React.null
+        | Some(reply) =>
+          <ul className="items">
+            {reply.items
+            ->Array.mapWithIndex((item, i) => <ItemCard key={Int.toString(i)} item />)
+            ->React.array}
+          </ul>
+        }}
+        {switch model.reply {
+        | None => React.null
+        | Some(reply) => <Footer model reply />
+        }}
+      </>
+    | Starting => <div className="status"> {React.string("starting haul…")} </div>
+    | Active(status) | Finishing(status) | Finished(status) =>
+      <HaulView
+        model
+        phase={model.haul}
+        status
+        onTakePhoto={onTakeHaulPhoto}
+        onAddPhotos={onAddHaulPhotos}
+        onDone
+        onNewHaul
       />
-      {React.string("Take photo")}
-    </label>
-    <div className="status"> {React.string(statusText(model.status))} </div>
-    {switch model.reply {
-    | None => React.null
-    | Some(reply) =>
-      <ul className="items">
-        {reply.items
-        ->Array.mapWithIndex((item, i) => <ItemCard key={Int.toString(i)} item />)
-        ->React.array}
-      </ul>
-    }}
-    {switch model.reply {
-    | None => React.null
-    | Some(reply) => <Footer model reply />
     }}
   </div>
 }
