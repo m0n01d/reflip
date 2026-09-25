@@ -4,6 +4,6 @@
   "package-specs": [{ "module": "esmodule", "in-source": true }],
   "suffix": ".res.mjs",
   "jsx": { "version": 4, "mode": "automatic" },
-  "dependencies": ["@rescript/react", "@glennsl/rescript-json-combinators"],
+  "dependencies": ["@rescript/react", "rescript-rewind", "@glennsl/rescript-json-combinators"],
   "warnings": { "error": "+101" }
 }
