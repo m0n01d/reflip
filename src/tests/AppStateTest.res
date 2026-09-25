@@ -220,14 +220,35 @@ let run = () => {
     m4b.status == AppState.ErrorStatus("could not read that photo"),
   )
 
-  // -- a second photo clears the previous reply and timings ---------------
-  let withReply = {...m3, uploadBytes: Some(12345), resizeMs: Some(78.0)}
+  // -- SelectItem ----------------------------------------------------------
+  let m6 = AppState.update(m3, AppState.SelectItem(2))
+  TestKit.check("SelectItem stores the tapped index", m6.selected == Some(2))
+  let m6b = AppState.update(m6, AppState.SelectItem(0))
+  TestKit.check("a second SelectItem replaces the first", m6b.selected == Some(0))
+
+  // -- PhotoUrlReady ---------------------------------------------------------
+  let m7 = AppState.update(m0, AppState.PhotoUrlReady("blob:http://x/1"))
+  TestKit.check(
+    "PhotoUrlReady stores the object URL",
+    m7.photoUrl == Some("blob:http://x/1"),
+  )
+
+  // -- a second photo clears the previous reply, timings, selection and URL -
+  let withReply = {
+    ...m3,
+    uploadBytes: Some(12345),
+    resizeMs: Some(78.0),
+    photoUrl: Some("blob:http://x/1"),
+    selected: Some(1),
+  }
   let m5 = AppState.update(withReply, AppState.StartPhoto)
   TestKit.check("a second photo resets status to Resizing", m5.status == AppState.Resizing)
   TestKit.check("a second photo clears the old reply", m5.reply == None)
   TestKit.check("a second photo clears the old upload size", m5.uploadBytes == None)
   TestKit.check("a second photo clears the old resize time", m5.resizeMs == None)
   TestKit.check("a second photo clears the old round trip", m5.rttMs == None)
+  TestKit.check("a second photo clears the old photo url", m5.photoUrl == None)
+  TestKit.check("a second photo clears the selected item", m5.selected == None)
   TestKit.check(
     "a second photo keeps the chosen model",
     m5.selectedModel == withReply.selectedModel,
