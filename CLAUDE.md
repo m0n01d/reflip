@@ -45,7 +45,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 
 1. eBay numbers never reach the model. The order is: call Claude first, then query eBay for each item, then merge the two in code. `GuardTest.res` checks this by building a real Claude request and searching its JSON for eBay fixture titles and prices.
 2. The web search tool blocks ebay.com, with `blocked_domains: ["ebay.com"]`.
-3. Secrets come from the environment only: `ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`. `npm start` loads `~/.config/reflip/env` with Node's `--env-file-if-exists` flag. Never write a secret to the repo or to a log.
+3. Secrets come from the environment only: `ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. `npm start` loads `~/.config/reflip/env` with Node's `--env-file-if-exists` flag. Never write a secret to the repo or to a log.
 4. The server binds to `127.0.0.1` only. Later, `tailscale serve` proxies HTTPS to it from outside. Never Funnel.
 5. `FIXTURES=1` forces fixture mode: both the Claude call and the eBay calls read from `tests/fixtures/` instead of the network. Outside fixture mode, a missing eBay key sets each item's `ebay` field to null and fills the reply's `ebayNote` field with why. A missing Anthropic key, without `FIXTURES=1`, returns a 503.
 

@@ -67,8 +67,11 @@ The haul prompt:
 The digest and the email:
 
 - `Digest.res` is a pure function from the rows of one haul to a subject, an HTML body and a text body. It has a hand-computed test.
-- `Email.res` is a copy of dippa's `src/worker/Email.res`, with the two fixes that `flip-scout.md` in app-ideas names. It encodes UTF-8 correctly, and it decodes the token response with no `%identity` cast.
-- The email goes through the Gmail API with an OAuth refresh token. The secrets are `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN` and `EMAIL_TO`, in `~/.config/reflip/env`. Dwight writes them himself.
+- `Email.res` builds the MIME message. Its MIME code started as a copy of dippa's `src/worker/Email.res`, with the UTF-8 fix that `flip-scout.md` in app-ideas names.
+- The email goes through Gmail SMTP (`smtp.gmail.com`, port 465) with an app password, through `nodemailer`. The secrets are `GMAIL_USER` and `GMAIL_APP_PASSWORD`, in `~/.config/reflip/env`. Dwight writes them himself.
+- `EMAIL_TO` is optional. If it is not set, the email goes to `GMAIL_USER`.
+- The first build used the Gmail API with an OAuth refresh token. Dwight chose SMTP on 2026-09-25. He had an app password and no OAuth keys. Also, while a Google app is in Testing, its refresh token expires after 7 days.
+- `npm run email:check` logs in to Gmail SMTP with the secrets and sends nothing. It shows if the app password works.
 - Each gem thumbnail is an inline attachment (`cid:`), 480px on the long edge. Gmail cannot load images from the tailnet.
 - The brain makes each thumbnail with `/usr/bin/sips` on macOS, in `Thumb.res`. It never makes a photo larger. If the photo is 480px or smaller on the long edge, `Thumb.res` copies it unchanged. If `sips` fails, the email uses the original photo.
 - With `FIXTURES=1`, the brain writes the email to `data/outbox/<haulId>.eml` and sends nothing. A missing Gmail secret outside fixture mode does the same, and the page tells why.
