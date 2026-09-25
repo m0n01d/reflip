@@ -129,7 +129,7 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
 type outcome =
   | Success(float, float) // costUsd, claudeMs
   | RetryLater(string) // 429/529 — scene stays queued
-  | Failed(string) // everything else, including a missing photo
+  | Failed(string, option<float>, option<float>) // error, costUsd, claudeMs — everything else, including a missing photo; a cut-off reply is billed, so it carries its cost
 
 let claudeErrorText = (err: ClaudeClient.callError): string =>
   switch err {
@@ -144,7 +144,7 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
 
 let runScene = async (t: t, scene: Store.scene): outcome =>
   switch readPhotoBase64(scene.photoPath) {
-  | None => Failed("could not read photo: " ++ scene.photoPath)
+  | None => Failed("could not read photo: " ++ scene.photoPath, None, None)
   | Some(imageBase64) => {
       let model = Shared.modelId(Shared.defaultModel)
       let claudeStart = Date.now()
@@ -169,7 +169,12 @@ let runScene = async (t: t, scene: Store.scene): outcome =>
         }
       | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
         RetryLater(claudeErrorText(err))
-      | Error(err) => Failed(claudeErrorText(err))
+      | Error(ClaudeClient.CutOff(raw) as err) => {
+          let claudeMs = Date.now() -. claudeStart
+          let costUsd = Pricing.usdCost(~model, ~usage=ClaudeClient.usageOfResponse(raw))
+          Failed(claudeErrorText(err), Some(costUsd), Some(claudeMs))
+        }
+      | Error(err) => Failed(claudeErrorText(err), None, None)
       }
     }
   }
@@ -191,7 +196,7 @@ and process = async (t: t, scene: Store.scene): unit => {
   let outcome = try {
     await runScene(t, scene)
   } catch {
-  | JsExn(e) => Failed(JsExn.message(e)->Option.getOr("unknown error"))
+  | JsExn(e) => Failed(JsExn.message(e)->Option.getOr("unknown error"), None, None)
   }
   switch outcome {
   | Success(costUsd, _claudeMs) => {
@@ -222,8 +227,8 @@ and process = async (t: t, scene: Store.scene): unit => {
         Node.Timer.setTimeout(() => kick(t), retryMsFor(t.config))
       }
     }
-  | Failed(msg) => {
-      Store.failScene(t.store, ~sceneId=scene.sceneId, ~error=msg, ~costUsd=None, ~claudeMs=None)
+  | Failed(msg, costUsd, claudeMs) => {
+      Store.failScene(t.store, ~sceneId=scene.sceneId, ~error=msg, ~costUsd, ~claudeMs)
       let streak = bumpStreak(t, scene.haulId)
       if streak >= failStreakLimit {
         Store.stopHaul(
