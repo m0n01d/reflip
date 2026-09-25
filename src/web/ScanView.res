@@ -142,48 +142,65 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
         | Some(url) =>
           <div className="scan-photo-frame">
             <img className="scan-photo-img" src={url} />
-            {visible
-            ->Array.filterMap(s =>
-              switch s.box {
-              | None => None
-              | Some(box) =>
+            {
+              let pinned =
+                visible->Array.filterMap(s =>
+                  switch s.box {
+                  | None => None
+                  | Some(box) => Some((s, box))
+                  }
+                )
+              let centerPx = (box: Types.box): (float, float) => (
+                Int.toFloat(box.x1 + box.x2) /. 2.0,
+                Int.toFloat(box.y1 + box.y2) /. 2.0,
+              )
+              let halfSizes = BoxLayout.pinHalfSizes(
+                pinned->Array.map(pair => {
+                  let (_, box) = pair
+                  centerPx(box)
+                }),
+              )
+              pinned
+              ->Array.mapWithIndex((pair, i) => {
+                let (s, box) = pair
                 let (left, top) = boxCenterPct(box, model.sentWidth, model.sentHeight)
+                let half = Option.getOr(Array.get(halfSizes, i), 22.0)
+                let hw = pctOf(half *. 2.0, Int.toFloat(model.sentWidth))
+                let hh = pctOf(half *. 2.0, Int.toFloat(model.sentHeight))
                 let latest = isLatest(s.number)
                 let gem = s.item->Option.mapOr(false, isGem)
-                Some(
-                  <button
-                    type_="button"
-                    key={Int.toString(s.number)}
-                    ariaLabel={"Item " ++ Int.toString(s.number)}
-                    onClick={_ => dispatch(ScanState.SheetOpened(s.number))}
-                    className={"scan-pin" ++ (latest ? " scan-pin-latest" : "")}
-                    style={{JsxDOMStyle.left: left, top}}>
-                    {gem
-                      ? <span
-                          className={"scan-pin-badge-gem" ++
-                          (latest ? " scan-pin-badge-gem-top scan-pin-badge-latest" : "")}>
-                          {React.string(Int.toString(s.number))}
+                <button
+                  type_="button"
+                  key={Int.toString(s.number)}
+                  ariaLabel={"Item " ++ Int.toString(s.number)}
+                  onClick={_ => dispatch(ScanState.SheetOpened(s.number))}
+                  className={"scan-pin" ++ (latest ? " scan-pin-latest" : "")}
+                  style={{JsxDOMStyle.left: left, top, width: hw, height: hh}}>
+                  {gem
+                    ? <span
+                        className={"scan-pin-badge-gem" ++
+                        (latest ? " scan-pin-badge-gem-top scan-pin-badge-latest" : "")}>
+                        {React.string(Int.toString(s.number))}
+                      </span>
+                    : <span
+                        className={"scan-pin-badge-plain" ++
+                        (latest ? " scan-pin-badge-latest" : "")}
+                      />}
+                  {latest
+                    ? switch s.item {
+                      | Some(item) =>
+                        <span className="scan-pin-callout">
+                          {React.string(
+                            ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd),
+                          )}
                         </span>
-                      : <span
-                          className={"scan-pin-badge-plain" ++
-                          (latest ? " scan-pin-badge-latest" : "")}
-                        />}
-                    {latest
-                      ? switch s.item {
-                        | Some(item) =>
-                          <span className="scan-pin-callout">
-                            {React.string(
-                              ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd),
-                            )}
-                          </span>
-                        | None => React.null
-                        }
-                      : React.null}
-                  </button>,
-                )
-              }
-            )
-            ->React.array}
+                      | None => React.null
+                      }
+                    : React.null}
+                </button>
+              })
+              ->React.array
+            }
           </div>
         }}
         <div className="scan-card-shadow">
