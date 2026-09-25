@@ -159,3 +159,116 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
     }
   | _ => Error("reply missing a required field")
   }
+
+// -- haulStatus decode, field-for-field against Types.encodeHaulStatus -----
+// (docs/spec-haul-mode.md "Step 3: brain queue" — the phone page decodes
+// this same shape in step 5, so it lives here, not in a Node-only module.)
+
+let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
+  switch (
+    Json.stringField(json, "findId"),
+    Json.stringField(json, "sceneId"),
+    Json.stringField(json, "name"),
+    Json.floatField(json, "estimateLowUsd"),
+    Json.floatField(json, "estimateHighUsd"),
+    Json.floatField(json, "confidence"),
+    Json.stringField(json, "soldSearchUrl"),
+  ) {
+  | (
+      Some(findId),
+      Some(sceneId),
+      Some(name),
+      Some(estimateLowUsd),
+      Some(estimateHighUsd),
+      Some(confidence),
+      Some(soldSearchUrl),
+    ) =>
+    let ebay = switch Json.field(json, "ebay") {
+    | None => None
+    | Some(v) =>
+      switch decodeEbayStats(v) {
+      | Ok(stats) => Some(stats)
+      | Error(_) => None
+      }
+    }
+    Ok({
+      Types.findId,
+      sceneId,
+      name,
+      where: Json.stringField(json, "where"),
+      estimateLowUsd,
+      estimateHighUsd,
+      confidence,
+      soldSearchUrl,
+      ebay,
+    })
+  | _ => Error("gem missing a required field")
+  }
+
+let decodeFailedPhoto = (json: JSON.t): result<Types.failedPhoto, string> =>
+  switch (Json.stringField(json, "sceneId"), Json.stringField(json, "error")) {
+  | (Some(sceneId), Some(error)) => Ok({Types.sceneId, error})
+  | _ => Error("failed photo missing a required field")
+  }
+
+let decodeHaulCounts = (json: JSON.t): result<Types.haulCounts, string> =>
+  switch (
+    Json.intField(json, "queued"),
+    Json.intField(json, "running"),
+    Json.intField(json, "valued"),
+    Json.intField(json, "failed"),
+  ) {
+  | (Some(queued), Some(running), Some(valued), Some(failed)) =>
+    Ok({Types.queued, running, valued, failed})
+  | _ => Error("counts missing a required field")
+  }
+
+let decodeHaulStatus = (json: JSON.t): result<Types.haulStatus, string> =>
+  switch (
+    Json.stringField(json, "haulId"),
+    Json.stringField(json, "startedAt"),
+    Json.floatField(json, "costUsd"),
+    Json.floatField(json, "maxUsd"),
+    Json.floatField(json, "gemMinUsd"),
+    Json.field(json, "counts"),
+    Json.arrayField(json, "gems"),
+    Json.intField(json, "otherCount"),
+    Json.arrayField(json, "failed"),
+  ) {
+  | (
+      Some(haulId),
+      Some(startedAt),
+      Some(costUsd),
+      Some(maxUsd),
+      Some(gemMinUsd),
+      Some(countsJson),
+      Some(gemsJson),
+      Some(otherCount),
+      Some(failedJson),
+    ) =>
+    switch (
+      decodeHaulCounts(countsJson),
+      Array.map(gemsJson, decodeHaulGem)->Result.all,
+      Array.map(failedJson, decodeFailedPhoto)->Result.all,
+    ) {
+    | (Ok(counts), Ok(gems), Ok(failed)) =>
+      Ok({
+        Types.haulId,
+        name: Json.stringField(json, "name"),
+        startedAt,
+        doneAt: Json.stringField(json, "doneAt"),
+        emailedAt: Json.stringField(json, "emailedAt"),
+        costUsd,
+        maxUsd,
+        gemMinUsd,
+        stopReason: Json.stringField(json, "stopReason"),
+        emailNote: Json.stringField(json, "emailNote"),
+        counts,
+        gems,
+        otherCount,
+        failed,
+      })
+    | (Error(e), _, _) | (_, Error(e), _) | (_, _, Error(e)) => Error(e)
+    }
+  | _ => Error("haul status missing a required field")
+  }

@@ -15,6 +15,11 @@ module Fs = {
   @module("node:fs") external readFileBuffer: string => Buffer.t = "readFileSync"
   @module("node:fs") external readFileUtf8: (string, string) => string = "readFileSync"
   @module("node:fs") external writeFileSync: (string, string) => unit = "writeFileSync"
+  // Same underlying "writeFileSync", a second typed binding for the Buffer
+  // overload — needed to save an uploaded photo's raw JPEG bytes without
+  // corrupting them through a string round-trip (mirrors Server.res's
+  // endWithBuffer, the equivalent split for "end").
+  @module("node:fs") external writeFileBuffer: (string, Buffer.t) => unit = "writeFileSync"
   @module("node:fs") external appendFileSync: (string, string) => unit = "appendFileSync"
 
   type mkdirOptions = {recursive: bool}
@@ -36,6 +41,16 @@ module Crypto = {
 
 module Os = {
   @module("node:os") external tmpdir: unit => string = "tmpdir"
+}
+
+// The global timer, used by HaulWorker.res to retry after a 429/529 without
+// blocking the queue (`setTimeout(kick, retryMs)` in docs/spec-haul-mode.md
+// "Step 3: brain queue"). No `clearTimeout` binding: every scheduled retry
+// is short (`haulRetryMs`) and only ever set on a path that itself required
+// this exact timer to fire before the worker can look at that haul again,
+// so nothing needs to cancel it early.
+module Timer = {
+  @val external setTimeout: (unit => unit, int) => unit = "setTimeout"
 }
 
 module Url = {

@@ -77,3 +77,8 @@ let outputFormat: JSON.t = Json.obj([
   ("type", Json.str("json_schema")),
   ("schema", responseSchema),
 ])
+
+// Stamped on every find row (Store.find.promptVersion), so a later prompt
+// change never scrambles history. Haul mode still calls this scene prompt
+// in step 3; the "haul-1" variant with `where` and `otherCount` is step 4.
+let promptVersion = "scene-1"
