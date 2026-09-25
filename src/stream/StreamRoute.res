@@ -168,6 +168,15 @@ let handle = async (
           ~onEvent=onSpotEvent,
           ~onRaw=(_ms, _sseEvt) => (),
         )
+        // SpotPass.runLive already turns a failed live call into a
+        // StreamError outcome, so this promise seldom rejects. It still can
+        // in fixture mode (a fixture file that fails to read, for example).
+        // If the catch around the priced pass below ends the scene before
+        // finishSpot awaits this promise, that rejection would reach Node
+        // unhandled and stop the process. This observer only guards against
+        // that crash. finishSpot still awaits the real spotPromise and sees
+        // its real value.
+        spotPromise->Promise.catch(_ => Promise.resolve(SpotPass.NoApiKey))->ignore
 
         // Set once ClaudeStream's onEvent callback sees Finished, so the
         // Completed branch below can hand buildSceneReply the same "how long
@@ -281,21 +290,63 @@ let handle = async (
           }
         }
 
+        // The reply for `scene` when the eBay step fails. It has the shape
+        // Server.buildSceneReply gives with no eBay keys: each item's `ebay`
+        // is null, and `ebayNote` says why. The items, the boxes and the
+        // cost are Claude's own, so the scene still counts. The fields
+        // mirror Server.buildSceneReply, because that function is shared
+        // with /api/scene and stays as it is.
+        let replyWithoutEbay = (
+          ~claudeMs: float,
+          ~ebayMs: float,
+          ~outputPath: string,
+          ~items: array<Types.claudeItem>,
+          ~usage: Types.usage,
+          ~quarterSeen: bool,
+          ~note: string,
+        ): Types.sceneReply => {
+          let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
+          {
+            Types.sceneId,
+            model,
+            fixture: config.fixtures,
+            outputPath,
+            items: Array.map(items, item => {
+              ...toReplyItemPartial(item),
+              box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+            }),
+            imageWidth: sentWidth,
+            imageHeight: sentHeight,
+            timing: {Types.serverMs: elapsedMs(), claudeMs, ebayMs},
+            cost: {
+              Types.usd: Pricing.usdCost(~model, ~usage),
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cacheReadInputTokens,
+              cacheWriteTokens: usage.cacheCreationInputTokens,
+              webSearches: usage.webSearchRequests,
+            },
+            ebayNote: Some(note),
+            quarterSeen,
+          }
+        }
+
         // buildSceneReply's eBay merge (Promise.all over EbayClient.statsFor)
         // can reject outside fixture mode — EbayClient.res itself catches
-        // nothing (a bad key, a dropped connection). Without this try, that
-        // rejection used to escape all the way to Server.res's server-level
-        // handler after the 200 SSE headers were already sent, which threw
-        // ERR_HTTP_HEADERS_SENT and crashed the process.
-        let tryBuildSceneReply = async (
+        // nothing (a bad key, a dropped connection). A failed eBay step does
+        // not fail the scene (review finding R2). It sends `error` with the
+        // message, and the scene goes on with replyWithoutEbay, so `end`
+        // keeps Claude's own outcome: done, stopped or timeout.
+        let sceneReplyFor = async (
           ~claudeMs: float,
           ~outputPath: string,
           ~items: array<Types.claudeItem>,
           ~usage: Types.usage,
           ~quarterSeen: bool,
-        ): result<Types.sceneReply, string> =>
+        ): Types.sceneReply => {
+          let ebayStart = Date.now()
           try {
-            let reply = await buildSceneReply(
+            await buildSceneReply(
               ~config,
               ~model,
               ~sentWidth,
@@ -308,207 +359,221 @@ let handle = async (
               ~usage,
               ~quarterSeen,
             )
-            Ok(reply)
           } catch {
-          | JsExn(e) => Error(JsExn.message(e)->Option.getOr("unknown error"))
+          | JsExn(e) => {
+              let note = "eBay lookup failed: " ++ JsExn.message(e)->Option.getOr("unknown error")
+              write(ScanEvent.ErrorEvent({t: elapsedMs(), message: note}))
+              replyWithoutEbay(
+                ~claudeMs,
+                ~ebayMs=Date.now() -. ebayStart,
+                ~outputPath,
+                ~items,
+                ~usage,
+                ~quarterSeen,
+                ~note,
+              )
+            }
           }
-
-        // A failed eBay merge still owes the registry scene its `error`,
-        // then `end {status: failed}`, so a page that reconnects ends cleanly.
-        let endFailed = async (message: string): unit => {
-          write(ScanEvent.ErrorEvent({t: elapsedMs(), message}))
-          await finishSpot()
-          write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Failed}))
         }
 
-        let outcome = await ClaudeStream.run(
-          ~config,
-          ~buildBody=(~structuredOutput) =>
-            ClaudeClient.buildRequestBody(
-              ~model,
-              ~imageBase64,
-              ~structuredOutput,
-              ~mode=ClaudeClient.Scene({width: sentWidth, height: sentHeight}),
-            ),
-          ~stop=Fetch.AbortController.signal(controller),
-          ~onEvent,
-          ~onRaw=(ms, sseEvt) => Array.push(rawEvents, (ms, sseEvt))->ignore,
-          ~onHeaders=_ms => (),
-        )
+        // The last-resort catch for this scene. ClaudeStream.run turns a
+        // failed Claude call into its StreamError outcome, and
+        // sceneReplyFor catches a failed eBay merge, so neither one
+        // reaches this catch. Anything else that throws from here on (a
+        // failed write of the raw events file or of a scene log line, for
+        // example) still ends the scene: `error`, then `end {status:
+        // failed}`. Without this catch, the scene stayed Running with no
+        // `end`, and the rejection reached Server.res's top-level catch.
+        try {
+          let outcome = await ClaudeStream.run(
+            ~config,
+            ~buildBody=(~structuredOutput) =>
+              ClaudeClient.buildRequestBody(
+                ~model,
+                ~imageBase64,
+                ~structuredOutput,
+                ~mode=ClaudeClient.Scene({width: sentWidth, height: sentHeight}),
+              ),
+            ~stop=Fetch.AbortController.signal(controller),
+            ~onEvent,
+            ~onRaw=(ms, sseEvt) => Array.push(rawEvents, (ms, sseEvt))->ignore,
+            ~onHeaders=_ms => (),
+          )
 
-        switch outcome {
-        | ClaudeStream.Completed(m) =>
-          switch cutOffRef.contents {
-          // Same rule as ClaudeClient.parseClaudeJson's CutOff case and
-          // Server.res's handleScene: a max_tokens stop is not a normal
-          // finish. No eBay merge, no `scene` event — log the cut-off scene
-          // (same fields as Server.res's CutOff branch, adapted to the
-          // stream's own raw-events dump) and end the request as failed.
-          | Some(usage) => {
-              let ms = elapsedMs()
-              let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-              let cost: Types.cost = {
-                Types.usd: Pricing.usdCost(~model, ~usage),
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                cacheReadTokens: usage.cacheReadInputTokens,
-                cacheWriteTokens: usage.cacheCreationInputTokens,
-                webSearches: usage.webSearchRequests,
+          switch outcome {
+          | ClaudeStream.Completed(m) =>
+            switch cutOffRef.contents {
+            // Same rule as ClaudeClient.parseClaudeJson's CutOff case and
+            // Server.res's handleScene: a max_tokens stop is not a normal
+            // finish. No eBay merge, no `scene` event — log the cut-off scene
+            // (same fields as Server.res's CutOff branch, adapted to the
+            // stream's own raw-events dump) and end the request as failed.
+            | Some(usage) => {
+                let ms = elapsedMs()
+                let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
+                let cost: Types.cost = {
+                  Types.usd: Pricing.usdCost(~model, ~usage),
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  cacheReadTokens: usage.cacheReadInputTokens,
+                  cacheWriteTokens: usage.cacheCreationInputTokens,
+                  webSearches: usage.webSearchRequests,
+                }
+                SceneLog.appendLine(
+                  config.dataDir,
+                  Json.obj([
+                    ("sceneId", Json.str(sceneId)),
+                    ("model", Json.str(model)),
+                    ("error", Json.str("reply cut off")),
+                    ("stopReason", Json.str("max_tokens")),
+                    ("outputPath", Json.str(outputPath)),
+                    ("imageWidth", Json.num(Int.toFloat(sentWidth))),
+                    ("imageHeight", Json.num(Int.toFloat(sentHeight))),
+                    ("timing", Json.obj([("claudeMs", Json.num(claudeMsRef.contents))])),
+                    ("cost", Types.encodeCost(cost)),
+                  ]),
+                )
+                Console.error(
+                  "reflip: scene " ++
+                  sceneId ++
+                  " cut off (stream), " ++
+                  Int.toString(usage.outputTokens) ++
+                  " output tokens, " ++
+                  Int.toString(usage.webSearchRequests) ++
+                  " web searches, $" ++
+                  Float.toString(cost.usd),
+                )
+                write(ScanEvent.ErrorEvent({t: ms, message: "reply cut off"}))
+                await finishSpot()
+                write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
               }
+            | None => {
+                let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
+                let reply = await sceneReplyFor(
+                  ~claudeMs=claudeMsRef.contents,
+                  ~outputPath,
+                  ~items=SceneStream.items(m),
+                  ~usage=SceneStream.usage(m),
+                  ~quarterSeen=SceneStream.quarterSeen(m),
+                )
+                SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
+                write(ScanEvent.Scene(reply))
+                await finishSpot()
+                write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
+              }
+            }
+          | ClaudeStream.Stopped(m) => {
+              let ms = elapsedMs()
+              let items = SceneStream.items(m)
+              write(ScanEvent.Stop({t: ms}))
+              // Kept exactly as before (docs/scan-ui.md wave brief: "keep the
+              // usd null logging of stopped ... scenes") — no cost field, since
+              // the usage seen so far is not a real bill. The eBay-merged
+              // `scene` event below is for the live client only; it is not
+              // logged a second time here with that partial-usage cost.
               SceneLog.appendLine(
                 config.dataDir,
                 Json.obj([
+                  ("stopped", Json.boolJ(true)),
                   ("sceneId", Json.str(sceneId)),
                   ("model", Json.str(model)),
-                  ("error", Json.str("reply cut off")),
-                  ("stopReason", Json.str("max_tokens")),
-                  ("outputPath", Json.str(outputPath)),
-                  ("imageWidth", Json.num(Int.toFloat(sentWidth))),
-                  ("imageHeight", Json.num(Int.toFloat(sentHeight))),
-                  ("timing", Json.obj([("claudeMs", Json.num(claudeMsRef.contents))])),
-                  ("cost", Types.encodeCost(cost)),
+                  ("t", Json.num(ms)),
+                  (
+                    "items",
+                    Json.arr(
+                      Array.map(items, item => Types.encodeReplyItem(toReplyItemPartial(item))),
+                    ),
+                  ),
                 ]),
               )
-              Console.error(
-                "reflip: scene " ++
-                sceneId ++
-                " cut off (stream), " ++
-                Int.toString(usage.outputTokens) ++
-                " output tokens, " ++
-                Int.toString(usage.webSearchRequests) ++
-                " web searches, $" ++
-                Float.toString(cost.usd),
-              )
-              write(ScanEvent.ErrorEvent({t: ms, message: "reply cut off"}))
-              await finishSpot()
-              write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
-            }
-          | None => {
               let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-              switch await tryBuildSceneReply(
-                ~claudeMs=claudeMsRef.contents,
+              let reply = await sceneReplyFor(
+                ~claudeMs=ms,
+                ~outputPath,
+                ~items,
+                ~usage=SceneStream.usage(m),
+                ~quarterSeen=SceneStream.quarterSeen(m),
+              )
+              write(ScanEvent.Scene(reply))
+              await finishSpot()
+              write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Stopped}))
+            }
+          | ClaudeStream.TimedOut(m, timeoutMs) => {
+              let ms = elapsedMs()
+              let msg =
+                "Claude took longer than " ++
+                Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s"
+              write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+              // Same "usd null" shape as the Stopped branch above, and for the
+              // same reason: kept as its own line even though the `scene`
+              // event below now also merges eBay for the items found so far.
+              SceneLog.appendLine(
+                config.dataDir,
+                Json.obj([
+                  ("timedOut", Json.boolJ(true)),
+                  ("sceneId", Json.str(sceneId)),
+                  ("model", Json.str(model)),
+                  ("t", Json.num(ms)),
+                  (
+                    "items",
+                    Json.arr(
+                      Array.map(SceneStream.items(m), item =>
+                        Types.encodeReplyItem(toReplyItemPartial(item))
+                      ),
+                    ),
+                  ),
+                ]),
+              )
+              let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
+              let reply = await sceneReplyFor(
+                ~claudeMs=ms,
                 ~outputPath,
                 ~items=SceneStream.items(m),
                 ~usage=SceneStream.usage(m),
                 ~quarterSeen=SceneStream.quarterSeen(m),
-              ) {
-              | Ok(reply) => {
-                  SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-                  write(ScanEvent.Scene(reply))
-                  await finishSpot()
-                  write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
-                }
-              | Error(message) => await endFailed(message)
-              }
+              )
+              write(ScanEvent.Scene(reply))
+              await finishSpot()
+              write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Timeout}))
+            }
+          | ClaudeStream.HttpFailed(status, text) => {
+              let ms = elapsedMs()
+              let msg = "Claude request failed (" ++ Int.toString(status) ++ "): " ++ text
+              write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+              await finishSpot()
+              write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
+            }
+          | ClaudeStream.NoApiKey => {
+              let ms = elapsedMs()
+              write(
+                ScanEvent.ErrorEvent({
+                  t: ms,
+                  message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1",
+                }),
+              )
+              await finishSpot()
+              write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
+            }
+          // A dropped connection or any other exception mid-stream:
+          // ClaudeStream.run resolves this instead of rejecting. The registry
+          // scene still gets `error`, then `end {status: failed}`, so a page
+          // that reconnects through GET /api/scene/:id/events ends cleanly.
+          | ClaudeStream.StreamError(_, msg) => {
+              let ms = elapsedMs()
+              write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+              await finishSpot()
+              write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
             }
           }
-        | ClaudeStream.Stopped(m) => {
+        } catch {
+        | JsExn(e) => {
+            // Stops a spot pass that still runs, as finishSpot does on every
+            // other path. finishSpot itself is not called here, because it
+            // can be the part that threw.
+            Fetch.AbortController.abort(controller)
             let ms = elapsedMs()
-            let items = SceneStream.items(m)
-            write(ScanEvent.Stop({t: ms}))
-            // Kept exactly as before (docs/scan-ui.md wave brief: "keep the
-            // usd null logging of stopped ... scenes") — no cost field, since
-            // the usage seen so far is not a real bill. The eBay-merged
-            // `scene` event below is for the live client only; it is not
-            // logged a second time here with that partial-usage cost.
-            SceneLog.appendLine(
-              config.dataDir,
-              Json.obj([
-                ("stopped", Json.boolJ(true)),
-                ("sceneId", Json.str(sceneId)),
-                ("model", Json.str(model)),
-                ("t", Json.num(ms)),
-                (
-                  "items",
-                  Json.arr(
-                    Array.map(items, item => Types.encodeReplyItem(toReplyItemPartial(item))),
-                  ),
-                ),
-              ]),
-            )
-            let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-            switch await tryBuildSceneReply(
-              ~claudeMs=ms,
-              ~outputPath,
-              ~items,
-              ~usage=SceneStream.usage(m),
-              ~quarterSeen=SceneStream.quarterSeen(m),
-            ) {
-            | Ok(reply) => {
-                write(ScanEvent.Scene(reply))
-                await finishSpot()
-                write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Stopped}))
-              }
-            | Error(message) => await endFailed(message)
-            }
-          }
-        | ClaudeStream.TimedOut(m, timeoutMs) => {
-            let ms = elapsedMs()
-            let msg =
-              "Claude took longer than " ++ Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s"
-            write(ScanEvent.ErrorEvent({t: ms, message: msg}))
-            // Same "usd null" shape as the Stopped branch above, and for the
-            // same reason: kept as its own line even though the `scene`
-            // event below now also merges eBay for the items found so far.
-            SceneLog.appendLine(
-              config.dataDir,
-              Json.obj([
-                ("timedOut", Json.boolJ(true)),
-                ("sceneId", Json.str(sceneId)),
-                ("model", Json.str(model)),
-                ("t", Json.num(ms)),
-                (
-                  "items",
-                  Json.arr(
-                    Array.map(SceneStream.items(m), item =>
-                      Types.encodeReplyItem(toReplyItemPartial(item))
-                    ),
-                  ),
-                ),
-              ]),
-            )
-            let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-            switch await tryBuildSceneReply(
-              ~claudeMs=ms,
-              ~outputPath,
-              ~items=SceneStream.items(m),
-              ~usage=SceneStream.usage(m),
-              ~quarterSeen=SceneStream.quarterSeen(m),
-            ) {
-            | Ok(reply) => {
-                write(ScanEvent.Scene(reply))
-                await finishSpot()
-                write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Timeout}))
-              }
-            | Error(message) => await endFailed(message)
-            }
-          }
-        | ClaudeStream.HttpFailed(status, text) => {
-            let ms = elapsedMs()
-            let msg = "Claude request failed (" ++ Int.toString(status) ++ "): " ++ text
-            write(ScanEvent.ErrorEvent({t: ms, message: msg}))
-            await finishSpot()
-            write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
-          }
-        | ClaudeStream.NoApiKey => {
-            let ms = elapsedMs()
-            write(
-              ScanEvent.ErrorEvent({
-                t: ms,
-                message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1",
-              }),
-            )
-            await finishSpot()
-            write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
-          }
-        // A dropped connection or any other exception mid-stream:
-        // ClaudeStream.run resolves this instead of rejecting. The registry
-        // scene still gets `error`, then `end {status: failed}`, so a page
-        // that reconnects through GET /api/scene/:id/events ends cleanly.
-        | ClaudeStream.StreamError(_, msg) => {
-            let ms = elapsedMs()
-            write(ScanEvent.ErrorEvent({t: ms, message: msg}))
-            await finishSpot()
+            let message = JsExn.message(e)->Option.getOr("unknown error")
+            write(ScanEvent.ErrorEvent({t: ms, message: "scene failed: " ++ message}))
             write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           }
         }

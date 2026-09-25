@@ -73,8 +73,29 @@ let readEvents = (path: string): array<recorded> => {
   ->Array.filterMap(decodeLine)
 }
 
-let sleep = (ms: int): promise<unit> =>
-  Promise.make((resolve, _reject) => Node.Timer.setTimeout(() => resolve(), ms))
+// Resolves after ms, or as soon as `stop` fires its "abort" event --
+// whichever comes first. Before this fix, a stop landing inside a long
+// inter-event gap had to wait out the rest of setTimeout(ms), because
+// nothing here listened for the signal -- only the *next* iteration's
+// top-of-loop `aborted(stop)` check in `go` (below) would notice it, up to
+// the length of the longest recorded gap (~20s on some fixtures).
+let sleep = (ms: int, ~stop: Fetch.AbortSignal.t): promise<unit> =>
+  Promise.make((resolve, _reject) => {
+    let timerRef = ref(None)
+    let onAbort = () => {
+      switch timerRef.contents {
+      | Some(timer) => Node.Timer.clearTimeout(timer)
+      | None => ()
+      }
+      resolve()
+    }
+    let timer = Node.Timer.setTimeoutHandle(() => {
+      Fetch.AbortSignal.removeEventListener(stop, "abort", onAbort)
+      resolve()
+    }, ms)
+    timerRef := Some(timer)
+    Fetch.AbortSignal.addEventListener(stop, "abort", onAbort)
+  })
 
 // A non-positive speed would divide by zero or run the replay backward --
 // ignore it and use realtime instead. Config.res's fromEnv already applies
@@ -105,9 +126,17 @@ let play = (
       let r = Array.getUnsafe(events, i)
       let waitMs = r.ms /. effectiveSpeed -. (Date.now() -. startMs)
       let delayMs = waitMs > 0.0 ? Float.toInt(Math.round(waitMs)) : 0
-      sleep(delayMs)->Promise.then(() => {
-        onEvent(r.evt)
-        go(i + 1)
+      sleep(delayMs, ~stop)->Promise.then(() => {
+        // sleep() above can resolve early because `stop` fired mid-wait,
+        // not only because ms elapsed -- in that case this event was still
+        // pending when the stop arrived, so treat it the same as the
+        // aborted(stop) check at the top of this function: not delivered.
+        if Fetch.AbortSignal.aborted(stop) {
+          Promise.resolve()
+        } else {
+          onEvent(r.evt)
+          go(i + 1)
+        }
       })
     }
   go(0)

@@ -21,6 +21,58 @@ let checkSameEvents = (
   }
 }
 
+// Real timer for this test's own pacing (letting the first event fire and
+// the second event's long wait actually start before calling abort) --
+// same shape as HaulTest.res's and HaulEmailTest.res's own local sleep.
+let sleep = (ms: int): promise<unit> =>
+  Promise.make((resolve, _reject) => Node.Timer.setTimeout(() => resolve(), ms))
+
+// Abort mid-sleep (Opus review item 2): a `stop` fired while play() is
+// waiting out a long gap between two events must end the replay near
+// instantly, not only at the top of the next loop iteration. Before the
+// fix, sleep()'s setTimeout ran to the end regardless of `stop`, so a stop
+// landing inside a long gap could wait out the rest of that gap (up to
+// ~20s on some recordings) before play() noticed.
+let runAbortMidSleep = async () => {
+  TestKit.section("FixtureReplay: a stop mid-gap ends the replay quickly")
+
+  let longGapEvents: array<FixtureReplay.recorded> = [
+    {ms: 0.0, evt: {event: "first", data: "{}"}},
+    {ms: 5_000.0, evt: {event: "second", data: "{}"}},
+  ]
+  let controller = Fetch.AbortController.make()
+  // A safety net only, so a regression fails fast instead of hanging the
+  // suite for the full 5s gap -- it does not weaken the < 500ms check below.
+  let stop = Fetch.AbortSignal.any([
+    Fetch.AbortController.signal(controller),
+    Fetch.AbortSignal.timeout(10_000),
+  ])
+  let delivered: array<Sse.event> = []
+  let t0 = Date.now()
+  let playPromise = FixtureReplay.play(
+    longGapEvents,
+    ~speed=1.0,
+    ~stop,
+    ~onEvent=evt => Array.push(delivered, evt)->ignore,
+  )
+  // Let the first (ms=0) event fire and the second event's 5s wait actually
+  // start -- its setTimeout armed, its abort listener attached -- before
+  // stopping. That is stopping *inside* the gap, the case the top-of-loop
+  // aborted(stop) check alone cannot catch.
+  await sleep(100)
+  TestKit.check("the first event fired before the stop", Array.length(delivered) == 1)
+  Fetch.AbortController.abort(controller)
+  await playPromise
+  let elapsedMs = Date.now() -. t0
+
+  TestKit.check(
+    "stop mid-gap ends play() in under 500ms, not the full ~5s gap, got " ++
+      Float.toString(elapsedMs) ++ "ms",
+    elapsedMs < 500.0,
+  )
+  TestKit.check("only the pre-stop event was delivered", Array.length(delivered) == 1)
+}
+
 let run = async () => {
   TestKit.section("FixtureReplay")
 
@@ -96,4 +148,6 @@ let run = async () => {
   let (stats, note) = await EbayClient.statsFor(config, 99, missingItem)
   TestKit.check("missing ebay-search-99.json gives ebay null", stats == None)
   TestKit.check("missing ebay-search-99.json gives no error note", note == None)
+
+  await runAbortMidSleep()
 }
