@@ -28,6 +28,7 @@ type args = {
   promptOnestep: bool,
   searchTool: option<string>,
   directSearch: bool,
+  dynamicFiltering: bool,
   noParallel: bool,
   printBody: bool,
 }
@@ -35,18 +36,19 @@ type args = {
 let defaultArgs: args = {
   photo: "",
   label: "",
-  schema: BoxLast,
+  schema: BoxSecond,
   search: SearchOn,
   model: Pricing.defaultModel,
   stopAfterFirstItem: false,
   promptOnestep: false,
   searchTool: None,
   directSearch: false,
+  dynamicFiltering: false,
   noParallel: false,
   printBody: false,
 }
 
-let usageText = "usage: spike:stream --photo PATH --label NAME [--schema box-last|box-second] [--search on|off] [--model ID] [--stop-after-first-item] [--prompt-onestep] [--search-tool TYPE] [--direct-search] [--no-parallel] [--print-body]"
+let usageText = "usage: spike:stream --photo PATH --label NAME [--schema box-last|box-second] [--search on|off] [--model ID] [--stop-after-first-item] [--prompt-onestep] [--search-tool TYPE] [--direct-search] [--dynamic-filtering] [--no-parallel] [--print-body]"
 
 // Pure: walks argv from `i` on, folding flags into `acc`. Node.Process.argv
 // is ["node", "<script>.mjs", ...actual args], so callers start at i=2.
@@ -92,6 +94,7 @@ let rec parseFrom = (argv: array<string>, i: int, acc: args): result<args, strin
       | None => Error("--search-tool needs a value")
       }
     | "--direct-search" => parseFrom(argv, i + 1, {...acc, directSearch: true})
+    | "--dynamic-filtering" => parseFrom(argv, i + 1, {...acc, dynamicFiltering: true})
     | "--no-parallel" => parseFrom(argv, i + 1, {...acc, noParallel: true})
     | "--print-body" => parseFrom(argv, i + 1, {...acc, printBody: true})
     | other => Error("unknown argument: " ++ other)
@@ -158,7 +161,26 @@ let itemSchemaPath = list{"output_config", "format", "schema", "properties", "it
 
 let applySchema = (schema: schemaArg, body: JSON.t): JSON.t =>
   switch schema {
-  | BoxLast => body
+  | BoxLast =>
+    updateField(body, itemSchemaPath, itemSchema =>
+      switch JSON.Decode.object(itemSchema) {
+      | None => itemSchema
+      | Some(schemaDict) =>
+        switch Dict.get(schemaDict, "properties")->Option.flatMap(JSON.Decode.object) {
+        | None => itemSchema
+        | Some(propsDict) =>
+          switch Dict.get(propsDict, "box") {
+          | None => itemSchema
+          | Some(boxValue) =>
+            let withoutBox = Array.filter(Dict.toArray(propsDict), ((k, _)) => k != "box")
+            let reordered = Array.concat(withoutBox, [("box", boxValue)])
+            let schemaDict2 = Dict.fromArray(Dict.toArray(schemaDict))
+            Dict.set(schemaDict2, "properties", JSON.Encode.object(Dict.fromArray(reordered)))
+            JSON.Encode.object(schemaDict2)
+          }
+        }
+      }
+    )
   | BoxSecond => updateField(body, itemSchemaPath, moveBoxAfterName)
   }
 
@@ -281,7 +303,7 @@ type summary = {
   stopToEndMs: option<float>,
   promptOnestep: bool,
   webSearchToolType: option<string>,
-  directSearch: bool,
+  callers: string,
   noParallel: bool,
   codeStepCount: int,
   codeStepTimeouts: int,
@@ -300,7 +322,7 @@ let summaryLines = (s: summary): array<string> => {
     " tool=" ++
     s.webSearchToolType->Option.getOr("none") ++
     " callers=" ++
-    (s.directSearch ? "direct" : "default") ++
+    s.callers ++
     " parallel=" ++
     (s.noParallel ? "off" : "default"),
     "headers: " ++ fmtMs(s.headersMs),
@@ -389,7 +411,7 @@ let summaryJson = (s: summary): JSON.t =>
       Json.obj([
         ("prompt", Json.str(s.promptOnestep ? "onestep" : "default")),
         ("tool", Json.str(s.webSearchToolType->Option.getOr("none"))),
-        ("callers", Json.str(s.directSearch ? "direct" : "default")),
+        ("callers", Json.str(s.callers)),
         ("parallel", Json.str(s.noParallel ? "off" : "default")),
       ]),
     ),
@@ -484,6 +506,35 @@ let runSpike = async (~args: args, ~buf: Node.Buffer.t, ~width: int, ~height: in
       }
     }
 
+  // Reads "allowed_callers" off the web_search tool of a built body, joined
+  // with ",". "default" means the key is absent, so the API default applies.
+  let callersInBody = (body: JSON.t): string =>
+    switch JSON.Decode.object(body) {
+    | None => "default"
+    | Some(d) =>
+      switch Dict.get(d, "tools")->Option.flatMap(JSON.Decode.array) {
+      | None => "default"
+      | Some(toolsArr) =>
+        Array.reduce(toolsArr, None, (acc, tool) =>
+          switch acc {
+          | Some(_) => acc
+          | None =>
+            switch JSON.Decode.object(tool) {
+            | None => None
+            | Some(toolDict) =>
+              switch Dict.get(toolDict, "name")->Option.flatMap(JSON.Decode.string) {
+              | Some("web_search") =>
+                Dict.get(toolDict, "allowed_callers")->Option.flatMap(JSON.Decode.array)
+              | _ => None
+              }
+            }
+          }
+        )
+        ->Option.map(callersArr => Array.filterMap(callersArr, JSON.Decode.string)->Array.join(","))
+        ->Option.getOr("default")
+      }
+    }
+
   let setToolType = (toolType: string, tool: JSON.t): JSON.t =>
     switch JSON.Decode.object(tool) {
     | None => tool
@@ -512,6 +563,18 @@ let runSpike = async (~args: args, ~buf: Node.Buffer.t, ~width: int, ~height: in
 
   let applyDirectSearch = (enabled: bool, body: JSON.t): JSON.t =>
     enabled ? mapWebSearchTool(body, setDirectCaller) : body
+
+  // --dynamic-filtering: strip allowed_callers back off the web_search tool,
+  // for a control run against the API default (search from a code step).
+  let removeAllowedCallers = (tool: JSON.t): JSON.t =>
+    switch JSON.Decode.object(tool) {
+    | None => tool
+    | Some(d) =>
+      JSON.Encode.object(Dict.fromArray(Array.filter(Dict.toArray(d), ((k, _)) => k != "allowed_callers")))
+    }
+
+  let applyDynamicFiltering = (enabled: bool, body: JSON.t): JSON.t =>
+    enabled ? mapWebSearchTool(body, removeAllowedCallers) : body
 
   let applyNoParallel = (enabled: bool, body: JSON.t): JSON.t =>
     if !enabled {
@@ -605,11 +668,13 @@ let runSpike = async (~args: args, ~buf: Node.Buffer.t, ~width: int, ~height: in
     let afterPrompt = applyPromptOnestep(args.promptOnestep, afterSearch)
     let afterTool = applySearchTool(args.searchTool, afterPrompt)
     let afterCallers = applyDirectSearch(args.directSearch, afterTool)
-    applyNoParallel(args.noParallel, afterCallers)
+    let afterParallel = applyNoParallel(args.noParallel, afterCallers)
+    applyDynamicFiltering(args.dynamicFiltering, afterParallel)
   }
 
   let sampleBody = buildBody(~structuredOutput=config.structuredOutput)
   let webSearchToolType = webSearchToolTypeInBody(sampleBody)
+  let callersLabel = callersInBody(sampleBody)
 
   if args.printBody {
     Console.log(JSON.stringify(redactBody(sampleBody)))
@@ -825,7 +890,7 @@ let runSpike = async (~args: args, ~buf: Node.Buffer.t, ~width: int, ~height: in
     stopToEndMs,
     promptOnestep: args.promptOnestep,
     webSearchToolType,
-    directSearch: args.directSearch,
+    callers: callersLabel,
     noParallel: args.noParallel,
     codeStepCount: codeStepCount.contents,
     codeStepTimeouts: codeStepTimeouts.contents,

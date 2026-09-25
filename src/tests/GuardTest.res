@@ -100,4 +100,37 @@ let run = () => {
     "haul system text names the $20 gem threshold",
     String.includes(haulSerialized, "$20"),
   )
+
+  // Stall fix (docs/stall-fix.md): the web_search tool searches directly,
+  // never from a code step, on both the scene and the haul request.
+  let checkWebSearchTool = (label: string, body: JSON.t) => {
+    let tool = Json.arrayField(body, "tools")->Option.getOr([])->Array.get(0)
+    let callers =
+      tool
+      ->Option.flatMap(t => Json.arrayField(t, "allowed_callers"))
+      ->Option.getOr([])
+      ->Array.filterMap(JSON.Decode.string)
+    let blocked =
+      tool
+      ->Option.flatMap(t => Json.arrayField(t, "blocked_domains"))
+      ->Option.getOr([])
+      ->Array.filterMap(JSON.Decode.string)
+    TestKit.check(label ++ " web_search tool allows only direct callers", callers == ["direct"])
+    TestKit.check(label ++ " web_search tool blocks ebay.com", blocked == ["ebay.com"])
+  }
+  checkWebSearchTool("scene", requestJson)
+  checkWebSearchTool("haul", haulRequestJson)
+
+  // Item schema (docs/stall-fix.md): box comes right after name so the model
+  // states where an item is before it prices it.
+  let itemSchemaKeys =
+    SystemPrompt.itemSchema
+    ->Json.field("properties")
+    ->Option.flatMap(JSON.Decode.object)
+    ->Option.map(Dict.keysToArray)
+    ->Option.getOr([])
+  TestKit.check(
+    "item schema properties start with name, then box",
+    Array.get(itemSchemaKeys, 0) == Some("name") && Array.get(itemSchemaKeys, 1) == Some("box"),
+  )
 }

@@ -203,11 +203,13 @@ let buildRequestBody = (
   | Haul(_) => "Value the resellable items on this table."
   }
   let textBlock = Json.obj([("type", Json.str("text")), ("text", Json.str(text))])
+  // Search directly, never from a code step: parallel code steps stalled for about 96 s (docs/stall-fix.md).
   let tool = Json.obj([
     ("type", Json.str(webSearchType)),
     ("name", Json.str("web_search")),
     ("max_uses", Json.num(3.0)),
     ("blocked_domains", Json.arr([Json.str("ebay.com")])),
+    ("allowed_callers", Json.arr([Json.str("direct")])),
   ])
   let base = [
     ("model", Json.str(model)),

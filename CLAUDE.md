@@ -38,6 +38,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - An image bills at about ceil(w/28) times ceil(h/28) tokens. Haiku 4.5 downsizes an image above a 1568px long edge. Opus 5.5 and Sonnet 5 downsize above 2576px.
 - Structured output uses `output_config.format`, not the old `output_format` field. Its shape is `{type: "json_schema", schema: {...}}`.
 - Never use forced `tool_choice`. It returns a 400 on Opus 5.5.
+- The web search tool sets `allowed_callers: ["direct"]`, so Claude never searches from a code step. On Sonnet 5, parallel code steps stalled for about 96 s. `disable_parallel_tool_use` returns a 400 with code-step search. See `docs/stall-fix.md`.
 
 `Pricing.res` holds this table in code. `PricingTest.res` checks it against a hand-computed value.
 
