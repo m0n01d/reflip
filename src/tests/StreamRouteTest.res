@@ -20,8 +20,11 @@ let expectedKinds = [
   "tool-done",
   "search-started",
   "search-failed",
+  "box",
   "item",
+  "box",
   "item",
+  "box",
   "item",
   "done",
   "scene",
@@ -118,6 +121,10 @@ let runHappyPath = async () => {
   TestKit.check(
     "event kinds come in order",
     Array.join(kinds, ",") == Array.join(expectedKinds, ","),
+  )
+  TestKit.check(
+    "a box event arrives for each item",
+    Array.length(Array.filter(kinds, k => k == "box")) == 3,
   )
 
   switch (Array.find(received, ((_, e)) => e.event == "item"), Array.get(received, Array.length(received) - 1)) {

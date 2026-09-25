@@ -43,8 +43,11 @@ let expectedKinds = [
   "ToolRunDone",
   "SearchStarted",
   "SearchFailed",
+  "BoxFound",
   "ItemFound",
+  "BoxFound",
   "ItemFound",
+  "BoxFound",
   "ItemFound",
   "Finished",
 ]
@@ -57,7 +60,9 @@ let claudeItemsEqual = (a: Types.claudeItem, b: Types.claudeItem): bool =>
   a.estimateHighUsd == b.estimateHighUsd &&
   a.basis == b.basis &&
   a.confidence == b.confidence &&
-  Array.join(a.sources, "|") == Array.join(b.sources, "|")
+  Array.join(a.sources, "|") == Array.join(b.sources, "|") &&
+  a.size == b.size &&
+  a.box == b.box
 
 let itemArraysEqual = (a: array<Types.claudeItem>, b: array<Types.claudeItem>): bool =>
   if Array.length(a) != Array.length(b) {
@@ -138,7 +143,7 @@ let checkAtChunkSize = (chunkSize: int) => {
   | _ => TestKit.check(label ++ ": search failed code present", false)
   }
 
-  switch Array.get(logs, 11) {
+  switch Array.get(logs, 14) {
   | Some(SceneStream.Finished({stopReason, usage})) =>
       TestKit.check(label ++ ": finished stop reason", stopReason == "end_turn")
       TestKit.check(label ++ ": finished web search requests", usage.webSearchRequests == 2)

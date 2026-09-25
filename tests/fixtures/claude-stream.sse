@@ -86,7 +86,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"xing "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowl set\", \"maker"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"bowl set\", \"box\": [2, 4, 20, 30], \"maker"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"Pyrex\", \"quer"}}
@@ -152,7 +152,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"Cast iron skillet"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"maker\": \"\", \""}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\", \"box\": [24, 6, 42, 28], \"maker\": \"\", \""}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"query\": \"vintage "}}
@@ -209,7 +209,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" {\"name\": \"Board "}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"game lot\", \"maker"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"game lot\", \"box\": [46, 2, 62, 34], \"maker"}}
 
 event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"\": \"\", \"query\": \""}}
