@@ -98,13 +98,15 @@ thinking line in an activity log. No box or item exists yet.
 the first sticker on the photo.
 
 **Midway.** More `box` and `item` events arrive. Each sticker sits on the
-photo, dim, until its price lands. A `spot-item` sticker lands dim too,
-with its number and no price (decision 1, once wave 2 sends it).
+photo, dim, until its price lands. A `spot-item` lands as a small white
+dot. The design gives a number only to a worth-a-look item, because the
+number points to its row in the list.
 
 **Done.** The `scene` event arrives, with eBay prices for each item. Each
 priced sticker updates to show its price. A priced item with an IoU of 0.5
 or more takes over its spot sticker (decision 2). The `end` event closes
-the stream. A spot item still with no match stays dim, marked "not priced".
+the stream. A spot item still with no match stays a white dot. Its row
+under "Also seen" reads "not priced".
 
 **Item sheet.** The user taps a sticker. A sheet opens with that item's
 full reply: name, price range, eBay stats, and the sold-search link.
