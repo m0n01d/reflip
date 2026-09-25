@@ -45,7 +45,7 @@ call that runs next to the priced call (decision 1 above).
 | `done` | claudeMs, inputTokens, outputTokens, webSearches, usd | Once, when the Claude stream sends `message_stop` |
 | `scene` | the scene reply itself (no wrapper) | Once, after eBay prices are merged in, right after `done` |
 | `error` | t, message | On a decode error for one item, or on a Claude API failure, a timeout, or a missing API key |
-| `stop` | t | When the phone closes the connection before the scene ends |
+| `stop` | t | When a stop request arrives through `POST /api/scene/:id/stop` |
 | `spot-started` | t, inputTokens | When the spot pass's Claude stream sends `message_start` |
 | `spot-item` | t, index, name, box | Once for each item the spot pass finds |
 | `spot-done` | t, claudeMs, inputTokens, outputTokens, usd | When the spot pass's Claude stream sends `message_stop` |
