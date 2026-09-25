@@ -228,7 +228,7 @@ let make = (
             </div>
             <fieldset className="scan-fieldset">
               <legend className="scan-legend"> {React.string("MODEL")} </legend>
-              {Shared.allModels
+              {[Shared.Sonnet5, Shared.Opus5_5, Shared.Haiku4_5]
               ->Array.map(m => {
                 let (label, desc) = switch m {
                 | Shared.Sonnet5 => (
