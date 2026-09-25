@@ -49,7 +49,8 @@ let config = (~dataDir: string): Config.t => {
 
 // A server with only the stream route on it, so the test can inject
 // buildSceneReply. Server.start always passes the real one.
-let startRoute = async (config: Config.t) => {
+// StreamRouteWriteFailTest uses this too, with the real one.
+let startRoute = async (~buildSceneReply=rejectingBuildSceneReply, config: Config.t) => {
   let server = Node.HttpServer.createServer((req, res) =>
     Node.HttpServer.readBody(req)
     ->Promise.then(body =>
@@ -58,7 +59,7 @@ let startRoute = async (config: Config.t) => {
         ~model=Shared.modelId(Shared.defaultModel),
         ~body,
         ~res,
-        ~buildSceneReply=rejectingBuildSceneReply,
+        ~buildSceneReply,
       )
     )
     ->Promise.ignore
