@@ -88,6 +88,9 @@ try {
   if (result.idbDelete !== "success") failures.push("the keyval-store delete answered " + result.idbDelete);
   consoleErrors.length = 0; // the API page's own 404 is expected, so count only app errors
   await page.goto("http://127.0.0.1:" + CONFIG.port + "/", { waitUntil: "domcontentloaded", timeout: msLeft() });
+  // The scan page opens on its Scan tab. The haul-start form is on the
+  // Haul tab (ScanShell.res), so switch tabs first.
+  await page.getByRole("button", { name: "Haul", exact: true }).click({ timeout: msLeft() });
   await page.waitForSelector('button:has-text("Start haul")', { timeout: msLeft() });
 
   const [haulResp] = await Promise.all([
