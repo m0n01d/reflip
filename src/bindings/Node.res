@@ -37,6 +37,9 @@ module Path = {
 module Process = {
   @scope("process") @val external env: dict<string> = "env"
   @scope("process") @val external cwd: unit => string = "cwd"
+  // Used by EmailCheck.res to report a clean 0/1 status instead of an
+  // uncaught-rejection stack trace.
+  @scope("process") @val external exit: int => unit = "exit"
 }
 
 module Crypto = {

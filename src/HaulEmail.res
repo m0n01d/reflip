@@ -141,8 +141,11 @@ let send = async (config: Config.t, store: Store.t, haulId: string): unit =>
       let input = digestInputOf(config, haul, scenes, finds, counts)
       let images = inlineImagesFor(config, input.gems, photoPathOf(scenes))
       let digest = Digest.make(input, ~cidFor)
+      let gmailUser = Config.getEnv("GMAIL_USER")
       let msg: Email.message = {
-        to_: Config.getEnv("EMAIL_TO")->Option.getOr(""),
+        to_: Config.getEnv("EMAIL_TO")->Option.getOr(gmailUser->Option.getOr("")),
+        from_: gmailUser->Option.getOr("reflip@localhost"),
+        date: Date.toUTCString(Date.make()),
         subject: digest.subject,
         text: digest.text,
         html: digest.html,
@@ -162,7 +165,7 @@ let send = async (config: Config.t, store: Store.t, haulId: string): unit =>
         | Error(missing) =>
           toOutbox("written to " ++ outboxNoteName(haulId) ++ " because " ++ joinComma(missing) ++ " are not set")
         | Ok(creds) =>
-          switch await Email.send(~creds, ~mime) {
+          switch await Email.send(~transport=Email.gmailTransport(creds), ~creds, ~mime) {
           | Ok() => Store.markEmailed(store, ~haulId, ~now, ~note=Some("sent"))
           | Error(errMsg) => {
               Email.writeOutbox(~dir=outboxDir(config), ~haulId, ~mime)->ignore

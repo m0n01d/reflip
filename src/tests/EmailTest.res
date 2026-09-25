@@ -1,5 +1,7 @@
 // Email.buildMime is pure, so it's hand-checked against a fixed boundary
-// with no network. decodeAccessToken and credsFromEnv need no I/O either.
+// with no network. credsFromEnv needs no I/O either. Email.send is
+// exercised through nodemailer's StreamTransport (Nodemailer.res), which
+// buffers the raw message instead of opening a socket — still no network.
 
 // -- small MIME-parsing helpers, test-local only ---------------------------
 
@@ -50,14 +52,23 @@ let partBody = (lines: array<string>, ~headerLine: string): string => {
 let decodeBase64Utf8 = (b64: string): string =>
   Node.Buffer.toStringWithEncoding(Node.Buffer.fromString(b64, "base64"), "utf8")
 
-let run = () => {
+// The single line starting with `prefix`, if there's exactly one.
+let lineStarting = (lines: array<string>, ~prefix: string): option<string> =>
+  Array.filterMap(lines, l => String.startsWith(l, prefix) ? Some(l) : None)->Array.get(0)
+
+let run = async () => {
   TestKit.section("Email.buildMime")
 
   let subject = "Café — 3 gems ✓" // "Café — 3 gems ✓"
   let html = "<p>Café — 3 gems ✓</p>"
   let text = "Cafe summary"
+  let from_ = "reflip@example.com"
+  let to_ = "dwight@example.com"
+  let date = "Fri, 25 Sep 2026 12:00:00 GMT"
   let msg: Email.message = {
-    to_: "dwight@example.com",
+    to_,
+    from_,
+    date,
     subject,
     text,
     html,
@@ -73,10 +84,23 @@ let run = () => {
   let mime = Email.buildMime(msg, ~boundary)
   let lines = crlfLines(mime)
 
+  // -- From and Date: SMTP sends these raw bytes as-is (the Gmail API used
+  // to fill From for us), so buildMime now writes both headers verbatim.
+  TestKit.check(
+    "the From header carries the sender address",
+    lineStarting(lines, ~prefix="From: ") == Some("From: " ++ from_),
+  )
+  TestKit.check(
+    "the Date header carries the caller's RFC 5322 date",
+    lineStarting(lines, ~prefix="Date: ") == Some("Date: " ++ date),
+  )
+  TestKit.check(
+    "the To header carries the recipient address",
+    lineStarting(lines, ~prefix="To: ") == Some("To: " ++ to_),
+  )
+
   // -- Subject: decode the RFC 2047 encoded word back and compare exactly.
-  let subjectLine =
-    Array.filterMap(lines, l => String.startsWith(l, "Subject: ") ? Some(l) : None)->Array.get(0)
-  switch subjectLine {
+  switch lineStarting(lines, ~prefix="Subject: ") {
   | None => TestKit.check("a Subject header line exists", false)
   | Some(line) => {
       let encoded = String.substring(line, ~start=String.length("Subject: "), ~end=String.length(line))
@@ -115,56 +139,89 @@ let run = () => {
     String.includes(mime, "Content-Disposition: inline; filename=\"scene-a.jpg\""),
   )
 
-  TestKit.section("Email.decodeAccessToken")
-
-  TestKit.check(
-    "Some for a genuine token reply",
-    Email.decodeAccessToken(JSON.parseOrThrow(`{"access_token":"x","expires_in":3600}`)) == Some("x"),
-  )
-  TestKit.check(
-    "None for an error reply with no access_token",
-    Email.decodeAccessToken(JSON.parseOrThrow(`{"error":"invalid_grant"}`)) == None,
-  )
-  TestKit.check(
-    "None for a JSON value that isn't an object",
-    Email.decodeAccessToken(JSON.parseOrThrow(`"just a string"`)) == None,
-  )
-
   TestKit.section("Email.credsFromEnv")
 
   let noEnv = (_: string): option<string> => None
   switch Email.credsFromEnv(noEnv) {
-  | Error(missing) => TestKit.check("all four names are reported missing", Array.length(missing) == 4)
+  | Error(missing) =>
+    TestKit.check(
+      "both names are reported missing, in order",
+      Array.length(missing) == 2 &&
+        Array.getUnsafe(missing, 0) == "GMAIL_USER" &&
+        Array.getUnsafe(missing, 1) == "GMAIL_APP_PASSWORD",
+    )
   | Ok(_) => TestKit.check("credsFromEnv should fail with no environment", false)
   }
 
-  let partialEnv = (k: string): option<string> =>
+  let onlyUser = (k: string): option<string> =>
     switch k {
-    | "GMAIL_CLIENT_ID" => Some("id")
-    | "EMAIL_TO" => Some("me@example.com")
+    | "GMAIL_USER" => Some("dwight@gmail.com")
     | _ => None
     }
-  switch Email.credsFromEnv(partialEnv) {
+  switch Email.credsFromEnv(onlyUser) {
   | Error(missing) =>
     TestKit.check(
-      "only the actually-missing names are listed, in order",
-      Array.length(missing) == 2 &&
-        Array.getUnsafe(missing, 0) == "GMAIL_CLIENT_SECRET" &&
-        Array.getUnsafe(missing, 1) == "GMAIL_REFRESH_TOKEN",
+      "only GMAIL_APP_PASSWORD is reported missing",
+      Array.length(missing) == 1 && Array.getUnsafe(missing, 0) == "GMAIL_APP_PASSWORD",
     )
-  | Ok(_) => TestKit.check("credsFromEnv should fail with a partial environment", false)
+  | Ok(_) => TestKit.check("credsFromEnv should fail with only GMAIL_USER set", false)
   }
 
-  let fullEnv = (k: string): option<string> =>
+  let noEmailTo = (k: string): option<string> =>
     switch k {
-    | "GMAIL_CLIENT_ID" => Some("id")
-    | "GMAIL_CLIENT_SECRET" => Some("secret")
-    | "GMAIL_REFRESH_TOKEN" => Some("refresh")
-    | "EMAIL_TO" => Some("me@example.com")
+    | "GMAIL_USER" => Some("dwight@gmail.com")
+    | "GMAIL_APP_PASSWORD" => Some("app-password")
     | _ => None
     }
-  TestKit.check("a complete environment decodes to Ok", switch Email.credsFromEnv(fullEnv) {
-  | Ok(_) => true
-  | Error(_) => false
-  })
+  TestKit.check(
+    "EMAIL_TO defaults to GMAIL_USER when unset",
+    switch Email.credsFromEnv(noEmailTo) {
+    | Ok(creds) => creds.emailTo == "dwight@gmail.com"
+    | Error(_) => false
+    },
+  )
+
+  let withEmailTo = (k: string): option<string> =>
+    switch k {
+    | "GMAIL_USER" => Some("dwight@gmail.com")
+    | "GMAIL_APP_PASSWORD" => Some("app-password")
+    | "EMAIL_TO" => Some("haul-digest@example.com")
+    | _ => None
+    }
+  TestKit.check(
+    "EMAIL_TO is used when set",
+    switch Email.credsFromEnv(withEmailTo) {
+    | Ok(creds) => creds.emailTo == "haul-digest@example.com"
+    | Error(_) => false
+    },
+  )
+
+  TestKit.section("Email.send through nodemailer's stream transport")
+
+  let creds: Email.creds = {user: from_, appPassword: "app-password", emailTo: to_}
+  let sendMime = Email.buildMime(msg, ~boundary="SENDTEST")
+  let transport = Nodemailer.createStreamTransport({streamTransport: true, buffer: true})
+
+  TestKit.check(
+    "Email.send resolves Ok through the stream transport",
+    switch await Email.send(~transport, ~creds, ~mime=sendMime) {
+    | Ok() => true
+    | Error(_) => false
+    },
+  )
+
+  // A second call against the same stream transport, this time reading the
+  // raw nodemailer reply directly (Nodemailer.sendMailStream), to check the
+  // envelope and the buffered message Email.send can't see through its own
+  // result<unit, string>.
+  let info = await Nodemailer.sendMailStream(
+    transport,
+    {Nodemailer.envelope: {from: creds.user, to: [creds.emailTo]}, raw: sendMime},
+  )
+  TestKit.check("the reply envelope's from is the sender", info.envelope.from == creds.user)
+  TestKit.check("the reply envelope's to is the recipient", info.envelope.to == [creds.emailTo])
+  TestKit.check(
+    "the buffered message equals the mime string",
+    Node.Buffer.toStringWithEncoding(info.message, "utf8") == sendMime,
+  )
 }

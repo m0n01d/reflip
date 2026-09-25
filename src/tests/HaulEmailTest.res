@@ -193,6 +193,50 @@ let run = async () => {
   TestKit.check("the .eml has a text/plain part", String.includes(eml, "Content-Type: text/plain; charset=UTF-8"))
   TestKit.check("the .eml has a text/html part", String.includes(eml, "Content-Type: text/html; charset=UTF-8"))
 
+  // -- From and To: no GMAIL_USER or EMAIL_TO is set in this test process
+  // (npm test never loads ~/.config/reflip/env), so HaulEmail.send falls
+  // back to "reflip@localhost" and "" per its From/To rule.
+  TestKit.check("the From header falls back to reflip@localhost", String.includes(eml, "From: reflip@localhost"))
+  TestKit.check("the To header falls back to empty", String.includes(eml, "To: " ++ "\r\n"))
+
   Node.HttpServer.close(server, () => ())
   Store.close(store)
+
+  TestKit.section("HaulEmail: a live-path haul with no Gmail secrets set notes them")
+
+  // Outside fixture mode, with GMAIL_USER/GMAIL_APP_PASSWORD unset,
+  // HaulEmail.send must fall back to the outbox and name both env vars in
+  // the note (Email.credsFromEnv's Error branch) — never touch the
+  // network. Seeded directly through Store, no HTTP or Claude call needed.
+  let dataDir2 = tmpDataDir()
+  Node.Fs.mkdirSync(dataDir2, {recursive: true})
+  let store2 = Store.openAt(Node.Path.join([dataDir2, "store.sqlite"]))
+  let liveConfig = {...baseConfig(~dataDir=dataDir2), Config.fixtures: false}
+  let haulId3 = "haul-missing-secrets-" ++ Node.Crypto.randomUUID()
+  let now2 = Date.toISOString(Date.make())
+  Store.createHaul(store2, ~haulId=haulId3, ~name=Some("No Secrets Haul"), ~now=now2)->ignore
+
+  await HaulEmail.send(liveConfig, store2, haulId3)
+
+  switch Store.getHaul(store2, haulId3) {
+  | None => TestKit.check("the haul still exists after send", false)
+  | Some(haul) => {
+      TestKit.check("emailedAt is set even though nothing was sent", haul.emailedAt->Option.isSome)
+      TestKit.check(
+        "the note names GMAIL_USER and GMAIL_APP_PASSWORD",
+        haul.emailNote ==
+          Some(
+            "written to data/outbox/" ++
+            haulId3 ++
+            ".eml because GMAIL_USER, GMAIL_APP_PASSWORD are not set",
+          ),
+      )
+    }
+  }
+  TestKit.check(
+    "the .eml file exists in data/outbox",
+    Node.Fs.existsSync(Node.Path.join([dataDir2, "outbox", haulId3 ++ ".eml"])),
+  )
+
+  Store.close(store2)
 }
