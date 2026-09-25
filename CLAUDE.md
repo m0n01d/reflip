@@ -93,6 +93,8 @@ To develop the page with fast reloads, run the brain in one shell and Vite in an
 
 `npm start` uses Node's `--env-file-if-exists` flag. If `~/.config/reflip/env` exists, that flag loads it. If not, `npm start` skips it and keeps going. Put each secret on its own `KEY=value` line there. No secret goes in this repo.
 
+To test the page from a phone on the tailnet, run `npm run build`, then `npm run tailnet`, then `npm start`. `npm run tailnet` points `tailscale serve` at the brain port and prints the HTTPS URL. The port is `PORT`, or 8787 if `PORT` is not set. The proxy is on the tailnet only, and it stays on after the script exits. The script finds the `tailscale` CLI on `PATH` or in `/Applications/Tailscale.app`. If Tailscale is off, the script prints `Tailscale is stopped.` and exits with code 1.
+
 ## Use `resq` when editing the `.res` files here
 
 `resq` reads and edits ReScript structurally. Prefer it over reading a whole file and hand-splicing text. Run `resq guide` for the full command reference.
