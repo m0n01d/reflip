@@ -50,6 +50,12 @@ let writeRawEvents = (dataDir: string, sceneId: string, events: array<(float, Ss
   path
 }
 
+// Tests only, same STREAM_DROP_AFTER_MS pattern below: STREAM_THROW_EXN
+// raises this before the Claude call, in fixture mode only, so a test can
+// prove the last-resort catch matches a genuine ReScript exception and not
+// only a JS Error wrapped as JsExn. Never set outside a test process.
+exception StreamRouteTestThrow
+
 let handle = async (
   ~config: Config.t,
   ~model: string,
@@ -384,7 +390,19 @@ let handle = async (
         // example) still ends the scene: `error`, then `end {status:
         // failed}`. Without this catch, the scene stayed Running with no
         // `end`, and the rejection reached Server.res's top-level catch.
+        // Matches every exception, not only a JS Error. Before this fix the
+        // catch pattern was `JsExn(e)` alone, so a plain ReScript exception
+        // raised anywhere in here missed the catch and reached Node
+        // unhandled instead of ending the scene.
         try {
+          // Tests only, same STREAM_DROP_AFTER_MS pattern above: fixture
+          // mode raises a plain ReScript exception before the Claude call,
+          // so a test can prove the catch below matches any exception, not
+          // only one JS threw (JsExn).
+          switch (config.fixtures, Config.getEnv("STREAM_THROW_EXN")) {
+          | (true, Some(_)) => throw(StreamRouteTestThrow)
+          | _ => ()
+          }
           let outcome = await ClaudeStream.run(
             ~config,
             ~buildBody=(~structuredOutput) =>
@@ -566,13 +584,20 @@ let handle = async (
             }
           }
         } catch {
-        | JsExn(e) => {
+        | exn => {
             // Stops a spot pass that still runs, as finishSpot does on every
             // other path. finishSpot itself is not called here, because it
-            // can be the part that threw.
+            // can be the part that threw. Matches any exception, not only a
+            // JS Error wrapped as JsExn. A plain ReScript `exception`,
+            // thrown with `throw`, reaches this catch too now, and keeps
+            // the same "scene failed: ..." shape -- "unknown error" stands
+            // in for a JsExn's missing message.
             Fetch.AbortController.abort(controller)
             let ms = elapsedMs()
-            let message = JsExn.message(e)->Option.getOr("unknown error")
+            let message = switch exn {
+            | JsExn(e) => JsExn.message(e)->Option.getOr("unknown error")
+            | _ => "unknown error"
+            }
             write(ScanEvent.ErrorEvent({t: ms, message: "scene failed: " ++ message}))
             write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           }
