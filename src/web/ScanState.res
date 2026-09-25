@@ -302,7 +302,7 @@ let foldEvent = (m: model, evt: ScanEvent.t): model => {
   | ScanEvent.SpotStarted(_) => m // no distinct headline moment for this in a plain view
   | ScanEvent.SpotItem({t, index, name, box}) => foldSpotItem(m, index, name, box, t)
   | ScanEvent.SpotDone(_) | ScanEvent.SpotFailed(_) => m // nothing derived shows these yet
-  | ScanEvent.End({t, status}) => {...m, phase: Ended(status), endedAtMs: Some(t)}
+  | ScanEvent.End({t, status}) => {...m, phase: Ended(status), endedAtMs: Some(t), reconnecting: false}
   }
 }
 
@@ -318,6 +318,7 @@ let update = (m: model, msg: msg): model =>
       phase: Ended(ScanEvent.EndStatus.Failed),
       endedAtMs: Some(m.lastEventAtMs),
       errors: Array.concat(m.errors, [(m.lastEventAtMs, reason)]),
+      reconnecting: false,
     }
   | StopTapped => {...m, stopRequested: true}
   | SheetOpened(n) => {...m, sheetOpen: Some(n)}
@@ -351,10 +352,10 @@ let isNotPriced = (m: model, s: sticker): bool => s.item->Option.isNone && isEnd
 type connectionState = Live | Reconnecting | Failed
 
 let connectionState = (m: model): connectionState =>
-  switch (m.reconnecting, m.phase) {
-  | (true, _) => Reconnecting
-  | (false, Ended(ScanEvent.EndStatus.Failed)) => Failed
-  | (false, _) => Live
+  switch m.phase {
+  | Ended(ScanEvent.EndStatus.Failed) => Failed
+  | Ended(_) => Live
+  | _ => m.reconnecting ? Reconnecting : Live
   }
 
 let visibleStickers = (m: model): array<sticker> =>

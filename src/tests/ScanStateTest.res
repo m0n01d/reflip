@@ -296,6 +296,9 @@ let runSendFailed = () => {
     },
   )
   TestKit.check("stickers already found are kept, not cleared", Array.length(m1.stickers) == Array.length(m0.stickers))
+  let mDropped = {...ScanState.initialModel, phase: Live, reconnecting: true}
+  let mDroppedFailed = ScanState.update(mDropped, SendFailed("lost it"))
+  TestKit.check("SendFailed clears reconnecting even if a reconnect was in flight", mDroppedFailed.reconnecting == false)
 }
 
 // -- The connection-state derived value -------------------------------------
@@ -322,9 +325,15 @@ let runConnectionState = () => {
     ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Done)}) == Live,
   )
   TestKit.check(
-    "reconnecting wins over a stale Ended(Failed) from before a fresh NewScan",
-    ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Failed), reconnecting: true}) == Reconnecting,
+    "an ended phase wins over a stale reconnecting flag",
+    ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Failed), reconnecting: true}) == Failed,
   )
+  let mDropped2 = {...ScanState.initialModel, phase: Live, reconnecting: true}
+  let mDropped2Ended = ScanState.update(
+    mDropped2,
+    GotEvent(Ok(ScanEvent.End({t: 1234.0, status: ScanEvent.EndStatus.Failed}))),
+  )
+  TestKit.check("the End event clears reconnecting", mDropped2Ended.reconnecting == false)
 }
 
 // -- sub(): the reconnecting banner overrides the phase-based line --------
@@ -344,6 +353,14 @@ let runSubReconnecting = () => {
   TestKit.check(
     "sub returns to the ordinary Live line once reconnecting clears",
     ScanState.sub(recovered) == ScanState.sub(live),
+  )
+  let endedWhileDropped = ScanState.update(
+    dropped,
+    GotEvent(Ok(ScanEvent.End({t: 1234.0, status: ScanEvent.EndStatus.Failed}))),
+  )
+  TestKit.check(
+    "sub shows the Failed line, not \"Catching up\", once End lands during a reconnect",
+    ScanState.sub(endedWhileDropped) != "Connection dropped. Catching up…",
   )
 }
 
