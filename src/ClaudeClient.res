@@ -189,6 +189,14 @@ let outputFormatFor = (mode: mode): JSON.t =>
   | Haul(_) => SystemPrompt.haulOutputFormat
   }
 
+// Sonnet 5 thinks by default (adaptive thinking), and its thinking tokens
+// count against max_tokens. On 2026-09-25 a 43-item scene used 7,583 output
+// tokens (2,300 of them thinking), and an earlier call on the same photo hit
+// the old 8192 cap. Only generated tokens bill, so the higher cap costs
+// nothing on a scene that fits. At about 110 tokens a second, 16,000 tokens
+// stay inside timeoutMs.
+let maxTokens = 16_000
+
 let buildRequestBody = (
   ~model: string,
   ~imageBase64: string,
@@ -225,7 +233,7 @@ let buildRequestBody = (
   ])
   let base = [
     ("model", Json.str(model)),
-    ("max_tokens", Json.num(8192.0)),
+    ("max_tokens", Json.num(Int.toFloat(maxTokens))),
     ("system", Json.str(systemTextFor(mode))),
     (
       "messages",

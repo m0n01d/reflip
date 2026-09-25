@@ -112,4 +112,21 @@ let run = async () => {
 
   Node.HttpServer.close(server, () => ())
   Node.HttpServer.close(stub, () => ())
+
+  // The fix for the cut-off: room for adaptive thinking, and a cap on the
+  // number of items the scene prompt asks for.
+  let body = ClaudeClient.buildRequestBody(
+    ~model=Shared.modelId(Shared.defaultModel),
+    ~imageBase64="",
+    ~structuredOutput=true,
+    ~mode=ClaudeClient.Scene({width: 1800, height: 1039}),
+  )
+  TestKit.check(
+    "the request asks for max_tokens 16000",
+    Json.intField(body, "max_tokens") == Some(16_000),
+  )
+  TestKit.check(
+    "the scene prompt caps the list at 30 items",
+    String.includes(Json.stringField(body, "system")->Option.getOr(""), "List at most 30 items."),
+  )
 }
