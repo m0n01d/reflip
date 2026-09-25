@@ -30,13 +30,13 @@ type haulPhase =
   | Starting
   | Active(Types.haulStatus)
   | Finishing(Types.haulStatus) // Done tapped: draining the queue, then POST done
-  | Finished(Types.haulStatus)
+  | Finished(Types.haulStatus) // brain confirmed done; polling continues until emailedAt
 
 // The Scan/Haul chrome switch (docs/design/scan-ui/Main.dc.html) — display
 // only, independent of haulPhase above. NoHaul + HaulTab shows the existing
 // haul-start entry form; NoHaul + ScanTab shows the restyled scan Ready
 // screen. Any other haulPhase always shows HaulView regardless of this.
-type tab = ScanTab | HaulTab // brain confirmed done; polling continues until emailedAt
+type tab = ScanTab | HaulTab
 
 type model = {
   selectedModel: Shared.model,
