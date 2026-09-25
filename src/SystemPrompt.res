@@ -94,7 +94,7 @@ let outputFormat: JSON.t = Json.obj([
 // Stamped on every find row (Store.find.promptVersion), so a later prompt
 // change never scrambles history. POST /api/scene uses this one; haul mode
 // uses haulPromptVersion below.
-let promptVersion = "scene-3"
+let promptVersion = "scene-4"
 
 // Haul mode's own words: only list items worth the trip to sell, name
 // where each one sits in the photo, and count the rest instead of

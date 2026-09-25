@@ -121,8 +121,8 @@ let run = () => {
   checkWebSearchTool("scene", requestJson)
   checkWebSearchTool("haul", haulRequestJson)
 
-  // Item schema (docs/stall-fix.md): box comes right after name so the model
-  // states where an item is before it prices it.
+  // Item schema (docs/stream-spike.md, recommendation 7): box comes right
+  // after name, so each box streams about 1 s before the rest of its item.
   let itemSchemaKeys =
     SystemPrompt.itemSchema
     ->Json.field("properties")
