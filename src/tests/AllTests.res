@@ -42,6 +42,7 @@ let () =
   ->Promise.then(() => StreamRouteCutOffTest.run())
   ->Promise.then(() => StreamRouteSpotTest.run())
   ->Promise.then(() => StreamRouteFetchFailTest.run())
+  ->Promise.then(() => StreamRouteEbayFailTest.run())
   ->Promise.then(() => SceneRegistryTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")

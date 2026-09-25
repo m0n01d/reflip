@@ -290,21 +290,63 @@ let handle = async (
           }
         }
 
+        // The reply for `scene` when the eBay step fails. It has the shape
+        // Server.buildSceneReply gives with no eBay keys: each item's `ebay`
+        // is null, and `ebayNote` says why. The items, the boxes and the
+        // cost are Claude's own, so the scene still counts. The fields
+        // mirror Server.buildSceneReply, because that function is shared
+        // with /api/scene and stays as it is.
+        let replyWithoutEbay = (
+          ~claudeMs: float,
+          ~ebayMs: float,
+          ~outputPath: string,
+          ~items: array<Types.claudeItem>,
+          ~usage: Types.usage,
+          ~quarterSeen: bool,
+          ~note: string,
+        ): Types.sceneReply => {
+          let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
+          {
+            Types.sceneId,
+            model,
+            fixture: config.fixtures,
+            outputPath,
+            items: Array.map(items, item => {
+              ...toReplyItemPartial(item),
+              box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+            }),
+            imageWidth: sentWidth,
+            imageHeight: sentHeight,
+            timing: {Types.serverMs: elapsedMs(), claudeMs, ebayMs},
+            cost: {
+              Types.usd: Pricing.usdCost(~model, ~usage),
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cacheReadInputTokens,
+              cacheWriteTokens: usage.cacheCreationInputTokens,
+              webSearches: usage.webSearchRequests,
+            },
+            ebayNote: Some(note),
+            quarterSeen,
+          }
+        }
+
         // buildSceneReply's eBay merge (Promise.all over EbayClient.statsFor)
         // can reject outside fixture mode — EbayClient.res itself catches
-        // nothing (a bad key, a dropped connection). Without this try, that
-        // rejection used to escape all the way to Server.res's server-level
-        // handler after the 200 SSE headers were already sent, which threw
-        // ERR_HTTP_HEADERS_SENT and crashed the process.
-        let tryBuildSceneReply = async (
+        // nothing (a bad key, a dropped connection). A failed eBay step does
+        // not fail the scene (review finding R2). It sends `error` with the
+        // message, and the scene goes on with replyWithoutEbay, so `end`
+        // keeps Claude's own outcome: done, stopped or timeout.
+        let sceneReplyFor = async (
           ~claudeMs: float,
           ~outputPath: string,
           ~items: array<Types.claudeItem>,
           ~usage: Types.usage,
           ~quarterSeen: bool,
-        ): result<Types.sceneReply, string> =>
+        ): Types.sceneReply => {
+          let ebayStart = Date.now()
           try {
-            let reply = await buildSceneReply(
+            await buildSceneReply(
               ~config,
               ~model,
               ~sentWidth,
@@ -317,22 +359,26 @@ let handle = async (
               ~usage,
               ~quarterSeen,
             )
-            Ok(reply)
           } catch {
-          | JsExn(e) => Error(JsExn.message(e)->Option.getOr("unknown error"))
+          | JsExn(e) => {
+              let note = "eBay lookup failed: " ++ JsExn.message(e)->Option.getOr("unknown error")
+              write(ScanEvent.ErrorEvent({t: elapsedMs(), message: note}))
+              replyWithoutEbay(
+                ~claudeMs,
+                ~ebayMs=Date.now() -. ebayStart,
+                ~outputPath,
+                ~items,
+                ~usage,
+                ~quarterSeen,
+                ~note,
+              )
+            }
           }
-
-        // A failed eBay merge still owes the registry scene its `error`,
-        // then `end {status: failed}`, so a page that reconnects ends cleanly.
-        let endFailed = async (message: string): unit => {
-          write(ScanEvent.ErrorEvent({t: elapsedMs(), message}))
-          await finishSpot()
-          write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Failed}))
         }
 
         // The last-resort catch for this scene. ClaudeStream.run turns a
         // failed Claude call into its StreamError outcome, and
-        // tryBuildSceneReply catches a failed eBay merge, so neither one
+        // sceneReplyFor catches a failed eBay merge, so neither one
         // reaches this catch. Anything else that throws from here on (a
         // failed write of the raw events file or of a scene log line, for
         // example) still ends the scene: `error`, then `end {status:
@@ -403,21 +449,17 @@ let handle = async (
               }
             | None => {
                 let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-                switch await tryBuildSceneReply(
+                let reply = await sceneReplyFor(
                   ~claudeMs=claudeMsRef.contents,
                   ~outputPath,
                   ~items=SceneStream.items(m),
                   ~usage=SceneStream.usage(m),
                   ~quarterSeen=SceneStream.quarterSeen(m),
-                ) {
-                | Ok(reply) => {
-                    SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-                    write(ScanEvent.Scene(reply))
-                    await finishSpot()
-                    write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
-                  }
-                | Error(message) => await endFailed(message)
-                }
+                )
+                SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
+                write(ScanEvent.Scene(reply))
+                await finishSpot()
+                write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
               }
             }
           | ClaudeStream.Stopped(m) => {
@@ -445,25 +487,22 @@ let handle = async (
                 ]),
               )
               let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-              switch await tryBuildSceneReply(
+              let reply = await sceneReplyFor(
                 ~claudeMs=ms,
                 ~outputPath,
                 ~items,
                 ~usage=SceneStream.usage(m),
                 ~quarterSeen=SceneStream.quarterSeen(m),
-              ) {
-              | Ok(reply) => {
-                  write(ScanEvent.Scene(reply))
-                  await finishSpot()
-                  write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Stopped}))
-                }
-              | Error(message) => await endFailed(message)
-              }
+              )
+              write(ScanEvent.Scene(reply))
+              await finishSpot()
+              write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Stopped}))
             }
           | ClaudeStream.TimedOut(m, timeoutMs) => {
               let ms = elapsedMs()
               let msg =
-                "Claude took longer than " ++ Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s"
+                "Claude took longer than " ++
+                Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s"
               write(ScanEvent.ErrorEvent({t: ms, message: msg}))
               // Same "usd null" shape as the Stopped branch above, and for the
               // same reason: kept as its own line even though the `scene`
@@ -486,20 +525,16 @@ let handle = async (
                 ]),
               )
               let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-              switch await tryBuildSceneReply(
+              let reply = await sceneReplyFor(
                 ~claudeMs=ms,
                 ~outputPath,
                 ~items=SceneStream.items(m),
                 ~usage=SceneStream.usage(m),
                 ~quarterSeen=SceneStream.quarterSeen(m),
-              ) {
-              | Ok(reply) => {
-                  write(ScanEvent.Scene(reply))
-                  await finishSpot()
-                  write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Timeout}))
-                }
-              | Error(message) => await endFailed(message)
-              }
+              )
+              write(ScanEvent.Scene(reply))
+              await finishSpot()
+              write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Timeout}))
             }
           | ClaudeStream.HttpFailed(status, text) => {
               let ms = elapsedMs()
