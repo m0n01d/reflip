@@ -47,9 +47,13 @@ module ItemDecode = {
 let applyFound = (model: model, found: ItemScanner.found): (model, array<logEvent>) =>
   switch found {
   | ItemScanner.ItemClosed({index, json}) =>
-    switch JsonCombinators.Json.decode(json, ItemDecode.spotItem) {
-    | Ok((name, box)) => (model, [ItemFound({index, name, box})])
-    | Error(_) => (model, [])
+    if index >= SystemPrompt.spotMaxItems {
+      (model, [])
+    } else {
+      switch JsonCombinators.Json.decode(json, ItemDecode.spotItem) {
+      | Ok((name, box)) => (model, [ItemFound({index, name, box})])
+      | Error(_) => (model, [])
+      }
     }
   | ItemScanner.BoxClosed(_) => (model, [])
   | ItemScanner.ItemUnparsable(_) => (model, [])
