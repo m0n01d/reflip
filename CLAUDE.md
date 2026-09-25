@@ -46,7 +46,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 1. eBay numbers never reach the model. The order is: call Claude first, then query eBay for each item, then merge the two in code. `GuardTest.res` checks this by building a real Claude request and searching its JSON for eBay fixture titles and prices.
 2. The web search tool blocks ebay.com, with `blocked_domains: ["ebay.com"]`.
 3. Secrets come from the environment only: `ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. `npm start` loads `~/.config/reflip/env` with Node's `--env-file-if-exists` flag. Never write a secret to the repo or to a log.
-4. The server binds to `127.0.0.1` only. On the MacBook Pro, `tailscale serve` proxies `https://dwights-macbook-pro.tail128d00.ts.net/` to port 8787, on the tailnet only. Never Funnel.
+4. The server binds to `127.0.0.1` only. `tailscale serve` proxies HTTPS to it from the tailnet. Never Funnel.
 5. `FIXTURES=1` forces fixture mode: both the Claude call and the eBay calls read from `tests/fixtures/` instead of the network. Outside fixture mode, a missing eBay key sets each item's `ebay` field to null and fills the reply's `ebayNote` field with why. A missing Anthropic key, without `FIXTURES=1`, returns a 503.
 
 ## How it fits together
@@ -127,4 +127,5 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 ## What is not built yet
 
 - eBay keys. `~/.config/reflip/env` has `ANTHROPIC_API_KEY`, `GMAIL_USER` and `GMAIL_APP_PASSWORD`, but no eBay keys. The first live haul ran on 2026-09-25: 3 photos, $0.42 in Claude, one email sent.
+- The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, and a way to keep the brain running.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.
