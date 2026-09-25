@@ -163,6 +163,11 @@ let handleScene = async (
         ("error", Json.str("Claude request failed (" ++ Int.toString(status) ++ "): " ++ msg)),
       ]),
     )
+  | Error(ClaudeClient.Timeout(ms)) => {
+      let msg = "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
+      Console.error("reflip: " ++ msg ++ ", answering 504")
+      jsonResponse(res, 504, Json.obj([("error", Json.str(msg))]))
+    }
   | Error(ClaudeClient.DecodeFailed(_)) =>
     jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
   | Ok(decoded) => {
