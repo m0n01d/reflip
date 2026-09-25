@@ -627,22 +627,6 @@ let make = () => {
     }
   }
 
-  let onModelChange = (event: ReactEvent.Form.t) => {
-    let value = WebApi.targetValue(WebApi.eventTarget(event))
-    switch Shared.parseModelId(value) {
-    | Some(m) => dispatch(AppState.SetModel(m))
-    | None => ()
-    }
-  }
-
-  let onLongEdgeChange = (event: ReactEvent.Form.t) => {
-    let value = WebApi.targetValue(WebApi.eventTarget(event))
-    switch Int.fromString(value) {
-    | Some(n) => dispatch(AppState.SetLongEdge(n))
-    | None => ()
-    }
-  }
-
   let onStoreNameChange = (event: ReactEvent.Form.t) =>
     dispatch(AppState.SetStoreName(WebApi.targetValue(WebApi.eventTarget(event))))
 
@@ -685,65 +669,7 @@ let make = () => {
     <h1> {React.string("reflip")} </h1>
     {switch model.haul {
     | NoHaul =>
-      <>
-        <section className="haul-start">
-          <h2> {React.string("Haul mode")} </h2>
-          <input
-            className="store-name"
-            type_="text"
-            placeholder="Store name (optional)"
-            value={model.storeName}
-            onChange={onStoreNameChange}
-          />
-          <button className="take-photo" onClick={onStartHaul}>
-            {React.string("Start haul")}
-          </button>
-          {switch model.haulError {
-          | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
-          | None => React.null
-          }}
-        </section>
-        <hr />
-        <div className="pickers">
-          <label className="picker">
-            {React.string("Model")}
-            <select value={Shared.modelId(model.selectedModel)} onChange={onModelChange}>
-              {Shared.allModels
-              ->Array.map(m =>
-                <option key={Shared.modelId(m)} value={Shared.modelId(m)}>
-                  {React.string(Shared.modelLabel(m))}
-                </option>
-              )
-              ->React.array}
-            </select>
-          </label>
-          <label className="picker">
-            {React.string("Long edge")}
-            <select value={Int.toString(model.longEdge)} onChange={onLongEdgeChange}>
-              <option value="1568"> {React.string("1568 px (default)")} </option>
-              <option value="2576"> {React.string("2576 px")} </option>
-            </select>
-          </label>
-        </div>
-        <label className="take-photo">
-          <input
-            className="visually-hidden"
-            type_="file"
-            accept="image/*"
-            capture=#environment
-            onChange={onScanFileChange}
-          />
-          {React.string("Take photo")}
-        </label>
-        <div className="hint">
-          {React.string("Put a quarter next to small items to show their size.")}
-        </div>
-        {switch model.status {
-        | ErrorStatus(msg) => <div className="scan-resize-error"> {React.string(msg)} </div>
-        | Idle | Resizing | Uploading | Waiting => React.null
-        }}
-        <ScanView model={model.scan} dispatch={scanMsg => dispatch(AppState.Scan(scanMsg))} />
-      </>
+      <ScanShell model dispatch onScanFileChange onStoreNameChange onStartHaul />
     | Starting => <div className="status"> {React.string("starting haul…")} </div>
     | Active(status) | Finishing(status) | Finished(status) =>
       <HaulView
