@@ -36,6 +36,7 @@ let () =
   ->Promise.then(() => HaulEmailTest.run())
   ->Promise.then(() => StreamRouteTest.run())
   ->Promise.then(() => StreamRouteCutOffTest.run())
+  ->Promise.then(() => SceneRegistryTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()
