@@ -7,6 +7,11 @@
 let cwd = Node.Process.cwd()
 let fixturesDir = Node.Path.join([cwd, "tests/fixtures"])
 
+// A haul scene's photo goes through HaulWorker.runScene, which reads its
+// width and height with JpegSize.dimensions before ever calling Claude. A
+// placeholder string body isn't a real JPEG, so postScene sends real bytes.
+let tablePhotoBuffer = Node.Fs.readFileBuffer(Node.Path.join([fixturesDir, "table.jpg"]))
+
 let tmpDataDir = (): string =>
   Node.Path.join([Node.Os.tmpdir(), "reflip-haul-email-test-" ++ Node.Crypto.randomUUID()])
 
@@ -54,12 +59,12 @@ let postEmpty = async (url: string): int => {
 }
 
 let postScene = async (base: string, haulId: string, clientId: string): (int, JSON.t) => {
-  let resp = await Fetch.fetch(
+  let resp = await Fetch.fetchBuffer(
     base ++ "/api/hauls/" ++ haulId ++ "/scenes",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg"), ("x-client-id", clientId)]),
-      body: "fake-jpeg-bytes",
+      body: tablePhotoBuffer,
     },
   )
   (Fetch.status(resp), await Fetch.json(resp))
@@ -90,6 +95,36 @@ let baseConfig = (~dataDir: string): Config.t => {
 // EmailTest.res) ------------------------------------------------------------
 
 let crlfLines = (s: string): array<string> => String.split(s, "\r\n")
+
+// The base64 body of the part whose header line is `headerLine`: every line
+// after the first blank line that follows it, up to (excluding) the next
+// "--boundary" line, concatenated back into one base64 string. Same helper
+// as EmailTest.res's own partBody — Email.res base64-encodes every part, so
+// a raw String.includes on `eml` can't see text inside the html part.
+let partBody = (lines: array<string>, ~headerLine: string): string => {
+  let n = Array.length(lines)
+  let rec findHeader = i =>
+    if i >= n {
+      -1
+    } else if Array.getUnsafe(lines, i) == headerLine {
+      i
+    } else {
+      findHeader(i + 1)
+    }
+  let headerIdx = findHeader(0)
+  let rec findBlank = i => Array.getUnsafe(lines, i) == "" ? i : findBlank(i + 1)
+  let blankIdx = findBlank(headerIdx + 1)
+  let rec collect = (i, acc) =>
+    if String.startsWith(Array.getUnsafe(lines, i), "--") {
+      acc
+    } else {
+      collect(i + 1, acc ++ Array.getUnsafe(lines, i))
+    }
+  collect(blankIdx + 1, "")
+}
+
+let decodeBase64Utf8 = (b64: string): string =>
+  Node.Buffer.toStringWithEncoding(Node.Buffer.fromString(b64, "base64"), "utf8")
 
 let countOccurrences = (haystack: string, needle: string): int => {
   let hLen = String.length(haystack)
@@ -171,16 +206,18 @@ let run = async () => {
   // per gem that has a box. Both scenes have gems (the haul fixture puts 2
   // items above the $20 default per scene: the lamp and the skillet; the
   // brooch's estimateHighUsd is 15, under the threshold, so it is not a
-  // gem). tests/fixtures/README.md: the fixture's third item (the brooch)
-  // has a degenerate box that Box.decode drops — but the brooch is not a
-  // gem either way, so both gems that ARE above threshold (lamp, skillet)
-  // keep their box (checked directly above: "every lamp/skillet find
-  // stores the fixture's box"). So the inline image count is
-  // (photos with gems: 2) + (gems with a box: 2 scenes x 2 gems = 4) = 6.
+  // gem). tests/fixtures/README.md: the fixture's second item (the
+  // skillet, a gem) has a degenerate box that Box.decode drops, so that
+  // gem gets no crop — only the lamp gem keeps its box (checked directly
+  // above: "every lamp find stores the fixture's box" / "every skillet
+  // find has no box"). So the inline image count is (photos with gems: 2)
+  // + (gems with a box: 2 scenes x 1 gem (the lamp) = 2) = 4.
   // Store.findsOf orders by createdAt then rowid, and insertFinds writes
   // one scene's items in claude-haul.json order in a single loop, so
   // within each scene the lamp is always find #1 and the skillet #2 —
-  // HaulEmail.gemCidFor's `n` follows that same per-scene order.
+  // HaulEmail.gemCidFor's `n` follows that same per-scene order (counting
+  // gems only), so the skillet's cid would be "gem-<sceneId>-2" and it
+  // never appears — HaulEmail.cropFor returns None for a find with no box.
   TestKit.check(
     "the first scene's whole-photo Content-ID is present",
     String.includes(eml, "Content-ID: <scene-" ++ sceneId1 ++ "@reflip>"),
@@ -190,22 +227,29 @@ let run = async () => {
     String.includes(eml, "Content-ID: <scene-" ++ sceneId2 ++ "@reflip>"),
   )
   TestKit.check(
-    "the first scene's two gem crops (lamp, skillet) have Content-IDs",
+    "the first scene's lamp crop has a Content-ID, the boxless skillet does not",
     String.includes(eml, "Content-ID: <gem-" ++ sceneId1 ++ "-1@reflip>") &&
-      String.includes(eml, "Content-ID: <gem-" ++ sceneId1 ++ "-2@reflip>"),
+      !String.includes(eml, "Content-ID: <gem-" ++ sceneId1 ++ "-2@reflip>"),
   )
   TestKit.check(
-    "the second scene's two gem crops (lamp, skillet) have Content-IDs",
+    "the second scene's lamp crop has a Content-ID, the boxless skillet does not",
     String.includes(eml, "Content-ID: <gem-" ++ sceneId2 ++ "-1@reflip>") &&
-      String.includes(eml, "Content-ID: <gem-" ++ sceneId2 ++ "-2@reflip>"),
+      !String.includes(eml, "Content-ID: <gem-" ++ sceneId2 ++ "-2@reflip>"),
   )
   TestKit.check(
-    "exactly 6 inline images: 2 whole photos + 4 gem crops",
-    countOccurrences(eml, "Content-ID: <") == 6,
+    "exactly 4 inline images: 2 whole photos + 2 lamp gem crops",
+    countOccurrences(eml, "Content-ID: <") == 4,
   )
   TestKit.check(
     "each inline image is an inline image/jpeg part",
-    countOccurrences(eml, "Content-Type: image/jpeg") == 6,
+    countOccurrences(eml, "Content-Type: image/jpeg") == 4,
+  )
+  // Email.res base64-encodes the html part, so decode it before looking
+  // for Digest.gemHtml's "no box" placeholder text.
+  let htmlBody64 = partBody(lines, ~headerLine="Content-Type: text/html; charset=UTF-8")
+  TestKit.check(
+    "the boxless skillet gem shows \"no box\" in the email html",
+    String.includes(decodeBase64Utf8(htmlBody64), "no box"),
   )
 
   // -- a text part and an html part, per the multipart/alternative Email.res

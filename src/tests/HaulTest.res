@@ -6,6 +6,13 @@
 let cwd = Node.Process.cwd()
 let fixturesDir = Node.Path.join([cwd, "tests/fixtures"])
 
+// A haul scene's photo goes through HaulWorker.runScene, which reads its
+// width and height with JpegSize.dimensions before ever calling Claude
+// (Server.res's handleScene does the same for the M0 flow). A placeholder
+// string body isn't a real JPEG, so any scene that must reach "valued"
+// posts or writes these real bytes instead.
+let tablePhotoBuffer = Node.Fs.readFileBuffer(Node.Path.join([fixturesDir, "table.jpg"]))
+
 let tmpDataDir = (): string =>
   Node.Path.join([Node.Os.tmpdir(), "reflip-haul-test-" ++ Node.Crypto.randomUUID()])
 
@@ -54,12 +61,12 @@ let postEmpty = async (url: string): int => {
 }
 
 let postScene = async (base: string, haulId: string, clientId: string): (int, JSON.t) => {
-  let resp = await Fetch.fetch(
+  let resp = await Fetch.fetchBuffer(
     base ++ "/api/hauls/" ++ haulId ++ "/scenes",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg"), ("x-client-id", clientId)]),
-      body: "fake-jpeg-bytes",
+      body: tablePhotoBuffer,
     },
   )
   (Fetch.status(resp), await Fetch.json(resp))
@@ -167,10 +174,12 @@ let run = async () => {
   )
 
   // Each scene's 3 finds come from the same claude-haul.json fixture: the
-  // first two items carry a box in table.jpg's 64x48 pixels (Box.decode
-  // passes them through unchanged, since the high tier doesn't resize a
-  // photo that small), and the third item's box is degenerate on purpose
-  // (x2 <= x1), so Box.decode drops it and that find stores no box.
+  // lamp and the brooch each carry a box in table.jpg's 64x48 pixels
+  // (Box.decode passes them through unchanged, since the high tier doesn't
+  // resize a photo that small). The skillet's box is degenerate on purpose
+  // (x2 <= x1), so Box.decode drops it and that find stores no box — the
+  // skillet is a gem (its estimateHighUsd is above the $20 threshold), so
+  // this is the fixture that proves a gem with no box works end to end.
   let finds1 = Store.findsOf(store1, haulId1)
   TestKit.check("all 9 finds (3 scenes x 3 items) were stored", Array.length(finds1) == 9)
   let lampFinds = Array.filter(finds1, f => f.name == "Brass table lamp")
@@ -182,13 +191,13 @@ let run = async () => {
       Array.every(lampFinds, f => f.box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30})),
   )
   TestKit.check(
-    "every skillet find stores the fixture's box",
-    Array.length(skilletFinds) == 3 &&
-      Array.every(skilletFinds, f => f.box == Some({Types.x1: 24, y1: 6, x2: 42, y2: 28})),
+    "every skillet find has no box, its fixture box is degenerate",
+    Array.length(skilletFinds) == 3 && Array.every(skilletFinds, f => f.box == None),
   )
   TestKit.check(
-    "every brooch find has no box, its fixture box is degenerate",
-    Array.length(broochFinds) == 3 && Array.every(broochFinds, f => f.box == None),
+    "every brooch find stores the fixture's box",
+    Array.length(broochFinds) == 3 &&
+      Array.every(broochFinds, f => f.box == Some({Types.x1: 44, y1: 32, x2: 60, y2: 46})),
   )
 
   let doneStatus = await postEmpty(base1 ++ "/api/hauls/" ++ haulId1 ++ "/done")
@@ -407,7 +416,7 @@ let run = async () => {
   Store.createHaul(preStore, ~haulId=haulId5, ~name=None, ~now="2026-09-24T00:00:00.000Z")->ignore
   Node.Fs.mkdirSync(Node.Path.join([dataDir5, "photos"]), {recursive: true})
   let photoPath5 = Node.Path.join([dataDir5, "photos", "scene-restart.jpg"])
-  Node.Fs.writeFileSync(photoPath5, "fake-jpeg-bytes")
+  Node.Fs.writeFileBuffer(photoPath5, tablePhotoBuffer)
   let scene5 = Store.addScene(
     preStore,
     ~haulId=haulId5,
