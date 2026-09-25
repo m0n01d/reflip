@@ -1,0 +1,39 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-09-25T04:50:10Z" },
+  "title": "reflip scan: live results",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 1244, "w": 390, "h": 844, "title": "Main (play me)", "is_interactive": true },
+    "Ready.dc.html": { "x": 0, "y": 0, "w": 390, "h": 844, "title": "Ready" },
+    "Thinking.dc.html": { "x": 470, "y": 0, "w": 390, "h": 844, "title": "Thinking · 0:14" },
+    "Searching.dc.html": { "x": 940, "y": 0, "w": 390, "h": 844, "title": "Searching · 0:57" },
+    "FirstFinds.dc.html": { "x": 1410, "y": 0, "w": 390, "h": 844, "title": "First finds · 1:41" },
+    "Midway.dc.html": { "x": 1880, "y": 0, "w": 390, "h": 844, "title": "Midway · 2:05" },
+    "Done.dc.html": { "x": 2350, "y": 0, "w": 390, "h": 1900, "title": "Done · 2:46" },
+    "Item.dc.html": { "x": 470, "y": 1244, "w": 390, "h": 844, "title": "Item sheet" },
+    "Timeout.dc.html": { "x": 940, "y": 1244, "w": 390, "h": 844, "title": "Timeout (modeled)" },
+    "Settings.dc.html": { "x": 1410, "y": 1244, "w": 390, "h": 844, "title": "Settings" },
+    "EbayBlock.dc.html": { "x": 1880, "y": 1244, "w": 390, "h": 880, "title": "eBay block: loading, stats, no keys" }
+  },
+  "order": [
+    "Main.dc.html",
+    "Ready.dc.html",
+    "Thinking.dc.html",
+    "Searching.dc.html",
+    "FirstFinds.dc.html",
+    "Midway.dc.html",
+    "Done.dc.html",
+    "Item.dc.html",
+    "Timeout.dc.html",
+    "Settings.dc.html",
+    "EbayBlock.dc.html"
+  ],
+  "notes": {
+    "row1": { "x": 0, "y": -300, "text": "Scan: items land one by one", "kind": "title1", "maxW": 2740 },
+    "row2": { "x": 0, "y": 944, "text": "Try it, and the other states", "kind": "title1", "maxW": 2270 },
+    "about": { "x": 0, "y": 2168, "w": 390, "text": "The top row walks one real scan: scene 5c0c5ba7, Sonnet 5, 22 items in 2:46 for $0.165. The brain does not stream yet. So the item times are modeled from that scan's token counts: about 88 s of reading and search, then one item every 3.4 s. Main plays the whole flow at 4x. The speed is a tweak. The Timeout board stretches every time by 1.3 to reach the 3:00 limit. The eBay stats on the eBay board come from the test fixture, not a real eBay call." }
+  },
+  "designSystems": []
+}
