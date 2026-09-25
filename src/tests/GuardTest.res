@@ -20,6 +20,7 @@ let run = () => {
     ~model="claude-sonnet-5",
     ~imageBase64="ZmFrZQ==",
     ~structuredOutput=true,
+    ~mode=ClaudeClient.Scene({width: 800, height: 600}),
   )
   let serialized = JSON.stringify(requestJson)
 
@@ -34,5 +35,43 @@ let run = () => {
       "request body excludes eBay price " ++ price,
       !String.includes(serialized, price),
     )
+  )
+
+  // Haul mode (step 4): same guard, plus the gem-threshold prompt and its
+  // own schema must not leak eBay numbers either.
+  let haulRequestJson = ClaudeClient.buildRequestBody(
+    ~model="claude-sonnet-5",
+    ~imageBase64="ZmFrZQ==",
+    ~structuredOutput=true,
+    ~mode=ClaudeClient.Haul(20.0),
+  )
+  let haulSerialized = JSON.stringify(haulRequestJson)
+  // Only the scene request states the photo size; the haul prompt asks for
+  // no box, so its request stays as it was before item boxes.
+  TestKit.check(
+    "scene request states the photo size",
+    String.includes(serialized, "800 pixels wide and 600 pixels tall"),
+  )
+  TestKit.check("haul request states no photo size", !String.includes(haulSerialized, "pixels wide"))
+
+  Array.forEach(titles, title =>
+    TestKit.check(
+      "haul request body excludes eBay title \"" ++ title ++ "\"",
+      !String.includes(haulSerialized, title),
+    )
+  )
+  Array.forEach(prices, price =>
+    TestKit.check(
+      "haul request body excludes eBay price " ++ price,
+      !String.includes(haulSerialized, price),
+    )
+  )
+  TestKit.check(
+    "haul request still blocks ebay.com",
+    String.includes(haulSerialized, "blocked_domains") && String.includes(haulSerialized, "ebay.com"),
+  )
+  TestKit.check(
+    "haul system text names the $20 gem threshold",
+    String.includes(haulSerialized, "$20"),
   )
 }

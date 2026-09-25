@@ -87,3 +87,30 @@ let searchFixture = (fixturesDir: string, index: int): JSON.t => {
   let path = Node.Path.join([fixturesDir, "ebay-search-" ++ Int.toString(index) ++ ".json"])
   JSON.parseOrThrow(Node.Fs.readFileUtf8(path, "utf8"))
 }
+
+// One item's eBay merge: fixture mode reads tests/fixtures/ebay-search-<n>;
+// real mode calls the Browse API. Missing eBay keys (non-fixture) mean the
+// stats are None and the second element of the tuple says why. Moved here
+// from Server.mergeEbay (docs/spec-haul-mode.md "Step 3: brain queue") so
+// HaulWorker.res can call it too without a Server <-> HaulWorker cycle.
+let statsFor = async (
+  config: Config.t,
+  index: int,
+  item: Types.claudeItem,
+): (option<Types.ebayStats>, option<string>) =>
+  if config.fixtures {
+    (decodeStats(searchFixture(config.fixturesDir, index)), None)
+  } else {
+    switch (config.ebayClientId, config.ebayClientSecret) {
+    | (Some(id), Some(secret)) =>
+      switch await fetchToken(~clientId=id, ~clientSecret=secret) {
+      | Ok(token) =>
+        switch await search(~accessToken=token, ~query=item.query) {
+        | Ok(json) => (decodeStats(json), None)
+        | Error(msg) => (None, Some("eBay search failed: " ++ msg))
+        }
+      | Error(msg) => (None, Some("eBay auth failed: " ++ msg))
+      }
+    | _ => (None, Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"))
+    }
+  }

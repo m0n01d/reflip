@@ -4,18 +4,16 @@
 
 module D = JsonCombinators.Json.Decode
 
-type item = {item: Types.claudeItem, box: option<array<int>>}
-
 type logEvent =
   | ClaudeStarted({inputTokens: int})
   | Thinking
-  | CodeRunStarted({id: string})
-  | CodeRunDone({id: string, status: option<string>, returnCode: option<int>})
+  | ToolRunStarted({id: string, name: string})
+  | ToolRunDone({id: string, name: string, status: option<string>, returnCode: option<int>})
   | SearchStarted({id: string, query: option<string>})
   | SearchDone({id: string, resultCount: int})
   | SearchFailed({id: string, errorCode: string})
   | BoxFound({index: int, box: array<int>})
-  | ItemFound({index: int, item: item})
+  | ItemFound({index: int, item: Types.claudeItem})
   | ItemRejected({index: int, reason: string})
   | Finished({stopReason: string, usage: Types.usage})
   | StreamFailed(string)
@@ -26,11 +24,11 @@ type logEvent =
 // append in place without rebuilding openBlocks on every delta.
 type openBlock =
   | TextBlock
-  | CodeExecBlock(string)
+  | ToolUseBlock({id: string, name: string})
   | WebSearchBlock({id: string, queryEmittedAtStart: bool, partialInput: ref<string>})
 
 type model = {
-  items: array<item>,
+  items: array<Types.claudeItem>,
   usage: Types.usage,
   lastStopReason: option<string>,
   scanner: ItemScanner.t,
@@ -43,19 +41,21 @@ type msg = Event(ClaudeEvents.t)
 
 module ItemDecode = {
   let claudeItem: D.t<Types.claudeItem> = D.object(field => {
-    let maker = field.optional("maker", D.string)->Option.flatMap(m => m == "" ? None : Some(m))
-    let sources = field.optional("sources", D.array(D.string))->Option.getOr([])
-    {
-      Types.name: field.required("name", D.string),
-      maker,
-      query: field.required("query", D.string),
-      estimateLowUsd: field.required("estimateLowUsd", D.float),
-      estimateHighUsd: field.required("estimateHighUsd", D.float),
-      basis: field.required("basis", D.string),
-      confidence: field.required("confidence", D.float),
-      sources,
-    }
-  })
+      let maker = field.optional("maker", D.string)->Option.flatMap(m => m == "" ? None : Some(m))
+      let sources = field.optional("sources", D.array(D.string))->Option.getOr([])
+      {
+        Types.name: field.required("name", D.string),
+        maker,
+        query: field.required("query", D.string),
+        estimateLowUsd: field.required("estimateLowUsd", D.float),
+        estimateHighUsd: field.required("estimateHighUsd", D.float),
+        basis: field.required("basis", D.string),
+        confidence: field.required("confidence", D.float),
+        sources,
+        where: field.optional("where", D.string),
+        box: field.optional("box", D.array(D.float)),
+      }
+    })
 
   let query: D.t<option<string>> = D.object(field => field.optional("query", D.string))
 }
@@ -90,7 +90,7 @@ let init: model = {
   openBlocks: [],
 }
 
-let items = (model: model): array<item> => model.items
+let items = (model: model): array<Types.claudeItem> => model.items
 let usage = (model: model): Types.usage => model.usage
 let finalText = (model: model): string => model.text
 
@@ -120,9 +120,11 @@ let applyFound = (model: model, found: ItemScanner.found): (model, array<logEven
   | ItemScanner.ItemClosed({index, json}) =>
       switch JsonCombinators.Json.decode(json, ItemDecode.claudeItem) {
       | Ok(claudeItem) =>
-          let (box, model2) = takeBoxFor(model, index)
-          let it = {item: claudeItem, box}
-          ({...model2, items: Array.concat(model2.items, [it])}, [ItemFound({index, item: it})])
+          let (_, model2) = takeBoxFor(model, index)
+          (
+            {...model2, items: Array.concat(model2.items, [claudeItem])},
+            [ItemFound({index, item: claudeItem})],
+          )
       | Error(msg) =>
           let (_, model2) = takeBoxFor(model, index)
           (model2, [ItemRejected({index, reason: msg})])
@@ -155,7 +157,6 @@ let update = (model: model, msg: msg): (model, array<logEvent>) =>
           | ClaudeEvents.ServerToolUseStart({id, name, input}) =>
               let resetModel = {...model, scanner: ItemScanner.empty, text: ""}
               switch name {
-              | "code_execution" => (registerOpenBlock(resetModel, index, CodeExecBlock(id)), [])
               | "web_search" =>
                   switch input->Option.flatMap(extractQueryFromJson) {
                   | Some(q) => (
@@ -175,7 +176,10 @@ let update = (model: model, msg: msg): (model, array<logEvent>) =>
                       [],
                     )
                   }
-              | _ => (resetModel, [])
+              // Any other server tool (code_execution, text_editor_code_execution,
+              // and whatever Anthropic ships next) starts here and is reported at
+              // its BlockStop, once we know it actually ran.
+              | _ => (registerOpenBlock(resetModel, index, ToolUseBlock({id, name})), [])
               }
           | ClaudeEvents.WebSearchResult({toolUseId, outcome}) =>
               switch outcome {
@@ -185,10 +189,27 @@ let update = (model: model, msg: msg): (model, array<logEvent>) =>
                   [SearchFailed({id: toolUseId, errorCode: code})],
                 )
               }
-          | ClaudeEvents.CodeExecutionResult({toolUseId, run}) => (
-              model,
-              [CodeRunDone({id: toolUseId, status: run.status, returnCode: run.returnCode})],
-            )
+          | ClaudeEvents.ToolResult({toolUseId, run}) =>
+              // The matching ServerToolUseStart carried the name; a *_tool_result
+              // block only carries the id, so look it up in the still-open blocks.
+              let name =
+                Array.find(model.openBlocks, ((_, b)) =>
+                  switch b {
+                  | ToolUseBlock({id}) => id == toolUseId
+                  | _ => false
+                  }
+                )
+                ->Option.flatMap(((_, b)) =>
+                  switch b {
+                  | ToolUseBlock({name}) => Some(name)
+                  | _ => None
+                  }
+                )
+                ->Option.getOr("tool")
+              (
+                model,
+                [ToolRunDone({id: toolUseId, name, status: run.status, returnCode: run.returnCode})],
+              )
           | ClaudeEvents.OtherBlock(_) => (model, [])
           }
 
@@ -209,12 +230,12 @@ let update = (model: model, msg: msg): (model, array<logEvent>) =>
                   (model, [])
               | _ => (model, [])
               }
-          | Some(CodeExecBlock(_)) | None => (model, [])
+          | Some(ToolUseBlock(_)) | None => (model, [])
           }
 
       | ClaudeEvents.BlockStop({index}) =>
           switch findOpenBlock(model.openBlocks, index) {
-          | Some(CodeExecBlock(id)) => (model, [CodeRunStarted({id: id})])
+          | Some(ToolUseBlock({id, name})) => (model, [ToolRunStarted({id, name})])
           | Some(WebSearchBlock({queryEmittedAtStart: true})) => (model, [])
           | Some(WebSearchBlock({id, queryEmittedAtStart: false, partialInput})) => (
               model,

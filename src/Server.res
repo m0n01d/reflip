@@ -3,7 +3,7 @@
 // 127.0.0.1 only — CLAUDE.md hard design rule 4 (tailscale serve proxies
 // HTTPS to it later; never Funnel).
 
-type startResult = {server: Node.HttpServer.server, port: int}
+type startResult = {server: Node.HttpServer.server, port: int, store: Store.t}
 
 let jsonResponse = (res: Node.HttpServer.response, status: int, json: JSON.t): unit => {
   Node.HttpServer.writeHead(res, status, Dict.fromArray([("Content-Type", "application/json")]))
@@ -117,25 +117,162 @@ let handleRtt = (
   }
 }
 
-// One item's eBay merge. Fixture mode reads tests/fixtures/ebay-search-<n>;
-// real mode calls the Browse API. Missing eBay keys (non-fixture) mean the
-// stats are null and the returned note says why (surfaced as the reply's
-// top-level `ebayNote`).
-let mergeEbay = async (config: Config.t, index: int, item: Types.claudeItem) =>
-  if config.fixtures {
-    (EbayClient.decodeStats(EbayClient.searchFixture(config.fixturesDir, index)), None)
-  } else {
-    switch (config.ebayClientId, config.ebayClientSecret) {
-    | (Some(id), Some(secret)) =>
-      switch await EbayClient.fetchToken(~clientId=id, ~clientSecret=secret) {
-      | Ok(token) =>
-        switch await EbayClient.search(~accessToken=token, ~query=item.query) {
-        | Ok(json) => (EbayClient.decodeStats(json), None)
-        | Error(msg) => (None, Some("eBay search failed: " ++ msg))
+// -- Haul mode routes (docs/spec-haul-mode.md "The routes") -----------------
+
+type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string)
+
+let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
+  let parts = pathname->String.split("/")->Array.filter(s => s != "")
+  switch (method, Array.length(parts)) {
+  | ("POST", 2) =>
+    let a = Array.getUnsafe(parts, 0)
+    let b = Array.getUnsafe(parts, 1)
+    a == "api" && b == "hauls" ? Some(CreateHaul) : None
+  | ("POST", 4) => {
+      let a = Array.getUnsafe(parts, 0)
+      let b = Array.getUnsafe(parts, 1)
+      let id = Array.getUnsafe(parts, 2)
+      let c = Array.getUnsafe(parts, 3)
+      if a == "api" && b == "hauls" {
+        if c == "scenes" {
+          Some(AddScene(id))
+        } else if c == "done" {
+          Some(MarkDone(id))
+        } else {
+          None
         }
-      | Error(msg) => (None, Some("eBay auth failed: " ++ msg))
+      } else {
+        None
       }
-    | _ => (None, Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"))
+    }
+  | ("GET", 3) => {
+      let a = Array.getUnsafe(parts, 0)
+      let b = Array.getUnsafe(parts, 1)
+      let id = Array.getUnsafe(parts, 2)
+      a == "api" && b == "hauls" ? Some(GetHaul(id)) : None
+    }
+  | _ => None
+  }
+}
+
+// 1 to 64 characters of [A-Za-z0-9-], per "The routes" in the spec.
+let isClientIdChar = (c: string): bool =>
+  (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || (c >= "0" && c <= "9") || c == "-"
+
+let isValidClientId = (s: string): bool => {
+  let len = String.length(s)
+  len >= 1 && len <= 64 && Array.every(String.split(s, ""), isClientIdChar)
+}
+
+let errorJson = (res: Node.HttpServer.response, status: int, msg: string): unit =>
+  jsonResponse(res, status, Json.obj([("error", Json.str(msg))]))
+
+let haulStatusResponse = (
+  config: Config.t,
+  store: Store.t,
+  haulId: string,
+  status: int,
+  res: Node.HttpServer.response,
+): unit =>
+  switch HaulStatus.build(store, config, haulId) {
+  | Some(haulStatus) => jsonResponse(res, status, Types.encodeHaulStatus(haulStatus))
+  | None => errorJson(res, 404, "no such haul")
+  }
+
+let handleCreateHaul = async (
+  config: Config.t,
+  store: Store.t,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+): unit =>
+  if !config.fixtures && config.anthropicApiKey == None {
+    errorJson(res, 503, "no ANTHROPIC_API_KEY set and FIXTURES is not 1")
+  } else {
+    let body = await Node.HttpServer.readBody(req)
+    let text = String.trim(Node.Buffer.toStringWithEncoding(body, "utf8"))
+    let name = if text == "" {
+      None
+    } else {
+      switch JSON.parseOrThrow(text) {
+      | json => Json.stringField(json, "name")->Option.flatMap(n => n == "" ? None : Some(n))
+      | exception JsExn(_) => None
+      }
+    }
+    let haulId = Node.Crypto.randomUUID()
+    let now = Date.toISOString(Date.make())
+    Store.createHaul(store, ~haulId, ~name, ~now)->ignore
+    haulStatusResponse(config, store, haulId, 201, res)
+  }
+
+let maxPhotoBytes = 15 * 1024 * 1024
+
+let handleAddScene = async (
+  config: Config.t,
+  store: Store.t,
+  worker: HaulWorker.t,
+  haulId: string,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+): unit =>
+  switch Store.getHaul(store, haulId) {
+  | None => errorJson(res, 404, "no such haul")
+  | Some(haul) if haul.doneAt != None => errorJson(res, 409, "haul is done")
+  | Some(_) => {
+      let clientId = Dict.get(Node.HttpServer.headers(req), "x-client-id")->Option.getOr("")
+      if !isValidClientId(clientId) {
+        errorJson(res, 400, "x-client-id header must be 1 to 64 characters of [A-Za-z0-9-]")
+      } else {
+        switch Store.sceneByClient(store, ~haulId, ~clientId) {
+        | Some(existing) =>
+          jsonResponse(
+            res,
+            202,
+            Json.obj([("sceneId", Json.str(existing.sceneId)), ("duplicate", Json.boolJ(true))]),
+          )
+        | None => {
+            let body = await Node.HttpServer.readBody(req)
+            let len = Node.Buffer.length(body)
+            if len == 0 {
+              errorJson(res, 400, "empty body")
+            } else if len > maxPhotoBytes {
+              errorJson(res, 413, "photo over 15 MB")
+            } else {
+              let sceneId = Node.Crypto.randomUUID()
+              Node.Fs.mkdirSync(Node.Path.join([config.dataDir, "photos"]), {recursive: true})
+              let photoPath = Node.Path.join([config.dataDir, "photos", sceneId ++ ".jpg"])
+              Node.Fs.writeFileBuffer(photoPath, body)
+              let now = Date.toISOString(Date.make())
+              Store.addScene(store, ~haulId, ~clientId, ~sceneId, ~photoPath, ~now)->ignore
+              HaulWorker.kick(worker)
+              jsonResponse(res, 202, Json.obj([("sceneId", Json.str(sceneId))]))
+            }
+          }
+        }
+      }
+    }
+  }
+
+let handleGetHaul = (
+  config: Config.t,
+  store: Store.t,
+  haulId: string,
+  res: Node.HttpServer.response,
+): unit => haulStatusResponse(config, store, haulId, 200, res)
+
+let handleMarkDone = (
+  config: Config.t,
+  store: Store.t,
+  worker: HaulWorker.t,
+  haulId: string,
+  res: Node.HttpServer.response,
+): unit =>
+  switch Store.getHaul(store, haulId) {
+  | None => errorJson(res, 404, "no such haul")
+  | Some(_) => {
+      let now = Date.toISOString(Date.make())
+      Store.markDone(store, ~haulId, ~now)
+      HaulWorker.checkDrained(worker, haulId)
+      haulStatusResponse(config, store, haulId, 200, res)
     }
   }
 
@@ -144,89 +281,124 @@ let handleScene = async (
   model: string,
   body: Node.Buffer.t,
   res: Node.HttpServer.response,
-): unit => {
-  let serverStart = Date.now()
-  let imageBase64 = Node.Buffer.toStringWithEncoding(body, "base64")
-  let claudeStart = Date.now()
-  switch await ClaudeClient.call(~config, ~model, ~imageBase64) {
-  | Error(ClaudeClient.NoApiKey) =>
+): unit =>
+  switch JpegSize.dimensions(body) {
+  | None =>
     jsonResponse(
       res,
-      503,
-      Json.obj([("error", Json.str("no ANTHROPIC_API_KEY set and FIXTURES is not 1"))]),
+      400,
+      Json.obj([("error", Json.str("could not read the photo's width and height"))]),
     )
-  | Error(ClaudeClient.HttpError(status, msg)) =>
-    jsonResponse(
-      res,
-      502,
-      Json.obj([
-        ("error", Json.str("Claude request failed (" ++ Int.toString(status) ++ "): " ++ msg)),
-      ]),
-    )
-  | Error(ClaudeClient.Timeout(ms)) => {
-      let msg = "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
-      Console.error("reflip: " ++ msg ++ ", answering 504")
-      jsonResponse(res, 504, Json.obj([("error", Json.str(msg))]))
-    }
-  | Error(ClaudeClient.DecodeFailed(_)) =>
-    jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
-  | Ok(decoded) => {
-      let claudeMs = Date.now() -. claudeStart
-      let ebayStart = Date.now()
-      let merged = await Promise.all(
-        Array.mapWithIndex(decoded.items, (item, i) => mergeEbay(config, i, item)),
-      )
-      let ebayMs = Date.now() -. ebayStart
-      let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
-      let items = Array.mapWithIndex(decoded.items, (item, i) => {
-        let (ebay, _) = Array.getUnsafe(merged, i)
-        {
-          Types.name: item.name,
-          query: item.query,
-          confidence: item.confidence,
-          estimateLowUsd: item.estimateLowUsd,
-          estimateHighUsd: item.estimateHighUsd,
-          basis: item.basis,
-          sources: item.sources,
-          ebay,
-          soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+  | Some((sentWidth, sentHeight)) => {
+      let serverStart = Date.now()
+      let imageBase64 = Node.Buffer.toStringWithEncoding(body, "base64")
+      let claudeStart = Date.now()
+      switch (
+        await ClaudeClient.call(
+          ~config,
+          ~model,
+          ~imageBase64,
+          ~mode=ClaudeClient.Scene({width: sentWidth, height: sentHeight}),
+        )
+      ) {
+      | Error(ClaudeClient.NoApiKey) =>
+        jsonResponse(
+          res,
+          503,
+          Json.obj([("error", Json.str("no ANTHROPIC_API_KEY set and FIXTURES is not 1"))]),
+        )
+      | Error(ClaudeClient.HttpError(status, msg)) =>
+        jsonResponse(
+          res,
+          502,
+          Json.obj([
+            ("error", Json.str("Claude request failed (" ++ Int.toString(status) ++ "): " ++ msg)),
+          ]),
+        )
+      | Error(ClaudeClient.Timeout(ms)) => {
+          let msg = "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
+          Console.error("reflip: " ++ msg ++ ", answering 504")
+          jsonResponse(res, 504, Json.obj([("error", Json.str(msg))]))
         }
-      })
-      let sceneId = Node.Crypto.randomUUID()
-      let cost = {
-        Types.usd: Pricing.usdCost(~model, ~usage=decoded.usage),
-        inputTokens: decoded.usage.inputTokens,
-        outputTokens: decoded.usage.outputTokens,
-        cacheReadTokens: decoded.usage.cacheReadInputTokens,
-        cacheWriteTokens: decoded.usage.cacheCreationInputTokens,
-        webSearches: decoded.usage.webSearchRequests,
+      | Error(ClaudeClient.DecodeFailed(_)) =>
+        jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
+      | Error(ClaudeClient.CutOff) =>
+        jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
+      | Ok(decoded) => {
+          let claudeMs = Date.now() -. claudeStart
+          let ebayStart = Date.now()
+          let merged = await Promise.all(
+            Array.mapWithIndex(decoded.items, (item, i) => EbayClient.statsFor(config, i, item)),
+          )
+          let ebayMs = Date.now() -. ebayStart
+          let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
+          // The box was decoded raw off Claude's reply (ClaudeClient.decodeItem);
+          // finishing it needs the sent photo's size and the model's tier, both
+          // known only here. Falls back to Sonnet 5's tier if `model` somehow
+          // isn't one of Shared.allModels — it always is, since it came from
+          // Shared.modelId in route below.
+          let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
+          let items = Array.mapWithIndex(decoded.items, (item, i) => {
+            let (ebay, _) = Array.getUnsafe(merged, i)
+            {
+              Types.name: item.name,
+              query: item.query,
+              confidence: item.confidence,
+              estimateLowUsd: item.estimateLowUsd,
+              estimateHighUsd: item.estimateHighUsd,
+              basis: item.basis,
+              sources: item.sources,
+              ebay,
+              soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+              box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+            }
+          })
+          let sceneId = Node.Crypto.randomUUID()
+          let cost = {
+            Types.usd: Pricing.usdCost(~model, ~usage=decoded.usage),
+            inputTokens: decoded.usage.inputTokens,
+            outputTokens: decoded.usage.outputTokens,
+            cacheReadTokens: decoded.usage.cacheReadInputTokens,
+            cacheWriteTokens: decoded.usage.cacheCreationInputTokens,
+            webSearches: decoded.usage.webSearchRequests,
+          }
+          let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, decoded.raw)
+          let serverMs = Date.now() -. serverStart
+          let reply: Types.sceneReply = {
+            Types.sceneId,
+            model,
+            fixture: config.fixtures,
+            outputPath,
+            items,
+            imageWidth: sentWidth,
+            imageHeight: sentHeight,
+            timing: {Types.serverMs, claudeMs, ebayMs},
+            cost,
+            ebayNote,
+          }
+          SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
+          jsonResponse(res, 200, Types.encodeSceneReply(reply))
+        }
       }
-      let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, decoded.raw)
-      let serverMs = Date.now() -. serverStart
-      let reply: Types.sceneReply = {
-        Types.sceneId,
-        model,
-        fixture: config.fixtures,
-        outputPath,
-        items,
-        timing: {Types.serverMs, claudeMs, ebayMs},
-        cost,
-        ebayNote,
-      }
-      SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-      jsonResponse(res, 200, Types.encodeSceneReply(reply))
     }
   }
-}
 
 let route = async (
   config: Config.t,
+  store: Store.t,
+  worker: HaulWorker.t,
   req: Node.HttpServer.request,
   res: Node.HttpServer.response,
 ) => {
   let method = Node.HttpServer.method(req)
   let url = Node.Url.make(Node.HttpServer.url(req), "http://127.0.0.1")
   let pathname = Node.Url.pathname(url)
+  switch parseHaulPath(method, pathname) {
+  | Some(CreateHaul) => await handleCreateHaul(config, store, req, res)
+  | Some(AddScene(haulId)) => await handleAddScene(config, store, worker, haulId, req, res)
+  | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)
+  | Some(MarkDone(haulId)) => handleMarkDone(config, store, worker, haulId, res)
+  | None =>
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
   } else if method == "POST" && pathname == "/api/scene" {
@@ -267,12 +439,25 @@ let route = async (
     | _ => textResponse(res, 404, "text/plain", "not found")
     }
   }
+  }
 }
 
 let start = (config: Config.t): promise<startResult> =>
   Promise.make((resolve, _reject) => {
+    Node.Fs.mkdirSync(config.dataDir, {recursive: true})
+    let store = Store.openAt(Node.Path.join([config.dataDir, "reflip.db"]))
+    let resetCount = Store.resetRunning(store)
+    if resetCount > 0 {
+      Console.log(
+        "reflip: reset " ++ Int.toString(resetCount) ++ " running scene(s) back to queued",
+      )
+    }
+    let worker = HaulWorker.make(~config, ~store, ~onDrained=haulId => {
+      Console.log("reflip: haul " ++ haulId ++ " drained")
+      HaulEmail.send(config, store, haulId)
+    })
     let server = Node.HttpServer.createServer((req, res) =>
-      route(config, req, res)
+      route(config, store, worker, req, res)
       ->Promise.catch(
         err => {
           Console.error2("reflip: unhandled error", err)
@@ -282,7 +467,8 @@ let start = (config: Config.t): promise<startResult> =>
       )
       ->Promise.ignore
     )
-    Node.HttpServer.listen(server, config.port, "127.0.0.1", () =>
-      resolve({server, port: Node.HttpServer.address(server).port})
-    )
+    Node.HttpServer.listen(server, config.port, "127.0.0.1", () => {
+      HaulWorker.kick(worker)
+      resolve({server, port: Node.HttpServer.address(server).port, store})
+    })
   })

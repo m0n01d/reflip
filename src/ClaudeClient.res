@@ -11,10 +11,21 @@ type decodeError = EmptyContent | NoJsonFound | InvalidJson(string) | SchemaMism
 type decoded = {
   items: array<Types.claudeItem>,
   usage: Types.usage,
+  // Haul mode only (step 4): how many other, unlisted items the model saw.
+  // None for a scene-mode reply, or any reply whose JSON left it out.
+  otherCount: option<int>,
   raw: JSON.t,
 }
 
-type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int)
+type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int) | CutOff
+
+// Scene mode is the single-photo M0 endpoint. It carries the width and the
+// height of the sent photo, so the prompt can ask for a box per item in
+// pixels of that photo (docs/spec-item-boxes.md). Haul(gemMinUsd) is the haul
+// queue (step 4): a different prompt and schema, gated on the same $ floor
+// HaulStatus and HaulWorker use to decide what counts as a gem. The haul
+// prompt asks for no box, so it needs no size.
+type mode = Scene({width: int, height: int}) | Haul(float)
 
 let decodeUsage = (json: JSON.t): Types.usage => {
   let webSearchRequests =
@@ -67,6 +78,9 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       Json.arrayField(json, "sources")
       ->Option.map(arr => Array.filterMap(arr, JSON.Decode.string))
       ->Option.getOr([])
+    // Left raw here — Box.decode does the geometric validation, clamp, and
+    // rescale once the sent photo's size and the model's tier are known.
+    let box = Json.arrayField(json, "box")->Option.map(arr => Array.filterMap(arr, JSON.Decode.float))
     Ok({
       Types.name,
       maker,
@@ -76,6 +90,8 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       basis,
       confidence,
       sources,
+      where: Json.stringField(json, "where"),
+      box,
     })
   | _ => Error("item missing a required field")
   }
@@ -105,14 +121,25 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
     | None => Error(EmptyContent)
     | Some(text) =>
       switch JSON.parseOrThrow(text) {
-      | parsed => decodeItemsJson(parsed)->Result.map(items => {items, usage, raw: responseJson})
+      | parsed =>
+        decodeItemsJson(parsed)->Result.map(items => {
+          items,
+          usage,
+          otherCount: Json.intField(parsed, "otherCount"),
+          raw: responseJson,
+        })
       | exception JsExn(_) =>
         switch Json.firstJsonObjectSpan(text) {
         | None => Error(NoJsonFound)
         | Some(span) =>
           switch JSON.parseOrThrow(span) {
           | parsed2 =>
-            decodeItemsJson(parsed2)->Result.map(items => {items, usage, raw: responseJson})
+            decodeItemsJson(parsed2)->Result.map(items => {
+              items,
+              usage,
+              otherCount: Json.intField(parsed2, "otherCount"),
+              raw: responseJson,
+            })
           | exception JsExn(_) => Error(InvalidJson(text))
           }
         }
@@ -121,7 +148,39 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
   }
 }
 
-let buildRequestBody = (~model: string, ~imageBase64: string, ~structuredOutput: bool): JSON.t => {
+// Wraps decodeResponse with the one check decodeResponse cannot make on its
+// own: a reply Claude cut short (stop_reason "max_tokens") is not a decode
+// failure, it is a different callError, so the worker and /api/scene can
+// both give it its own message ("reply cut off") instead of the generic
+// decode-failed one.
+let parseClaudeJson = (json: JSON.t): result<decoded, callError> =>
+  if Json.stringField(json, "stop_reason") == Some("max_tokens") {
+    Error(CutOff)
+  } else {
+    switch decodeResponse(json) {
+    | Ok(d) => Ok(d)
+    | Error(e) => Error(DecodeFailed(e))
+    }
+  }
+
+let systemTextFor = (mode: mode): string =>
+  switch mode {
+  | Scene(_) => SystemPrompt.text
+  | Haul(gemMinUsd) => SystemPrompt.haulPrompt(~gemMinUsd)
+  }
+
+let outputFormatFor = (mode: mode): JSON.t =>
+  switch mode {
+  | Scene(_) => SystemPrompt.outputFormat
+  | Haul(_) => SystemPrompt.haulOutputFormat
+  }
+
+let buildRequestBody = (
+  ~model: string,
+  ~imageBase64: string,
+  ~structuredOutput: bool,
+  ~mode: mode,
+): JSON.t => {
   let webSearchType =
     Pricing.rowFor(model)->Option.map(r => r.webSearchToolType)->Option.getOr("web_search_20260209")
   let imageBlock = Json.obj([
@@ -135,10 +194,15 @@ let buildRequestBody = (~model: string, ~imageBase64: string, ~structuredOutput:
       ]),
     ),
   ])
-  let textBlock = Json.obj([
-    ("type", Json.str("text")),
-    ("text", Json.str("Value the resellable items on this table.")),
-  ])
+  let text = switch mode {
+  | Scene({width, height}) =>
+    "This photo is " ++
+    Int.toString(width) ++
+    " pixels wide and " ++
+    Int.toString(height) ++ " pixels tall. Value the resellable items on this table."
+  | Haul(_) => "Value the resellable items on this table."
+  }
+  let textBlock = Json.obj([("type", Json.str("text")), ("text", Json.str(text))])
   let tool = Json.obj([
     ("type", Json.str(webSearchType)),
     ("name", Json.str("web_search")),
@@ -148,7 +212,7 @@ let buildRequestBody = (~model: string, ~imageBase64: string, ~structuredOutput:
   let base = [
     ("model", Json.str(model)),
     ("max_tokens", Json.num(8192.0)),
-    ("system", Json.str(SystemPrompt.text)),
+    ("system", Json.str(systemTextFor(mode))),
     (
       "messages",
       Json.arr([
@@ -159,7 +223,7 @@ let buildRequestBody = (~model: string, ~imageBase64: string, ~structuredOutput:
   ]
   let fields =
     structuredOutput
-      ? Array.concat(base, [("output_config", Json.obj([("format", SystemPrompt.outputFormat)]))])
+      ? Array.concat(base, [("output_config", Json.obj([("format", outputFormatFor(mode))]))])
       : base
   Json.obj(fields)
 }
@@ -195,13 +259,19 @@ let postToClaude = async (~config: Config.t, apiKey: string, bodyJson: JSON.t) =
 // Otherwise: no ANTHROPIC_API_KEY -> NoApiKey (the server turns this into a
 // 503). On a 400 naming output_config, retry once without it, per CLAUDE.md
 // rule: "nobody confirmed output_config works together with web search."
-let send = async (~config: Config.t, ~model: string, ~imageBase64: string): result<decoded, callError> =>
+let send = async (
+  ~config: Config.t,
+  ~model: string,
+  ~imageBase64: string,
+  ~mode: mode,
+): result<decoded, callError> =>
   if config.fixtures {
-    let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, "claude-scene.json"]), "utf8")
-    switch decodeResponse(JSON.parseOrThrow(text)) {
-    | Ok(d) => Ok(d)
-    | Error(e) => Error(DecodeFailed(e))
+    let fixtureFile = switch mode {
+    | Scene(_) => "claude-scene.json"
+    | Haul(_) => "claude-haul.json"
     }
+    let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, fixtureFile]), "utf8")
+    parseClaudeJson(JSON.parseOrThrow(text))
   } else {
     switch config.anthropicApiKey {
     | None => Error(NoApiKey)
@@ -213,13 +283,10 @@ let send = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
         let resp = await postToClaude(
           ~config,
           apiKey,
-          buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput),
+          buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput, ~mode),
         )
         if Fetch.ok(resp) {
-          switch decodeResponse(await Fetch.json(resp)) {
-          | Ok(d) => Ok(d)
-          | Error(e) => Error(DecodeFailed(e))
-          }
+          parseClaudeJson(await Fetch.json(resp))
         } else if Fetch.status(resp) == 400 && config.structuredOutput {
           let errText = await Fetch.text(resp)
           if String.includes(errText, "output_config") {
@@ -227,13 +294,10 @@ let send = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
             let resp2 = await postToClaude(
               ~config,
               apiKey,
-              buildRequestBody(~model, ~imageBase64, ~structuredOutput=false),
+              buildRequestBody(~model, ~imageBase64, ~structuredOutput=false, ~mode),
             )
             if Fetch.ok(resp2) {
-              switch decodeResponse(await Fetch.json(resp2)) {
-              | Ok(d) => Ok(d)
-              | Error(e) => Error(DecodeFailed(e))
-              }
+              parseClaudeJson(await Fetch.json(resp2))
             } else {
               Error(HttpError(Fetch.status(resp2), await Fetch.text(resp2)))
             }
@@ -250,12 +314,18 @@ let send = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
 // A scene that runs past the timeout makes fetch reject with a DOMException
 // named TimeoutError. Return Timeout(ms) for it, so that the scene route
 // answers 504 with a JSON error and not the generic 500.
-let call = async (~config: Config.t, ~model: string, ~imageBase64: string): result<
+let call = async (~config: Config.t, ~model: string, ~imageBase64: string, ~mode: mode): result<
   decoded,
   callError,
 > =>
   try {
-    await send(~config, ~model, ~imageBase64)
+    await send(~config, ~model, ~imageBase64, ~mode)
   } catch {
   | JsExn(e) if JsExn.name(e) == Some("TimeoutError") => Error(Timeout(timeoutFor(config)))
   }
+
+// Wraps decodeResponse with the one check decodeResponse can't make on its
+// own: a reply Claude cut short (stop_reason "max_tokens") isn't a decode
+// failure, it's a different callError, so the worker and /api/scene can
+// both give it its own message ("reply cut off") instead of the generic
+// decode-failed one.

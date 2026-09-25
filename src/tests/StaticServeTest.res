@@ -19,6 +19,9 @@ let run = async () => {
     structuredOutput: true,
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
     distDir: Node.Path.join([cwd, "dist"]),
+    haulConcurrency: 4,
+    haulMaxUsd: 10.0,
+    haulGemMinUsd: 20.0,
   }
 
   let {Server.server, port} = await Server.start(config)

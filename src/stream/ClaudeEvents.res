@@ -11,7 +11,7 @@ type blockStart =
   | ThinkingStart
   | ServerToolUseStart({id: string, name: string, callerId: option<string>, input: option<JSON.t>})
   | WebSearchResult({toolUseId: string, outcome: webSearchOutcome})
-  | CodeExecutionResult({toolUseId: string, run: codeRun})
+  | ToolResult({toolUseId: string, run: codeRun})
   | OtherBlock(string)
 type delta =
   | TextDelta(string)
@@ -100,8 +100,13 @@ let blockDecoder: D.t<blockStart> = D.object(field =>
         toolUseId: field.required("tool_use_id", D.string),
         outcome: field.required("content", webSearchOutcomeDecoder),
       })
-  | "code_execution_tool_result" =>
-      CodeExecutionResult({
+  // Any other "<tool name>_tool_result" block: code_execution_tool_result,
+  // text_editor_code_execution_tool_result (seen live 2026-09-25), and
+  // whatever Anthropic ships next. Same content shape codeRunDecoder reads
+  // today — an object with optional return_code/stdout. A tool result that
+  // carries neither just decodes to {returnCode: None, status: None}.
+  | other if String.endsWith(other, "_tool_result") =>
+      ToolResult({
         toolUseId: field.required("tool_use_id", D.string),
         run: field.required("content", codeRunDecoder),
       })

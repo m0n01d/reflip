@@ -18,8 +18,8 @@ let kindOf = (evt: SceneStream.logEvent): string =>
   switch evt {
   | SceneStream.ClaudeStarted(_) => "ClaudeStarted"
   | SceneStream.Thinking => "Thinking"
-  | SceneStream.CodeRunStarted(_) => "CodeRunStarted"
-  | SceneStream.CodeRunDone(_) => "CodeRunDone"
+  | SceneStream.ToolRunStarted(_) => "ToolRunStarted"
+  | SceneStream.ToolRunDone(_) => "ToolRunDone"
   | SceneStream.SearchStarted(_) => "SearchStarted"
   | SceneStream.SearchDone(_) => "SearchDone"
   | SceneStream.SearchFailed(_) => "SearchFailed"
@@ -37,10 +37,10 @@ let kindOf = (evt: SceneStream.logEvent): string =>
 let expectedKinds = [
   "ClaudeStarted",
   "Thinking",
-  "CodeRunStarted",
+  "ToolRunStarted",
   "SearchStarted",
   "SearchDone",
-  "CodeRunDone",
+  "ToolRunDone",
   "SearchStarted",
   "SearchFailed",
   "ItemFound",
@@ -145,7 +145,7 @@ let checkAtChunkSize = (chunkSize: int) => {
   | _ => TestKit.check(label ++ ": finished present", false)
   }
 
-  let items = Array.map(SceneStream.items(model), si => si.item)
+  let items = SceneStream.items(model)
   TestKit.check(label ++ ": 3 items in the model", Array.length(items) == 3)
   TestKit.check(
     label ++ ": items equal ClaudeClient.decodeResponse on claude-scene.json",

@@ -23,18 +23,24 @@ let run = async () => {
     structuredOutput: true,
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
     distDir: Node.Path.join([cwd, "dist"]),
+    haulConcurrency: 4,
+    haulMaxUsd: 10.0,
+    haulGemMinUsd: 20.0,
     claudeUrl: "http://127.0.0.1:" ++ Int.toString(stubPort) ++ "/v1/messages",
     claudeTimeoutMs: 300,
   }
 
   let {Server.server: server, port} = await Server.start(config)
 
-  let resp = await Fetch.fetch(
+  // Real (non-fixture) mode: the server still needs real JPEG bytes to read
+  // a width and height from (JpegSize.res) before it ever reaches the stub.
+  let photo = Node.Fs.readFileBuffer(Node.Path.join([cwd, "tests/fixtures/table.jpg"]))
+  let resp = await Fetch.fetchBuffer(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg")]),
-      body: "stub-mode-ignores-this-body",
+      body: photo,
       signal: Fetch.AbortSignal.timeout(10_000),
     },
   )

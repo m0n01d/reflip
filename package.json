@@ -9,11 +9,14 @@
     "dev": "rescript build -w",
     "dev:web": "vite",
     "test": "npm run build && node src/tests/AllTests.res.mjs",
-    "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs"
+    "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs",
+    "email:check": "node --env-file-if-exists=$HOME/.config/reflip/env src/EmailCheck.res.mjs"
   },
   "dependencies": {
     "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
+    "idb-keyval": "^6.3.0",
+    "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "rescript": "^12.3.0",
