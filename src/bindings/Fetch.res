@@ -8,6 +8,10 @@ type response
 module AbortSignal = {
   type t
   @val @scope("AbortSignal") external timeout: int => t = "timeout"
+
+  @val @scope("AbortSignal") external any: array<t> => t = "any"
+
+  @get external aborted: t => bool = "aborted"
 }
 
 type requestInit = {
@@ -50,3 +54,36 @@ type headers
 @get external responseHeaders: response => headers = "headers"
 
 @send external getHeader: (headers, string) => Nullable.t<string> = "get"
+
+module AbortController = {
+  type t
+  @new external make: unit => t = "AbortController"
+  @get external signal: t => AbortSignal.t = "signal"
+  @send external abort: t => unit = "abort"
+}
+
+// Opaque: we only pass a chunk through to TextDecoder.decode, never inspect
+// its bytes in ReScript.
+module Uint8Array = {
+  type t
+}
+
+type readableStream
+
+type readableStreamReader
+
+// response.body is `ReadableStream | null` — Nullable, converted with
+// Nullable.toOption at the call site, per this file's existing getHeader.
+@get external bodyRaw: response => Nullable.t<readableStream> = "body"
+
+let body = (resp: response): option<readableStream> => Nullable.toOption(bodyRaw(resp))
+
+@send external getReader: readableStream => readableStreamReader = "getReader"
+
+// `value` is absent (not just empty) on the final `{done: true}` chunk in
+// some engines, so it is an optional field, not a plain Uint8Array.
+type readResult = {done: bool, value?: Uint8Array.t}
+
+@send external read: readableStreamReader => promise<readResult> = "read"
+
+@send external cancel: readableStreamReader => promise<unit> = "cancel"

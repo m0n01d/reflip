@@ -51,6 +51,9 @@ module Process = {
   // Used by EmailCheck.res to report a clean 0/1 status instead of an
   // uncaught-rejection stack trace.
   @scope("process") @val external exit: int => unit = "exit"
+  // [execPath, scriptPath, ...userArgs] -- StreamSpike.res slices off the
+  // first two to get just the flags the caller passed after the script name.
+  @scope("process") @val external argv: array<string> = "argv"
 }
 
 module Crypto = {
@@ -95,9 +98,40 @@ module HttpServer = {
 
   @send external onData: (request, string, Buffer.t => unit) => unit = "on"
   @send external onEnd: (request, string, unit => unit) => unit = "on"
+  // The stub Claude server in ClaudeStream tests: fires when the incoming
+  // request's underlying connection is terminated, so a test can see that
+  // an aborted downstream fetch (StreamRoute.res) really tore down the
+  // upstream connection to it too.
+  @send external onRequestClose: (request, string, unit => unit) => unit = "on"
 
   @send external writeHead: (response, int, dict<string>) => unit = "writeHead"
   @send external endWithBody: (response, string) => unit = "end"
+
+  // StreamRoute.res: write one SSE chunk without ending the response, force
+  // the headers out immediately (tailscale serve, a Go reverse proxy, only
+  // flushes a text/event-stream response once headers are on the wire), and
+  // tell whether "end" was already called — so a late write (a heartbeat, or
+  // an event still in flight when the client disconnects) is a no-op instead
+  // of a write-after-end throw.
+  @send external write: (response, string) => unit = "write"
+  @send external flushHeaders: response => unit = "flushHeaders"
+  @get external writableEnded: response => bool = "writableEnded"
+  // Server.res's server-level error handler: once StreamRoute.handle has
+  // already sent the SSE 200 headers, a later uncaught rejection must not
+  // call writeHead again (Node throws ERR_HTTP_HEADERS_SENT for that). This
+  // says whether the headers already went out.
+  @get external headersSent: response => bool = "headersSent"
+  // Test-only: StreamRouteTest.res's stub Claude server uses this to
+  // simulate a connection dropping mid-stream — a plain "end" is a clean
+  // finish, not the failure that test needs.
+  @send external destroy: response => unit = "destroy"
+  // Fires on a premature disconnect (checked via writableEnded above) and
+  // also once normally after our own "end" finishes flushing — the caller
+  // tells the two apart. A no-op "error" listener too: Node treats an
+  // unlistened "error" event as an uncaught exception, and a response
+  // being written to after the client aborted the connection can raise one.
+  @send external onClose: (response, string, unit => unit) => unit = "on"
+  @send external onResponseError: (response, string, unit => unit) => unit = "on"
 
   @module("node:http")
   external createServer: ((request, response) => unit) => server = "createServer"

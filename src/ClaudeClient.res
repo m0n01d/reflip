@@ -232,6 +232,8 @@ let buildRequestBody = (
     ("name", Json.str("web_search")),
     ("max_uses", Json.num(3.0)),
     ("blocked_domains", Json.arr([Json.str("ebay.com")])),
+    // Search directly, never from a code step: parallel code steps stalled for about 96 s (docs/stall-fix.md).
+    ("allowed_callers", Json.arr([Json.str("direct")])),
   ])
   let base = [
     ("model", Json.str(model)),

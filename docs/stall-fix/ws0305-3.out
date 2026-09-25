@@ -1,0 +1,19 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20250305 callers=default parallel=default
+headers: 2053ms
+message_start: 2058ms  input_tokens=5447
+search "vintage ceramic lighted church village houses resale value": start=22141ms done=25435ms count=10
+search "vintage blue white transferware divided relish bowl value": start=22503ms done=25438ms count=10
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: 26131ms
+first box: 26675ms
+first item: 28455ms
+last item: 50774ms
+done: 50835ms
+items: 20
+usage: in=41207 out=4827 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.1507
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

@@ -16,6 +16,9 @@ ThumbTest.run()
 CropTest.run()
 ScaleRefTest.run()
 BoxLayoutTest.run()
+SseTest.run()
+ItemScannerTest.run()
+SceneStreamTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server, plus EmailTest's stream-transport
@@ -30,6 +33,7 @@ let () =
   ->Promise.then(() => ClaudeCutOffTest.run())
   ->Promise.then(() => HaulTest.run())
   ->Promise.then(() => HaulEmailTest.run())
+  ->Promise.then(() => StreamRouteTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()

@@ -7,9 +7,11 @@ per the claude-api skill. `claude-haul.json` is the haul prompt's shape
 (step 4): each item has a `where`, and the reply has a top-level
 `otherCount`. Its third item's `estimateHighUsd` (15) sits under the
 default $20 gem threshold on purpose, to prove the threshold is code, not
-the prompt. We shaped each `ebay-search-*.json` from the eBay Browse API,
-per `~/code/yard-sale/worker/ebay.ts` and eBay's own docs. `table.jpg` is a
-small generated image, not a real photo.
+the prompt. We shaped `claude-stream.sse` by hand from the streaming
+Messages API docs. It embeds the same 3 items as `claude-scene.json`, and
+nobody streamed it from a real call. We shaped each `ebay-search-*.json`
+from the eBay Browse API, per `~/code/yard-sale/worker/ebay.ts` and eBay's
+own docs. `table.jpg` is a small generated image, not a real photo.
 
 Per `docs/spec-scale-ref.md`, `claude-scene.json` has `quarterSeen: true`
 at the top level, and each fixture's items mix a `size` value, an empty

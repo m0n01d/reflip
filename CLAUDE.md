@@ -38,6 +38,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - An image bills at about ceil(w/28) times ceil(h/28) tokens. Haiku 4.5 downsizes an image above a 1568px long edge. Opus 5.5 and Sonnet 5 downsize above 2576px.
 - Structured output uses `output_config.format`, not the old `output_format` field. Its shape is `{type: "json_schema", schema: {...}}`.
 - Never use forced `tool_choice`. It returns a 400 on Opus 5.5.
+- The web search tool sets `allowed_callers: ["direct"]`, so Claude never searches from a code step. On Sonnet 5, parallel code steps stalled for about 96 s. `disable_parallel_tool_use` returns a 400 with code-step search. See `docs/stall-fix.md`.
 
 `Pricing.res` holds this table in code. `PricingTest.res` checks it against a hand-computed value.
 
@@ -46,7 +47,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 1. eBay numbers never reach the model. The order is: call Claude first, then query eBay for each item, then merge the two in code. `GuardTest.res` checks this by building a real Claude request and searching its JSON for eBay fixture titles and prices.
 2. The web search tool blocks ebay.com, with `blocked_domains: ["ebay.com"]`.
 3. Secrets come from the environment only: `ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. `npm start` loads `~/.config/reflip/env` with Node's `--env-file-if-exists` flag. Never write a secret to the repo or to a log.
-4. The server binds to `127.0.0.1` only. Later, `tailscale serve` proxies HTTPS to it from outside. Never Funnel.
+4. The server binds to `127.0.0.1` only. `tailscale serve` proxies HTTPS to it from the tailnet. Never Funnel.
 5. `FIXTURES=1` forces fixture mode: both the Claude call and the eBay calls read from `tests/fixtures/` instead of the network. Outside fixture mode, a missing eBay key sets each item's `ebay` field to null and fills the reply's `ebayNote` field with why. A missing Anthropic key, without `FIXTURES=1`, returns a 503.
 
 ## How it fits together
@@ -63,10 +64,12 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.
 - `src/SceneLog.res`: appends one JSON line per scene to `data/scenes.jsonl`, and writes the raw Claude response to `data/raw/<sceneId>.json`. `data/` is gitignored.
-- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/:id/rtt`, `GET /api/scenes/:id/photo`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`. The photo route serves the stored JPEG for one scene, guarded the same way as the `dist/` files.
+- `src/Server.res`: the routes are `GET /`, `POST /api/scene`, `POST /api/scene/stream`, `POST /api/scene/:id/rtt`, `GET /api/scenes/:id/photo`, and the haul routes `POST /api/hauls`, `POST /api/hauls/:id/scenes`, `GET /api/hauls/:id` and `POST /api/hauls/:id/done`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`. The photo route serves the stored JPEG for one scene, guarded the same way as the `dist/` files.
 - `src/Main.res`: the entry point `npm start` runs.
 - Haul mode, per `docs/spec-haul-mode.md`: `Config.res` reads the environment. `Store.res` is the SQLite store in `data/reflip.db`. `HaulWorker.res` runs the Claude calls in the background. `HaulStatus.res` builds the reply of `GET /api/hauls/:id`.
 - The haul email: `Digest.res` builds the subject and the bodies. `Thumb.res` makes the thumbnails with `sips`. `Crop.res` crops one gem from its photo with `sips`, with a 10% margin, at most 240 px on the long edge. The digest has one section for each photo: the photo once, then a crop for each gem. `scripts/eml-preview.py` turns an outbox `.eml` into one HTML file, for a look in a browser. `Email.res` builds the MIME message and sends it through Gmail SMTP with `nodemailer`. `HaulEmail.res` chooses between a send and the outbox. `EmailCheck.res` is `npm run email:check`, which logs in and sends nothing.
+- `src/stream/`: the streaming scene route, per `docs/stream-spike.md`. `Sse.res` parses and encodes SSE. `ItemScanner.res` finds each item in the partial JSON. `ClaudeEvents.res` decodes each Claude stream event. `SceneStream.res` is the model and `update` from Claude events to log events. `ClaudeStream.res` is the network edge, with Stop and the time limit. `StreamRoute.res` is `POST /api/scene/stream`.
+- `src/spike/StreamSpike.res`: the measurement runner, `npm run spike:stream`. It writes to `data/spike/`.
 - `src/web/`: the phone page. `Index.res` mounts it. `App.res` holds the view and the side effects. `AppState.res` holds the pure model, the `msg` type, and `update`. `Resize.res` scales and encodes the photo on a canvas. `Api.res` calls `/api/scene` and posts the round-trip time. `WebApi.res` holds the typed DOM and canvas bindings.
 
 ## How to run
@@ -146,5 +149,5 @@ The eBay keys must come from the Production keyset on developer.ebay.com. The Ap
 
 ## What is not built yet
 
-- `tailscale serve` in front of this server.
+- The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, a way to keep the brain running, and its own `tailscale serve`. The MacBook Pro already runs one, per `docs/stream-spike.md`.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.
