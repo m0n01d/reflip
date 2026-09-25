@@ -46,7 +46,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 1. eBay numbers never reach the model. The order is: call Claude first, then query eBay for each item, then merge the two in code. `GuardTest.res` checks this by building a real Claude request and searching its JSON for eBay fixture titles and prices.
 2. The web search tool blocks ebay.com, with `blocked_domains: ["ebay.com"]`.
 3. Secrets come from the environment only: `ANTHROPIC_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`. `npm start` loads `~/.config/reflip/env` with Node's `--env-file-if-exists` flag. Never write a secret to the repo or to a log.
-4. The server binds to `127.0.0.1` only. Later, `tailscale serve` proxies HTTPS to it from outside. Never Funnel.
+4. The server binds to `127.0.0.1` only. `tailscale serve` proxies HTTPS to it from the tailnet. Never Funnel.
 5. `FIXTURES=1` forces fixture mode: both the Claude call and the eBay calls read from `tests/fixtures/` instead of the network. Outside fixture mode, a missing eBay key sets each item's `ebay` field to null and fills the reply's `ebayNote` field with why. A missing Anthropic key, without `FIXTURES=1`, returns a 503.
 
 ## How it fits together
@@ -85,6 +85,27 @@ To develop the page with fast reloads, run the brain in one shell and Vite in an
 
 `npm start` uses Node's `--env-file-if-exists` flag. If `~/.config/reflip/env` exists, that flag loads it. If not, `npm start` skips it and keeps going. Put each secret on its own `KEY=value` line there. No secret goes in this repo.
 
+## How to reach it from the phone
+
+The phone reaches the brain through `tailscale serve`, over HTTPS inside the tailnet. The brain stays on `127.0.0.1`, as hard rule 4 says. The Mac mini is the preferred host, because it is always on.
+
+The tailnet must have MagicDNS and HTTPS certificates turned on in the Tailscale admin console. Both were on at 2026-09-24. On macOS, the CLI is `/Applications/Tailscale.app/Contents/MacOS/Tailscale`.
+
+On the host Mac, do these steps once:
+
+1. Make sure that `tailscale status` shows the Mac as logged in. Note its machine name.
+2. Find the tailnet name in the `MagicDNSSuffix` field of `tailscale status --json`.
+3. In the reflip clone on that Mac, run `npm install && npm run build`.
+4. Start the brain with `PORT=8787 npm start`. Add `FIXTURES=1` for a test that bills nothing.
+5. Run `tailscale serve --bg --https=443 http://127.0.0.1:8787`.
+6. Make sure that `lsof -nP -iTCP:8787 -sTCP:LISTEN` shows `127.0.0.1:8787`, not `*:8787`.
+
+On the phone, turn Tailscale on and open `https://<machine>.<tailnet>.ts.net/`. The first request can take about 25 seconds, because Tailscale gets the TLS certificate then.
+
+The `--bg` flag keeps the serve configuration across a reboot and a Tailscale restart. The brain does not restart by itself. If nothing listens on port 8787, the phone gets an error from the proxy. To stop the proxy, run `tailscale serve --https=443 off`. Never run `tailscale funnel`, because it puts the brain on the public internet.
+
+On 2026-09-24, with Tailscale 1.102.4 on the MacBook Pro and a fixture brain, the phone loaded the page and showed the fixture reply.
+
 ## Use `resq` when editing the `.res` files here
 
 `resq` reads and edits ReScript structurally. Prefer it over reading a whole file and hand-splicing text. Run `resq guide` for the full command reference.
@@ -120,5 +141,5 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 ## What is not built yet
 
 - A real `~/.config/reflip/env` with live keys. Nobody has set one up yet, so every real run so far used `FIXTURES=1`.
-- `tailscale serve` in front of this server.
+- The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, and a way to keep the brain running.
 - The haul-summary email and the Chrome extension side of Flip Scout. Those are later spec work, not this spike.
