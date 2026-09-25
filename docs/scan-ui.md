@@ -143,12 +143,8 @@ both, but wave 2 owns their edits.
 
 ## 6. Hand-off
 
-- **Status:** wave 1 is done. Step 1 (`ScanEvent.res` wired into
-  `StreamRoute.res`) and step 2 (`Overlap.res`) are built, tested, and
-  pushed. This document is step 3, the last step of wave 1.
-- **Last commit before this document:** `d7b9a1a`, "Add Overlap: pure IoU
-  box matching for the spot pass," on branch `claude/scan-ui`.
-- **Next step:** start wave 2 (brain) or wave 3 (page) from §5. Wave 2
-  needs no wait for `claude/stall-fix` to merge before it starts.
-- **Merge:** this track does not merge to `main` yet. Per decision 4, it
-  merges after `claude/stall-fix`.
+- Status on 2026-09-25: waves 1 and 2 are merged on `claude/scan-ui` at `288738f`. The build and all tests pass.
+- A demo run in a headless browser worked end to end. It showed 22 items, the item sheet, Stop, and a forced drop that reconnected with `?from=3`. The shots are `docs/shots/scan-ui/logic-demo-*.png`. The page has no styles yet.
+- In progress: the design pass on `claude/scan-ui-view`, the spot pass on `claude/scan-ui-spot`, and a review of the merged code.
+- Next step: merge those two branches, fix the review findings, then run the smoke test in Safari on an iPhone 16 Simulator.
+- Merge: this track merges to `main` after `claude/stall-fix` merges (decision 4).
