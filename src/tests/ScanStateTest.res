@@ -376,4 +376,101 @@ let run = () => {
   runSendFailed()
   runConnectionState()
   runSubReconnecting()
+
+  // -- Copy gaps 2/3/6's new pure helpers ------------------------------------
+  // Nested here (not a sibling top-level fn) so it still runs from this one
+  // AllTests.res call, same one-run()-per-module shape as every other
+  // *Test.res file — resq v1 has no move/insert-before-declaration command,
+  // and a new top-level fn always lands at file end, after `run`, which
+  // `run` could not then call (ReScript has no forward reference across
+  // top-level lets). Nesting it here keeps the call inside `run()` as
+  // asked, with no ordering problem.
+  let runCopyGaps = () => {
+    TestKit.section("ScanState copy helpers: logToggleText, commaInt, hasNoEbayData")
+
+    TestKit.check("logToggleText singular", ScanState.logToggleText(1) == "Run log · 1 line")
+    TestKit.check("logToggleText plural", ScanState.logToggleText(5) == "Run log · 5 lines")
+
+    TestKit.check("commaInt 0", ScanState.commaInt(0) == "0")
+    TestKit.check("commaInt 218 (3 digits, no comma)", ScanState.commaInt(218) == "218")
+    TestKit.check("commaInt 40218 (one comma)", ScanState.commaInt(40218) == "40,218")
+    TestKit.check("commaInt 1000000 (two commas)", ScanState.commaInt(1000000) == "1,000,000")
+
+    let baseReply: Types.sceneReply = {
+      Types.sceneId: "copy-gap-scene",
+      model: "claude-sonnet-5",
+      fixture: true,
+      outputPath: "/tmp/reflip-test/copy-gap.json",
+      items: [testItem()],
+      imageWidth: 800,
+      imageHeight: 600,
+      timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
+      cost: {
+        Types.usd: 0.01,
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 0,
+      },
+      ebayNote: None,
+      quarterSeen: false,
+    }
+
+    TestKit.check(
+      "no sceneReply at all -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: None}) == false,
+    )
+
+    let withNote = {
+      ...baseReply,
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+    }
+    TestKit.check(
+      "ebayNote present (keys off) -> true",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(withNote)}) == true,
+    )
+
+    let everyItemNoEbay = {
+      ...baseReply,
+      ebayNote: None,
+      items: [testItem(), testItem(~name="Second", ())],
+    }
+    TestKit.check(
+      "ebayNote absent, every item's ebay=None (items non-empty) -> true",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(everyItemNoEbay)}) ==
+        true,
+    )
+
+    let oneItemHasEbay = {
+      ...baseReply,
+      ebayNote: None,
+      items: [
+        testItem(),
+        {
+          ...testItem(~name="Second", ()),
+          ebay: Some({
+            Types.count: 3,
+            minUsd: 5.0,
+            p25Usd: 6.0,
+            medianUsd: 7.0,
+            p75Usd: 8.0,
+            maxUsd: 9.0,
+          }),
+        },
+      ],
+    }
+    TestKit.check(
+      "ebayNote absent, one item has ebay=Some -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(oneItemHasEbay)}) ==
+        false,
+    )
+
+    let emptyItems = {...baseReply, ebayNote: None, items: []}
+    TestKit.check(
+      "ebayNote absent, items=[] -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(emptyItems)}) == false,
+    )
+  }
+  runCopyGaps()
 }
