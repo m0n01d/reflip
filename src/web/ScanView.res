@@ -111,12 +111,11 @@ let chevron = (~className: string) =>
   </svg>
 
 @react.component
-let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit) => {
+let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPhoto: ReactEvent.Form.t => unit) => {
   let (logOpen, setLogOpen) = React.useState(() => false)
   let (alsoOpen, setAlsoOpen) = React.useState(() => false)
   let onSheetClose = (_: ReactEvent.Mouse.t) => dispatch(ScanState.SheetClosed)
   let onRetry = (_: ReactEvent.Mouse.t) => dispatch(ScanState.NewScan)
-  let onNewPhoto = (_: ReactEvent.Form.t) => dispatch(ScanState.NewScan)
   let toggleLog = (_: ReactEvent.Mouse.t) => setLogOpen(o => !o)
   let toggleAlso = (_: ReactEvent.Mouse.t) => setAlsoOpen(o => !o)
 
