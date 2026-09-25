@@ -355,7 +355,7 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit) => {
                   ->Array.map(s => {
                     let label = switch s.item {
                     | Some(item) => ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd)
-                    | None => "not priced"
+                    | None => ScanState.isNotPriced(model, s) ? "not priced" : ""
                     }
                     <button
                       type_="button"
@@ -562,9 +562,11 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit) => {
                     : React.null}
                 </>
               | None =>
-                <p className="scan-sheet-not-priced">
-                  {React.string(stickerName(sticker) ++ " — not priced")}
-                </p>
+                ScanState.isNotPriced(model, sticker)
+                  ? <p className="scan-sheet-not-priced">
+                      {React.string(stickerName(sticker) ++ " — not priced")}
+                    </p>
+                  : React.null
               }}
             </div>
           </section>

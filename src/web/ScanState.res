@@ -19,8 +19,9 @@
 // sticker it overlaps at IoU >= 0.5 (Overlap.bestMatch): that spot sticker
 // keeps its number and gains the item's data, and the item's own box-made
 // sticker is marked `supersededBy` and never shown. A spot sticker with no
-// match stays dim, and after `end` it shows "not priced" (the view's job:
-// `sticker.item == None && ScanState.isEnded(model)`).
+// match stays dim, and after `end` it shows "not priced" — call
+// `ScanState.isNotPriced(model, sticker)`, not `sticker.item == None`
+// alone, so a still-live scan doesn't jump the gun.
 type sticker = {
   number: int, // 1-based, in landing order
   landedAtMs: float,
@@ -333,6 +334,13 @@ let isEnded = (m: model): bool =>
   | Ended(_) => true
   | _ => false
   }
+
+// A sticker settles into "not priced" only once the scene has ended —
+// before `end`, an unmatched spot sticker's estimate can still land, so
+// the view keeps it dim instead of naming it unpriced. One tested
+// function so both ScanView call sites share the same answer instead of
+// duplicating the check.
+let isNotPriced = (m: model, s: sticker): bool => s.item->Option.isNone && isEnded(m)
 
 // The network edge's state, derived for display (docs/scan-ui.md; a
 // later pass shows "Reconnecting" in the view). `reconnecting` already

@@ -186,6 +186,42 @@ let runNotPriced = () => {
   )
 }
 
+// -- The "not priced" pure decision (sticker type's own doc comment) ------
+let runIsNotPriced = () => {
+  TestKit.section("ScanState.isNotPriced: dim while live, \"not priced\" only once ended")
+  let events: array<ScanEvent.t> = [
+    ScanEvent.SpotItem({t: 100.0, index: 0, name: "Lonely spot", box: [0, 0, 10, 10]}),
+  ]
+  let live = events->Array.reduce(ScanState.initialModel, foldStep)
+  TestKit.check(
+    "an unmatched spot sticker is not \"not priced\" while the scan is live — its match can still land",
+    switch Array.get(live.stickers, 0) {
+    | Some(s) => !ScanState.isNotPriced(live, s)
+    | None => false
+    },
+  )
+  let ended = foldStep(live, ScanEvent.End({t: 5000.0, status: ScanEvent.EndStatus.Done}))
+  TestKit.check(
+    "the same unmatched sticker is \"not priced\" once the scan has ended",
+    switch Array.get(ended.stickers, 0) {
+    | Some(s) => ScanState.isNotPriced(ended, s)
+    | None => false
+    },
+  )
+  let priced: ScanState.sticker = {
+    number: 2,
+    landedAtMs: 0.0,
+    box: None,
+    name: None,
+    item: Some(testItem()),
+    supersededBy: None,
+  }
+  TestKit.check(
+    "a priced sticker is never \"not priced\", live or ended",
+    !ScanState.isNotPriced(live, priced) && !ScanState.isNotPriced(ended, priced),
+  )
+}
+
 // -- A stop ---------------------------------------------------------------
 let runStop = () => {
   TestKit.section("ScanState: StopTapped, then the authoritative end")
@@ -296,6 +332,7 @@ let run = () => {
   runNumbering()
   runTakeover()
   runNotPriced()
+  runIsNotPriced()
   runStop()
   runTimeout()
   runReplaySplit()
