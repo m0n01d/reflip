@@ -1,0 +1,25 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=default parallel=default
+headers: 2799ms
+message_start: 2804ms  input_tokens=8595
+tool code_execution: start=11384ms done=18777ms status=-
+tool code_execution: start=19606ms done=24129ms status=-
+tool code_execution: start=26695ms done=29134ms status=-
+tool code_execution: start=88129ms done=88143ms status=-
+tool code_execution: start=88147ms done=88148ms status=-
+search "vintage blue white transferware divided relish dish value": start=18723ms done=18753ms count=10
+search "ceramic Christmas village lighted church figurine collectible value": start=18753ms done=18774ms count=9
+search "vintage blue white transferware divided relish dish value": start=24109ms done=24127ms count=10
+code steps: 5  detection_timeout: 0  longest step: 7393ms
+first text delta: 88149ms
+first box: 88168ms
+first item: 89176ms
+last item: 109417ms
+done: 109644ms
+items: 27
+usage: in=69244 out=10108 cacheRead=0 cacheWrite=0 webSearch=3
+usd: $0.2696
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

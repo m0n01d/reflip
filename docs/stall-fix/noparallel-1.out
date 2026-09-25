@@ -1,0 +1,18 @@
+http failed: 400 {"type":"error","error":{"type":"invalid_request_error","message":"tool_choice.disable_parallel_tool_use: true cannot be used with programmatic tool calling"},"request_id":"req_011CfQFSUsagTBZf5GvfVUxZ"}
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=default parallel=off
+headers: -
+message_start: -  input_tokens=-
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: -
+first box: -
+first item: -
+last item: -
+done: 5095ms
+items: 0
+usage: in=0 out=0 cacheRead=0 cacheWrite=0 webSearch=0
+usd: $0.0000
+stop reason: (stream did not finish)
+items equal final decode: true
+outcome: http_failed
