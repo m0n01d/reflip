@@ -376,6 +376,26 @@ let mb = (bytes: int): string => {
   Float.toString(v)
 }
 
+// docs/design/scan-ui/Main.dc.html's logToggleText: one string for both the
+// open and closed state (the design has no separate open-state copy).
+let logToggleText = (n: int): string =>
+  "Run log · " ++ Int.toString(n) ++ (n == 1 ? " line" : " lines")
+
+// Comma-grouped digits, for a token count (always >= 0). Hand-rolled over
+// Array.reduceWithIndex (already used in BoxLayout.res) rather than
+// Array.join, which this repo's own Digest.res and HaulEmail.res comments
+// flag as unverified.
+let commaInt = (n: int): string => {
+  let digits = Int.toString(n)
+  let chars = String.split(digits, "")
+  let len = Array.length(chars)
+  chars->Array.reduceWithIndex("", (acc, ch, i) => {
+    let fromRight = len - i
+    let sep = i > 0 && mod(fromRight, 3) == 0 ? "," : ""
+    acc ++ sep ++ ch
+  })
+}
+
 let usd0 = (v: float): string => Int.toString(Float.toInt(Math.round(v)))
 
 let moneyRange = (lo: float, hi: float): string => "$" ++ usd0(lo) ++ "–" ++ usd0(hi)
@@ -578,10 +598,33 @@ let trackMarks = (m: model): array<trackMark> => {
   )
 }
 
+// The no-eBay banner's condition: either the scene says why (ebayNote —
+// keys are off), or every item that landed has no eBay data at all (keys
+// are on, nothing matched). Array.some/Array.every already used in this
+// file (see the search-state checks above).
+let hasNoEbayData = (m: model): bool =>
+  switch m.sceneReply {
+  | None => false
+  | Some(r) =>
+    r.ebayNote->Option.isSome ||
+      (Array.length(r.items) > 0 && Array.every(r.items, it => it.ebay->Option.isNone))
+  }
+
 // -- Run receipt ------------------------------------------------------------
 // Only what the wire contract actually carries: no resize or round-trip
 // time (docs/scan-ui.md's event table has no field for either — see this
 // track's report for why they are left out of a "plain working view").
+// modelLabel uses the plain name (docs/design/scan-ui/Main.dc.html's
+// MODELS[].label), not Shared.modelLabel's Settings-radio copy, which adds
+// "(the default)" to Sonnet 5 — right for a Settings option, wrong for a
+// receipt value.
+let shortModelLabel = (m: Shared.model): string =>
+  switch m {
+  | Shared.Sonnet5 => "Sonnet 5"
+  | Shared.Opus5_5 => "Opus 5.5"
+  | Shared.Haiku4_5 => "Haiku 4.5"
+  }
+
 type receipt = {
   modelLabel: string,
   photoSize: string,
@@ -593,10 +636,15 @@ type receipt = {
 
 let receipt = (m: model): option<receipt> =>
   m.doneInfo->Option.map(d => {
-    modelLabel: Shared.modelLabel(m.selectedModel),
-    photoSize: Int.toString(m.sentWidth) ++ " x " ++ Int.toString(m.sentHeight),
+    modelLabel: shortModelLabel(m.selectedModel),
+    photoSize: Int.toString(m.sentWidth) ++
+    "×" ++
+    Int.toString(m.sentHeight) ++
+    " · " ++
+    mb(m.uploadBytes) ++
+    " MB",
     claude: mss(d.claudeMs),
-    tokens: Int.toString(d.inputTokens) ++ " in, " ++ Int.toString(d.outputTokens) ++ " out",
+    tokens: commaInt(d.inputTokens) ++ " in · " ++ commaInt(d.outputTokens) ++ " out",
     webSearches: d.webSearches,
     cost: "$" ++ Float.toString(Math.round(d.usd *. 10000.0) /. 10000.0),
   })

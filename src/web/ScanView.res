@@ -227,7 +227,7 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
             }}
             {Array.length(lines) > 1
               ? <button type_="button" onClick={toggleLog} className="scan-log-toggle">
-                  <span> {React.string(logOpen ? "Hide the log" : "Show the full log")} </span>
+                  <span> {React.string(ScanState.logToggleText(Array.length(lines)))} </span>
                   {chevron(
                     ~className="scan-log-toggle-chevron" ++
                     (logOpen ? " scan-log-toggle-chevron-open" : ""),
@@ -261,17 +261,21 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                   </div>
                 </div>
               : React.null}
-            {switch model.sceneReply {
-            | Some({ebayNote: Some(note)}) =>
-              <div className="scan-noebay">
-                <span className="scan-noebay-icon" ariaHidden={true}> {React.string("⚠")} </span>
-                <span>
-                  <span className="scan-noebay-title"> {React.string("No eBay stats")} </span>
-                  <span className="scan-noebay-note"> {React.string(note)} </span>
-                </span>
-              </div>
-            | _ => React.null
-            }}
+            {ScanState.hasNoEbayData(model)
+              ? <div className="scan-noebay">
+                  <span className="scan-noebay-icon" ariaHidden={true}> {React.string("⚠")} </span>
+                  <span>
+                    <span className="scan-noebay-title"> {React.string("No eBay stats")} </span>
+                    <span className="scan-noebay-note">
+                      {React.string(
+                        model.sceneReply
+                        ->Option.flatMap(r => r.ebayNote)
+                        ->Option.getOr("No item had eBay stats."),
+                      )}
+                    </span>
+                  </span>
+                </div>
+              : React.null}
             {switch model.phase {
             | ScanState.Ended(ScanEvent.EndStatus.Failed) =>
               <button type_="button" onClick={onRetry} className="scan-retry-btn">
@@ -378,12 +382,12 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                 <div className="scan-receipt-label"> {React.string("RUN RECEIPT")} </div>
                 <div className="scan-receipt-rows">
                   {[
-                    ("model", r.modelLabel),
-                    ("photo", r.photoSize),
-                    ("claude", r.claude),
-                    ("tokens", r.tokens),
-                    ("web searches", Int.toString(r.webSearches)),
-                    ("cost", r.cost),
+                    ("Model", r.modelLabel),
+                    ("Photo", r.photoSize),
+                    ("Claude", r.claude),
+                    ("Tokens", r.tokens),
+                    ("Web searches", Int.toString(r.webSearches)),
+                    ("Cost", r.cost),
                   ]
                   ->Array.map(((key, value)) =>
                     <div key={key} className="scan-receipt-row">
@@ -402,6 +406,18 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                     onChange={onNewPhoto}
                     className="scan-file-input"
                   />
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+                    <circle cx="12" cy="13" r="3.6" />
+                  </svg>
                   {React.string("Snap another")}
                 </label>
               </div>
@@ -481,7 +497,7 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                     <span className="scan-sheet-price">
                       {React.string(ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd))}
                     </span>
-                    <span className="scan-sheet-price-label"> {React.string("estimate")} </span>
+                    <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
                   </div>
                   <div className="scan-sheet-conf-row">
                     <span className="scan-sheet-dots">
@@ -498,13 +514,20 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                       {React.string(ScanState.confidenceWord(item.confidence))}
                     </span>
                     <span className="scan-sheet-conf-num">
-                      {React.string(Int.toString(Float.toInt(Math.round(item.confidence *. 100.0))) ++ "%")}
+                      {React.string(toFixed(item.confidence, 2))}
                     </span>
                   </div>
                   <p className="scan-sheet-basis"> {React.string(item.basis)} </p>
                   <div className="scan-ebay">
                     <div className="scan-ebay-top">
-                      <span className="scan-ebay-label"> {React.string("EBAY")} </span>
+                      <span className="scan-ebay-label"> {React.string("eBay")} </span>
+                      <span className="scan-ebay-flag">
+                        {switch (item.ebay, model.sceneReply->Option.flatMap(r => r.ebayNote)) {
+                        | (Some(stats), _) => React.string(Int.toString(stats.count) ++ " listings")
+                        | (None, Some(_)) => React.string("stats off")
+                        | (None, None) => React.null
+                        }}
+                      </span>
                     </div>
                     {switch item.ebay {
                     | Some(stats) =>
