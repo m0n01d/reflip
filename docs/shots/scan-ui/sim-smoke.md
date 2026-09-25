@@ -4,6 +4,10 @@ Branch: `claude/scan-ui-smoke-sim`, base `origin/claude/scan-ui` @ 49cdf33.
 Server: `FIXTURES=1 FIXTURES_DIR=tests/fixtures/demo STREAM_FIXTURE_SPEED=3 PORT=8791`, fixture set `demo`.
 Simulator: iPhone 16e, UDID 48CB0D7C-F62B-4DE3-87FB-5DF6B495A5A7, opened via `simctl openurl` to `http://127.0.0.1:8791/`.
 
+Steps 5-9 (continued by a second agent) used two fresh servers instead: port 8791 at
+`STREAM_FIXTURE_SPEED=1` (~115s scan, for the Stop test in step 5) and port 8789 at
+`STREAM_FIXTURE_SPEED=10` (~12s scan, for steps 6-9).
+
 Bugs found are recorded below the table, not fixed.
 
 | step | control | expected | observed | pass/fail | shot |
@@ -12,3 +16,5 @@ Bugs found are recorded below the table, not fixed.
 | 2 | Wait for scan to end (~40s), then swipe down | Scan completes; swiping down reveals the results list | "0:37 Done", "14 worth a look", 35 items on the table, orange numbered price stickers on photo; swipe down revealed "Worth a look" list of 14 priced items (name, price range, confidence) | pass | sim-done.png, sim-done-list.png |
 | 3 | Tap a priced (orange numbered) sticker, then close | Item sheet opens with detail; closes back to the done view | Tapped #39: sheet opened with photo crop, "Cluster of vintage clear glass bottles", $15-40 estimate, "fair guess 40%", eBay search box + "See sold listings". X closed it back to the done/results view cleanly | pass | sim-sheet.png, sim-sheet-closed.png |
 | 4 | Tap a dim (non-orange) sticker that has no "worth a look" badge | "not priced" shown | Tried 3 different dim stickers (#25, #10, #29). All three opened the same item-sheet layout with an actual price estimate ("rough guess", $5-12 / $8-18 / $8-18) — none showed "not priced" text. Dim just means "below the worth-a-look bar", not "unpriced" | fail | sim-not-priced.png |
+| 5a | Pick a photo (speed-1 server, port 8791), wait ~10s (actually tapped at 0:38 of a live scan), tap Stop | Stopped view that keeps what it found | Tapped Stop mid-scan (31 found, 0:38). Briefly showed "Stopping / Finishing up the items already found." (0:42), then settled at "Stopped / Kept the 31 items found so far." with "1:00 Stopped by you" in the log and an "Also seen - 31" section. "New scan" button replaced Stop | pass | sim-stopped.png |
+| 5b | Tap "New scan" | Ready view | Returned cleanly to the "What's on the table?" ready view: Snap a photo button, "or pick from your photos" link, Scan\|Haul toggle | pass | sim-ready-again.png |
