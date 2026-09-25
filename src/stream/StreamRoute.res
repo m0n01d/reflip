@@ -116,6 +116,51 @@ let handle = async (
         }),
       )
 
+      // The spot pass (docs/scan-ui.md §1 decision 1): a second, toolless
+      // Claude call over the same photo, started right away so stickers
+      // land on the photo in seconds instead of near the end. It shares
+      // `controller`'s signal with the priced call below, so the same stop
+      // request or time limit reaches both, and so that once the priced
+      // pass ends, aborting `controller` again (see `finishSpot`) also
+      // cuts off a spot pass that is still running. A spot failure only
+      // ever writes spot-failed — it never touches the priced scene.
+      let spotUsageRef: ref<option<Types.usage>> = ref(None)
+
+      let onSpotEvent = (ms: float, evt: SpotPass.logEvent): unit =>
+        switch evt {
+        | SpotPass.Started({inputTokens}) => write(ScanEvent.SpotStarted({t: ms, inputTokens}))
+        | SpotPass.ItemFound({index, name, box}) =>
+          write(ScanEvent.SpotItem({t: ms, index, name, box}))
+        | SpotPass.Finished({usage}) => {
+            spotUsageRef := Some(usage)
+            write(
+              ScanEvent.SpotDone({
+                t: ms,
+                claudeMs: ms,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                usd: Pricing.usdCost(~model, ~usage),
+              }),
+            )
+          }
+        | SpotPass.Failed(message) => write(ScanEvent.SpotFailed({t: ms, message}))
+        }
+
+      let spotPromise = SpotPass.run(
+        ~config,
+        ~buildBody=(~structuredOutput) =>
+          SpotPass.buildRequestBody(
+            ~model,
+            ~imageBase64,
+            ~structuredOutput,
+            ~width=sentWidth,
+            ~height=sentHeight,
+          ),
+        ~stop=Fetch.AbortController.signal(controller),
+        ~onEvent=onSpotEvent,
+        ~onRaw=(_ms, _sseEvt) => (),
+      )
+
       // Set once ClaudeStream's onEvent callback sees Finished, so the
       // Completed branch below can hand buildSceneReply the same "how long
       // did Claude take" figure the `done` event already reported.
@@ -171,6 +216,60 @@ let handle = async (
           }
         | SceneStream.StreamFailed(msg) => write(ScanEvent.ErrorEvent({t: ms, message: msg}))
         }
+
+      // Aborts the spot pass if it is still running (docs/scan-ui.md
+      // brief: "when the priced pass ends, abort a spot pass that still
+      // runs"), then waits for it so any trailing spot event is written
+      // before `end`. Safe to call when `controller` is already aborted
+      // (a Stop request or the time limit got there first) — abort on an
+      // already-aborted AbortController is a no-op. Call this once, right
+      // before every `write(ScanEvent.End(...))` below.
+      let finishSpot = async (): unit => {
+        Fetch.AbortController.abort(controller)
+        switch await spotPromise {
+        | SpotPass.Completed(_) | SpotPass.Stopped(_) => ()
+        | SpotPass.TimedOut(_, timeoutMs) =>
+          write(
+            ScanEvent.SpotFailed({
+              t: elapsedMs(),
+              message: "the spot pass took longer than " ++
+              Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s",
+            }),
+          )
+        | SpotPass.HttpFailed(status, text) =>
+          write(
+            ScanEvent.SpotFailed({
+              t: elapsedMs(),
+              message: "spot request failed (" ++ Int.toString(status) ++ "): " ++ text,
+            }),
+          )
+        | SpotPass.NoApiKey =>
+          write(
+            ScanEvent.SpotFailed({
+              t: elapsedMs(),
+              message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1",
+            }),
+          )
+        | SpotPass.NoFixture(message) => write(ScanEvent.SpotFailed({t: elapsedMs(), message}))
+        }
+        // Logged as its own line, tagged with the same sceneId, rather
+        // than spliced into the scene line below: that line's JSON comes
+        // from Types.encodeSceneReply in the normal-completion branch,
+        // which is outside this file.
+        switch spotUsageRef.contents {
+        | None => ()
+        | Some(usage) =>
+          SceneLog.appendLine(
+            config.dataDir,
+            Json.obj([
+              ("sceneId", Json.str(sceneId)),
+              ("spotInputTokens", Json.num(Int.toFloat(usage.inputTokens))),
+              ("spotOutputTokens", Json.num(Int.toFloat(usage.outputTokens))),
+              ("spotUsd", Json.num(Pricing.usdCost(~model, ~usage))),
+            ]),
+          )
+        }
+      }
 
       let outcome = await ClaudeStream.run(
         ~config,
@@ -231,6 +330,7 @@ let handle = async (
               Float.toString(cost.usd),
             )
             write(ScanEvent.ErrorEvent({t: ms, message: "reply cut off"}))
+            await finishSpot()
             write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           }
         | None => {
@@ -250,6 +350,7 @@ let handle = async (
             )
             SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
             write(ScanEvent.Scene(reply))
+            await finishSpot()
             write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
           }
         }
@@ -290,6 +391,7 @@ let handle = async (
             ~quarterSeen=SceneStream.quarterSeen(m),
           )
           write(ScanEvent.Scene(reply))
+          await finishSpot()
           write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Stopped}))
         }
       | ClaudeStream.TimedOut(m, timeoutMs) => {
@@ -332,12 +434,14 @@ let handle = async (
             ~quarterSeen=SceneStream.quarterSeen(m),
           )
           write(ScanEvent.Scene(reply))
+          await finishSpot()
           write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Timeout}))
         }
       | ClaudeStream.HttpFailed(status, text) => {
           let ms = elapsedMs()
           let msg = "Claude request failed (" ++ Int.toString(status) ++ "): " ++ text
           write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+          await finishSpot()
           write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
         }
       | ClaudeStream.NoApiKey => {
@@ -345,6 +449,7 @@ let handle = async (
           write(
             ScanEvent.ErrorEvent({t: ms, message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1"}),
           )
+          await finishSpot()
           write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
         }
       }
