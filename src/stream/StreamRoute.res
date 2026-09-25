@@ -97,13 +97,20 @@ let handle = async (
           Node.HttpServer.write(res, Sse.encode(~event, ~data))
         }
 
-      writeEvent(
-        "photo-received",
-        Json.obj([
-          ("bytes", Json.num(Int.toFloat(Node.Buffer.length(body)))),
-          ("width", Json.num(Int.toFloat(sentWidth))),
-          ("height", Json.num(Int.toFloat(sentHeight))),
-        ]),
+      // Every SSE event goes out through ScanEvent.toSse, so the wire shape
+      // and the page's decode share one definition — see ScanEvent.res.
+      let write = (evt: ScanEvent.t): unit => {
+        let (event, data) = ScanEvent.toSse(evt)
+        writeEvent(event, data)
+      }
+
+      write(
+        ScanEvent.PhotoReceived({
+          sceneId,
+          bytes: Node.Buffer.length(body),
+          width: sentWidth,
+          height: sentHeight,
+        }),
       )
 
       // Self-terminating: each beat reschedules itself only once it has
@@ -138,93 +145,43 @@ let handle = async (
       let onEvent = (ms: float, evt: SceneStream.logEvent): unit =>
         switch evt {
         | SceneStream.ClaudeStarted({inputTokens}) =>
-          writeEvent(
-            "claude-started",
-            Json.obj([("t", Json.num(ms)), ("inputTokens", Json.num(Int.toFloat(inputTokens)))]),
-          )
-        | SceneStream.Thinking => writeEvent("thinking", Json.obj([("t", Json.num(ms))]))
-        | SceneStream.ToolRunStarted({id, name}) =>
-          writeEvent(
-            "tool-run",
-            Json.obj([("t", Json.num(ms)), ("id", Json.str(id)), ("name", Json.str(name))]),
-          )
+          write(ScanEvent.ClaudeStarted({t: ms, inputTokens}))
+        | SceneStream.Thinking => write(ScanEvent.Thinking({t: ms}))
+        | SceneStream.ToolRunStarted({id, name}) => write(ScanEvent.ToolRun({t: ms, id, name}))
         | SceneStream.ToolRunDone({id, name, status}) =>
-          writeEvent(
-            "tool-done",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("id", Json.str(id)),
-              ("name", Json.str(name)),
-              ("status", Types.encodeOptString(status)),
-            ]),
-          )
+          write(ScanEvent.ToolDone({t: ms, id, name, status}))
         | SceneStream.SearchStarted({id, query}) =>
-          writeEvent(
-            "search-started",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("id", Json.str(id)),
-              ("query", Types.encodeOptString(query)),
-            ]),
-          )
+          write(ScanEvent.SearchStarted({t: ms, id, query}))
         | SceneStream.SearchDone({id, resultCount}) =>
-          writeEvent(
-            "search-done",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("id", Json.str(id)),
-              ("count", Json.num(Int.toFloat(resultCount))),
-            ]),
-          )
+          write(ScanEvent.SearchDone({t: ms, id, count: resultCount}))
         | SceneStream.SearchFailed({id, errorCode}) =>
-          writeEvent(
-            "search-failed",
-            Json.obj([("t", Json.num(ms)), ("id", Json.str(id)), ("errorCode", Json.str(errorCode))]),
-          )
-        | SceneStream.BoxFound({index, box}) =>
-          writeEvent(
-            "box",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("index", Json.num(Int.toFloat(index))),
-              ("box", Json.arr(Array.map(box, n => Json.num(Int.toFloat(n))))),
-            ]),
-          )
+          write(ScanEvent.SearchFailed({t: ms, id, errorCode}))
+        | SceneStream.BoxFound({index, box}) => write(ScanEvent.Box({t: ms, index, box}))
         | SceneStream.ItemFound({index, item}) =>
-          writeEvent(
-            "item",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("index", Json.num(Int.toFloat(index))),
-              ("item", Types.encodeReplyItem(toReplyItemPartial(item))),
-            ]),
-          )
+          write(ScanEvent.Item({t: ms, index, item: toReplyItemPartial(item)}))
         // Not in the brief's event list — closest fit is the same `error`
         // shape the outer outcomes below use, rather than dropping a
         // failure silently.
         | SceneStream.ItemRejected({index, reason}) =>
-          writeEvent(
-            "error",
-            Json.obj([
-              ("t", Json.num(ms)),
-              ("message", Json.str("item " ++ Int.toString(index) ++ " rejected: " ++ reason)),
-            ]),
+          write(
+            ScanEvent.ErrorEvent({
+              t: ms,
+              message: "item " ++ Int.toString(index) ++ " rejected: " ++ reason,
+            }),
           )
         | SceneStream.Finished({usage}) => {
             claudeMsRef := ms
-            writeEvent(
-              "done",
-              Json.obj([
-                ("claudeMs", Json.num(ms)),
-                ("inputTokens", Json.num(Int.toFloat(usage.inputTokens))),
-                ("outputTokens", Json.num(Int.toFloat(usage.outputTokens))),
-                ("webSearches", Json.num(Int.toFloat(usage.webSearchRequests))),
-                ("usd", Json.num(Pricing.usdCost(~model, ~usage))),
-              ]),
+            write(
+              ScanEvent.Done({
+                claudeMs: ms,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                webSearches: usage.webSearchRequests,
+                usd: Pricing.usdCost(~model, ~usage),
+              }),
             )
           }
-        | SceneStream.StreamFailed(msg) =>
-          writeEvent("error", Json.obj([("t", Json.num(ms)), ("message", Json.str(msg))]))
+        | SceneStream.StreamFailed(msg) => write(ScanEvent.ErrorEvent({t: ms, message: msg}))
         }
 
       let outcome = await ClaudeStream.run(
@@ -259,7 +216,8 @@ let handle = async (
             ~quarterSeen=SceneStream.quarterSeen(m),
           )
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-          writeEvent("scene", Types.encodeSceneReply(reply))
+          write(ScanEvent.Scene(reply))
+          write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
           if !Node.HttpServer.writableEnded(res) {
             Node.HttpServer.endWithBody(res, "")
           }
@@ -267,7 +225,7 @@ let handle = async (
       | ClaudeStream.Stopped(m) => {
           let ms = elapsedMs()
           let items = SceneStream.items(m)
-          writeEvent("stop", Json.obj([("t", Json.num(ms))]))
+          write(ScanEvent.Stop({t: ms}))
           SceneLog.appendLine(
             config.dataDir,
             Json.obj([
@@ -281,30 +239,36 @@ let handle = async (
               ),
             ]),
           )
+          write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Stopped}))
           if !Node.HttpServer.writableEnded(res) {
             Node.HttpServer.endWithBody(res, "")
           }
         }
       | ClaudeStream.TimedOut(_, timeoutMs) => {
+          let ms = elapsedMs()
           let msg =
             "Claude took longer than " ++ Float.toString(Int.toFloat(timeoutMs) /. 1000.0) ++ " s"
-          writeEvent("error", Json.obj([("message", Json.str(msg))]))
+          write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+          write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Timeout}))
           if !Node.HttpServer.writableEnded(res) {
             Node.HttpServer.endWithBody(res, "")
           }
         }
       | ClaudeStream.HttpFailed(status, text) => {
+          let ms = elapsedMs()
           let msg = "Claude request failed (" ++ Int.toString(status) ++ "): " ++ text
-          writeEvent("error", Json.obj([("message", Json.str(msg))]))
+          write(ScanEvent.ErrorEvent({t: ms, message: msg}))
+          write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           if !Node.HttpServer.writableEnded(res) {
             Node.HttpServer.endWithBody(res, "")
           }
         }
       | ClaudeStream.NoApiKey => {
-          writeEvent(
-            "error",
-            Json.obj([("message", Json.str("no ANTHROPIC_API_KEY set and FIXTURES is not 1"))]),
+          let ms = elapsedMs()
+          write(
+            ScanEvent.ErrorEvent({t: ms, message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1"}),
           )
+          write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           if !Node.HttpServer.writableEnded(res) {
             Node.HttpServer.endWithBody(res, "")
           }

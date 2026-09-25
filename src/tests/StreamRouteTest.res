@@ -9,7 +9,7 @@ let cwd = Node.Process.cwd()
 // Every SceneStream.logEvent the fixture SSE actually produces, in order,
 // via StreamRoute's SSE names — see SceneStreamTest.res's own
 // `expectedKinds` for the SceneStream-level list this maps from. Wrapped
-// with StreamRoute's own photo-received and scene.
+// with StreamRoute's own photo-received, scene and end.
 let expectedKinds = [
   "photo-received",
   "claude-started",
@@ -25,6 +25,7 @@ let expectedKinds = [
   "item",
   "done",
   "scene",
+  "end",
 ]
 
 // Reads a fetch response body as SSE, one event at a time, with its

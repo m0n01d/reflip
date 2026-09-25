@@ -18,6 +18,7 @@ BoxLayoutTest.run()
 SseTest.run()
 ItemScannerTest.run()
 SceneStreamTest.run()
+ScanEventTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server, plus EmailTest's stream-transport
