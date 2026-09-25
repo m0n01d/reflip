@@ -6,6 +6,7 @@ PricingTest.run()
 ClaudeDecodeTest.run()
 EbayDecodeTest.run()
 GuardTest.run()
+StoreTest.run()
 AppStateTest.run()
 Console.log("all sync tests passed")
 
