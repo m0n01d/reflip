@@ -634,7 +634,14 @@ let start = (config: Config.t): promise<startResult> =>
       ->Promise.catch(
         err => {
           Console.error2("reflip: unhandled error", err)
-          textResponse(res, 500, "text/plain", "internal error")
+          // A route that already streamed a reply (SSE, for example) has
+          // called writeHead once already -- calling it again here throws
+          // ERR_HTTP_HEADERS_SENT and that throw, inside a .catch handler
+          // with nothing after it in the chain, becomes an unhandled
+          // rejection that takes the whole server down.
+          if !Node.HttpServer.headersSent(res) {
+            textResponse(res, 500, "text/plain", "internal error")
+          }
           Promise.resolve()
         },
       )

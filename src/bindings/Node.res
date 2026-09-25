@@ -107,6 +107,7 @@ module HttpServer = {
   @send external write: (response, string) => unit = "write"
   @send external flushHeaders: response => unit = "flushHeaders"
   @get external writableEnded: response => bool = "writableEnded"
+  @get external headersSent: response => bool = "headersSent"
   // Fires on a premature disconnect (checked via writableEnded above) and
   // also once normally after our own "end" finishes flushing — the caller
   // tells the two apart. A no-op "error" listener too: Node treats an

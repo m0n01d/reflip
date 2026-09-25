@@ -160,6 +160,14 @@ let handle = async (
         ~onEvent=onSpotEvent,
         ~onRaw=(_ms, _sseEvt) => (),
       )
+      // A rejection here (anything past runLive's own TimeoutError/AbortError
+      // catches, such as a plain connection failure) would otherwise reach
+      // Node as an unhandled rejection once nothing else is still waiting on
+      // spotPromise -- in particular when the priced call below also fails
+      // and the catch around it never reaches finishSpot. This observer only
+      // guards against that crash; finishSpot below still awaits the real
+      // spotPromise and sees its real value.
+      spotPromise->Promise.catch(_ => Promise.resolve(SpotPass.NoApiKey))->ignore
 
       // Set once ClaudeStream's onEvent callback sees Finished, so the
       // Completed branch below can hand buildSceneReply the same "how long
@@ -271,6 +279,17 @@ let handle = async (
         }
       }
 
+      // Everything from here on can throw: ClaudeStream.run makes the
+      // live fetch to Claude, and buildSceneReply (called below on every
+      // branch) calls out to eBay. Neither is guaranteed not to reject --
+      // a network failure that is not a timeout or a client abort is not
+      // caught inside ClaudeStream.runLive, and EbayClient.fetchToken and
+      // EbayClient.search have no catch of their own either. Before this
+      // try, such a rejection unwound clear out of `handle` with no `end`
+      // event ever sent, so the scene stayed Running forever -- and the
+      // rejection then crashed the process at Server.res's top level
+      // (Opus review of 60920ed, brief item 1).
+      try {
       let outcome = await ClaudeStream.run(
         ~config,
         ~buildBody=(~structuredOutput) =>
@@ -450,6 +469,14 @@ let handle = async (
             ScanEvent.ErrorEvent({t: ms, message: "no ANTHROPIC_API_KEY set and FIXTURES is not 1"}),
           )
           await finishSpot()
+          write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
+        }
+      }
+      } catch {
+      | JsExn(e) => {
+          let ms = elapsedMs()
+          let message = JsExn.message(e)->Option.getOr("unknown error")
+          write(ScanEvent.ErrorEvent({t: ms, message: "scene failed: " ++ message}))
           write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
         }
       }
