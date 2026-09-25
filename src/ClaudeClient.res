@@ -21,7 +21,7 @@ type decoded = {
   quarterSeen: bool,
 }
 
-type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int) | CutOff
+type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int) | CutOff(JSON.t)
 
 // Scene mode is the single-photo M0 endpoint. It carries the width and the
 // height of the sent photo, so the prompt can ask for a box per item in
@@ -107,10 +107,10 @@ let decodeItemsJson = (json: JSON.t): result<array<Types.claudeItem>, decodeErro
   | Some(arr) => Array.map(arr, decodeItem)->Result.all->Result.mapError(msg => SchemaMismatch(msg))
   }
 
-// A decode failure is an error variant, never a crash: JSON.parseOrThrow's
-// SyntaxError is caught with the `exception JsExn(_)` arm below, and every
-// other branch is total over its input.
-let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
+// Public so the CutOff callError (a reply cut short before decodeResponse
+// ever runs) can still recover its usage — the scene route logs the cost of
+// a cut-off reply the same way it logs a decoded one.
+let usageOfResponse = (responseJson: JSON.t): Types.usage => {
   let emptyUsage: Types.usage = {
     inputTokens: 0,
     outputTokens: 0,
@@ -118,7 +118,14 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
     cacheCreationInputTokens: 0,
     webSearchRequests: 0,
   }
-  let usage = Json.field(responseJson, "usage")->Option.map(decodeUsage)->Option.getOr(emptyUsage)
+  Json.field(responseJson, "usage")->Option.map(decodeUsage)->Option.getOr(emptyUsage)
+}
+
+// A decode failure is an error variant, never a crash: JSON.parseOrThrow's
+// SyntaxError is caught with the `exception JsExn(_)` arm below, and every
+// other branch is total over its input.
+let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
+  let usage = usageOfResponse(responseJson)
   switch Json.arrayField(responseJson, "content") {
   | None => Error(EmptyContent)
   | Some(blocks) =>
@@ -162,7 +169,7 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
 // decode-failed one.
 let parseClaudeJson = (json: JSON.t): result<decoded, callError> =>
   if Json.stringField(json, "stop_reason") == Some("max_tokens") {
-    Error(CutOff)
+    Error(CutOff(json))
   } else {
     switch decodeResponse(json) {
     | Ok(d) => Ok(d)
@@ -330,9 +337,3 @@ let call = async (~config: Config.t, ~model: string, ~imageBase64: string, ~mode
   } catch {
   | JsExn(e) if JsExn.name(e) == Some("TimeoutError") => Error(Timeout(timeoutFor(config)))
   }
-
-// Wraps decodeResponse with the one check decodeResponse can't make on its
-// own: a reply Claude cut short (stop_reason "max_tokens") isn't a decode
-// failure, it's a different callError, so the worker and /api/scene can
-// both give it its own message ("reply cut off") instead of the generic
-// decode-failed one.

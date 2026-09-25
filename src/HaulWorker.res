@@ -139,7 +139,7 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
   | ClaudeClient.Timeout(ms) =>
     "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
   | ClaudeClient.DecodeFailed(_) => "could not decode Claude's reply"
-  | ClaudeClient.CutOff => "reply cut off"
+  | ClaudeClient.CutOff(_) => "reply cut off"
   }
 
 let runScene = async (t: t, scene: Store.scene): outcome =>
