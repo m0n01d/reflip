@@ -74,7 +74,7 @@ The haul build is in progress. It edits the same files: `SystemPrompt.res`, `Typ
 
 ## Later
 
-- Crops in the haul digest email. Node has no canvas, so a crop on the brain needs an image library. Put the choice through the package gate in `~/code/CLAUDE.md` first.
+- Done 2026-09-25: crops in the haul digest email. See `docs/spec-haul-mode.md`, Shape, "The digest and the email". ~~Node has no canvas, so a crop on the brain needs an image library. Put the choice through the package gate in `~/code/CLAUDE.md` first.~~ Struck 2026-09-25: checked on the Mac, `sips -c H W --cropOffset Y X src --out dest` crops the WxH region with its top-left corner at (X, Y). A PIL crop of the same region differed by a mean of 2.0. A crop of a swapped or a centered region differed by a mean of 61 to 63. `Thumb.res` already runs `/usr/bin/sips`.
 - A second look at a small item: send its crop back to Claude. The guide advises a crop for fine targets.
 - A box on the live camera view, as `flip-scout.md` in app-ideas describes.
 
