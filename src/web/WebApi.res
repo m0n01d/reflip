@@ -189,3 +189,8 @@ external addDocumentListener: (document, string, unit => unit) => unit = "addEve
 type windowLike
 @val external windowGlobal: windowLike = "window"
 @send external addWindowListener: (windowLike, string, unit => unit) => unit = "addEventListener"
+
+@send
+external removeDocumentListener: (document, string, unit => unit) => unit = "removeEventListener"
+
+@send external removeWindowListener: (windowLike, string, unit => unit) => unit = "removeEventListener"

@@ -52,7 +52,9 @@ let runTranscript = () => {
   let events = decodeAll(raw)
   TestKit.check("every event in the transcript decodes", Array.length(events) == Array.length(sseEvents))
   let m = events->Array.reduce(ScanState.initialModel, foldStep)
-  TestKit.check("eventCount counts every event, decoded or not", m.eventCount == 15)
+  // eventCount lived on ScanState.model here before bug D (288738f
+  // review): it was unused and drifted from ScanApi's own
+  // localEventCount, which is the one counter now — see ScanApiTest.res.
   TestKit.check("phase ended done", m.phase == Ended(ScanEvent.EndStatus.Done))
   TestKit.check(
     "3 items landed, each with no prior box event, each got its own sticker",
@@ -219,10 +221,6 @@ let runReplaySplit = () => {
     let rest = events->Array.slice(~start=n, ~end=Array.length(events))
     let twoPass =
       rest->Array.reduce(first->Array.reduce(ScanState.initialModel, foldStep), foldStep)
-    TestKit.check(
-      "split at " ++ Int.toString(n) ++ ": same eventCount",
-      onePass.eventCount == twoPass.eventCount,
-    )
     TestKit.check("split at " ++ Int.toString(n) ++ ": same phase", onePass.phase == twoPass.phase)
     TestKit.check(
       "split at " ++ Int.toString(n) ++ ": same sticker count",
@@ -235,6 +233,64 @@ let runReplaySplit = () => {
   })
 }
 
+// -- A failed first POST (bug A, 288738f review) ---------------------------
+// ScanApi.res dispatches this when the initial POST fails outright, or
+// when a reconnect never got a scene id to use — either way the old code
+// left `phase` stuck at Sending ("Sending photo" forever) and dropped the
+// reason. SendFailed must move the scan to a terminal state and keep the
+// reason, the same way an `Ended` from the server would.
+let runSendFailed = () => {
+  TestKit.section("ScanState: SendFailed ends the scan instead of hanging at \"Sending photo\"")
+  let m0 = {...ScanState.initialModel, phase: Sending}
+  TestKit.check("headline reads \"Sending photo\" before the failure", ScanState.headline(m0) == "Sending photo")
+  TestKit.check("connection state is Live before the failure", ScanState.connectionState(m0) == Live)
+  let m1 = ScanState.update(m0, SendFailed("the server said 503"))
+  TestKit.check("phase becomes Ended(Failed)", m1.phase == Ended(ScanEvent.EndStatus.Failed))
+  TestKit.check(
+    "headline reads \"Could not finish\", not stuck on \"Sending photo\"",
+    ScanState.headline(m1) == "Could not finish",
+  )
+  TestKit.check("connection state is Failed", ScanState.connectionState(m1) == Failed)
+  TestKit.check("exactly one error recorded, not dropped", Array.length(m1.errors) == 1)
+  TestKit.check(
+    "the reason is kept verbatim",
+    switch Array.get(m1.errors, 0) {
+    | Some((_, msg)) => msg == "the server said 503"
+    | None => false
+    },
+  )
+  TestKit.check("stickers already found are kept, not cleared", Array.length(m1.stickers) == Array.length(m0.stickers))
+}
+
+// -- The connection-state derived value -------------------------------------
+let runConnectionState = () => {
+  TestKit.section("ScanState.connectionState: live, reconnecting, failed")
+  TestKit.check(
+    "Ready is Live",
+    ScanState.connectionState(ScanState.initialModel) == Live,
+  )
+  TestKit.check(
+    "Live phase, not reconnecting, is Live",
+    ScanState.connectionState({...ScanState.initialModel, phase: Live}) == Live,
+  )
+  TestKit.check(
+    "reconnecting flips it to Reconnecting regardless of phase",
+    ScanState.connectionState({...ScanState.initialModel, phase: Live, reconnecting: true}) == Reconnecting,
+  )
+  TestKit.check(
+    "Ended(Failed) is Failed",
+    ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Failed)}) == Failed,
+  )
+  TestKit.check(
+    "Ended(Done) is Live, not Failed — the scan finishing on purpose is not a connection failure",
+    ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Done)}) == Live,
+  )
+  TestKit.check(
+    "reconnecting wins over a stale Ended(Failed) from before a fresh NewScan",
+    ScanState.connectionState({...ScanState.initialModel, phase: Ended(ScanEvent.EndStatus.Failed), reconnecting: true}) == Reconnecting,
+  )
+}
+
 let run = () => {
   runTranscript()
   runNumbering()
@@ -243,4 +299,6 @@ let run = () => {
   runStop()
   runTimeout()
   runReplaySplit()
+  runSendFailed()
+  runConnectionState()
 }

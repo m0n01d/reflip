@@ -59,7 +59,6 @@ type model = {
   sceneId: option<string>,
   sentWidth: int,
   sentHeight: int,
-  eventCount: int, // every SSE event received, decoded or not — never comments (Sse.feed drops those before this module ever sees them)
   lastEventAtMs: float,
   thinkingAtMs: option<float>,
   searches: array<searchEntry>,
@@ -86,7 +85,6 @@ let initialModel: model = {
   sceneId: None,
   sentWidth: 0,
   sentHeight: 0,
-  eventCount: 0,
   lastEventAtMs: 0.0,
   thinkingAtMs: None,
   searches: [],
@@ -111,6 +109,11 @@ type msg =
   | ConnectionLost
   | Reconnected
   | NewScan
+  // Bug A (288738f review): the first POST failed outright, or a
+  // reconnect had no scene id to use — either way there is nothing left
+  // to retry. Terminal, like an `Ended` from the server, but carries the
+  // reason ScanApi could not hand it a real `ScanEvent.t` for.
+  | SendFailed(string)
 
 // -- The fold -----------------------------------------------------------
 
@@ -306,8 +309,15 @@ let update = (m: model, msg: msg): model =>
   switch msg {
   | PhotoPicked({model, photoUrl, bytes}) =>
     {...initialModel, phase: Sending, selectedModel: model, photoUrl: Some(photoUrl), uploadBytes: bytes}
-  | GotEvent(Ok(evt)) => foldEvent({...m, eventCount: m.eventCount + 1}, evt)
-  | GotEvent(Error(_)) => {...m, eventCount: m.eventCount + 1} // a line ScanEvent.decode could not read; counted, not folded
+  | GotEvent(Ok(evt)) => foldEvent(m, evt)
+  | GotEvent(Error(_)) => m // a line ScanEvent.decode could not read; ScanApi.localEventCount is the one counter now (bug D, 288738f review)
+  | SendFailed(reason) =>
+    {
+      ...m,
+      phase: Ended(ScanEvent.EndStatus.Failed),
+      endedAtMs: Some(m.lastEventAtMs),
+      errors: Array.concat(m.errors, [(m.lastEventAtMs, reason)]),
+    }
   | StopTapped => {...m, stopRequested: true}
   | SheetOpened(n) => {...m, sheetOpen: Some(n)}
   | SheetClosed => {...m, sheetOpen: None}
@@ -322,6 +332,20 @@ let isEnded = (m: model): bool =>
   switch m.phase {
   | Ended(_) => true
   | _ => false
+  }
+
+// The network edge's state, derived for display (docs/scan-ui.md; a
+// later pass shows "Reconnecting" in the view). `reconnecting` already
+// tracks a drop in progress; `Ended(Failed)` is the one phase where the
+// network gave up, rather than the scan finishing on purpose (Stopped),
+// on schedule (Done), or by the clock (Timeout).
+type connectionState = Live | Reconnecting | Failed
+
+let connectionState = (m: model): connectionState =>
+  switch (m.reconnecting, m.phase) {
+  | (true, _) => Reconnecting
+  | (false, Ended(ScanEvent.EndStatus.Failed)) => Failed
+  | (false, _) => Live
   }
 
 let visibleStickers = (m: model): array<sticker> =>
