@@ -141,6 +141,10 @@ let handle = async (
       // did Claude take" figure the `done` event already reported.
       let claudeMsRef = ref(0.0)
       let rawEvents: array<(float, Sse.event)> = []
+      // Set in the Finished branch below when Claude stops on max_tokens.
+      // Checked once the HTTP stream itself closes (Completed), because
+      // MessageStop can arrive before the underlying response finishes.
+      let cutOffRef: ref<option<Types.usage>> = ref(None)
 
       let onEvent = (ms: float, evt: SceneStream.logEvent): unit =>
         switch evt {
@@ -169,17 +173,21 @@ let handle = async (
               message: "item " ++ Int.toString(index) ++ " rejected: " ++ reason,
             }),
           )
-        | SceneStream.Finished({usage}) => {
+        | SceneStream.Finished({stopReason, usage}) => {
             claudeMsRef := ms
-            write(
-              ScanEvent.Done({
-                claudeMs: ms,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                webSearches: usage.webSearchRequests,
-                usd: Pricing.usdCost(~model, ~usage),
-              }),
-            )
+            if stopReason == "max_tokens" {
+              cutOffRef := Some(usage)
+            } else {
+              write(
+                ScanEvent.Done({
+                  claudeMs: ms,
+                  inputTokens: usage.inputTokens,
+                  outputTokens: usage.outputTokens,
+                  webSearches: usage.webSearchRequests,
+                  usd: Pricing.usdCost(~model, ~usage),
+                }),
+              )
+            }
           }
         | SceneStream.StreamFailed(msg) => write(ScanEvent.ErrorEvent({t: ms, message: msg}))
         }
@@ -200,26 +208,75 @@ let handle = async (
       )
 
       switch outcome {
-      | ClaudeStream.Completed(m) => {
-          let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
-          let reply = await buildSceneReply(
-            ~config,
-            ~model,
-            ~sentWidth,
-            ~sentHeight,
-            ~serverStart=startMs,
-            ~claudeMs=claudeMsRef.contents,
-            ~sceneId,
-            ~outputPath,
-            ~items=SceneStream.items(m),
-            ~usage=SceneStream.usage(m),
-            ~quarterSeen=SceneStream.quarterSeen(m),
-          )
-          SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-          write(ScanEvent.Scene(reply))
-          write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
-          if !Node.HttpServer.writableEnded(res) {
-            Node.HttpServer.endWithBody(res, "")
+      | ClaudeStream.Completed(m) =>
+        switch cutOffRef.contents {
+        // Same rule as ClaudeClient.parseClaudeJson's CutOff case and
+        // Server.res's handleScene: a max_tokens stop is not a normal
+        // finish. No eBay merge, no `scene` event — log the cut-off scene
+        // (same fields as Server.res's CutOff branch, adapted to the
+        // stream's own raw-events dump) and end the request as failed.
+        | Some(usage) => {
+            let ms = elapsedMs()
+            let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
+            let cost: Types.cost = {
+              Types.usd: Pricing.usdCost(~model, ~usage),
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cacheReadInputTokens,
+              cacheWriteTokens: usage.cacheCreationInputTokens,
+              webSearches: usage.webSearchRequests,
+            }
+            SceneLog.appendLine(
+              config.dataDir,
+              Json.obj([
+                ("sceneId", Json.str(sceneId)),
+                ("model", Json.str(model)),
+                ("error", Json.str("reply cut off")),
+                ("stopReason", Json.str("max_tokens")),
+                ("outputPath", Json.str(outputPath)),
+                ("imageWidth", Json.num(Int.toFloat(sentWidth))),
+                ("imageHeight", Json.num(Int.toFloat(sentHeight))),
+                ("timing", Json.obj([("claudeMs", Json.num(claudeMsRef.contents))])),
+                ("cost", Types.encodeCost(cost)),
+              ]),
+            )
+            Console.error(
+              "reflip: scene " ++
+              sceneId ++
+              " cut off (stream), " ++
+              Int.toString(usage.outputTokens) ++
+              " output tokens, " ++
+              Int.toString(usage.webSearchRequests) ++
+              " web searches, $" ++
+              Float.toString(cost.usd),
+            )
+            write(ScanEvent.ErrorEvent({t: ms, message: "reply cut off"}))
+            write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
+            if !Node.HttpServer.writableEnded(res) {
+              Node.HttpServer.endWithBody(res, "")
+            }
+          }
+        | None => {
+            let outputPath = writeRawEvents(config.dataDir, sceneId, rawEvents)
+            let reply = await buildSceneReply(
+              ~config,
+              ~model,
+              ~sentWidth,
+              ~sentHeight,
+              ~serverStart=startMs,
+              ~claudeMs=claudeMsRef.contents,
+              ~sceneId,
+              ~outputPath,
+              ~items=SceneStream.items(m),
+              ~usage=SceneStream.usage(m),
+              ~quarterSeen=SceneStream.quarterSeen(m),
+            )
+            SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
+            write(ScanEvent.Scene(reply))
+            write(ScanEvent.End({t: elapsedMs(), status: ScanEvent.EndStatus.Done}))
+            if !Node.HttpServer.writableEnded(res) {
+              Node.HttpServer.endWithBody(res, "")
+            }
           }
         }
       | ClaudeStream.Stopped(m) => {

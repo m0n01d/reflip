@@ -31,9 +31,11 @@ let () =
   ->Promise.then(() => SharedDecodeTest.run())
   ->Promise.then(() => StaticServeTest.run())
   ->Promise.then(() => ClaudeTimeoutTest.run())
+  ->Promise.then(() => ClaudeCutOffTest.run())
   ->Promise.then(() => HaulTest.run())
   ->Promise.then(() => HaulEmailTest.run())
   ->Promise.then(() => StreamRouteTest.run())
+  ->Promise.then(() => StreamRouteCutOffTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()
