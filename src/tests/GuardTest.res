@@ -37,6 +37,32 @@ let run = () => {
     )
   )
 
+  // Streaming (M1 spike): ClaudeStream.addStreamFlag must add exactly one
+  // field, "stream": true, and change nothing else about the body.
+  switch (JSON.Decode.object(requestJson), JSON.Decode.object(ClaudeStream.addStreamFlag(requestJson))) {
+  | (Some(plainDict), Some(streamedDict)) =>
+      let plainKeys = Dict.keysToArray(plainDict)
+      let streamedKeys = Dict.keysToArray(streamedDict)
+      TestKit.check(
+        "streamed body adds exactly one key over the plain body",
+        Array.length(streamedKeys) == Array.length(plainKeys) + 1,
+      )
+      TestKit.check(
+        "stream field on the streamed body is true",
+        Dict.get(streamedDict, "stream")->Option.map(j => JSON.stringify(j)) ==
+          Some(JSON.stringify(JSON.Encode.bool(true))),
+      )
+      let sameExceptStream = Array.every(plainKeys, key =>
+        Dict.get(streamedDict, key)->Option.map(j => JSON.stringify(j)) ==
+          Dict.get(plainDict, key)->Option.map(j => JSON.stringify(j))
+      )
+      TestKit.check(
+        "streamed body equals the plain body plus \"stream\": true",
+        sameExceptStream,
+      )
+  | _ => TestKit.check("both the plain and streamed bodies decode as JSON objects", false)
+  }
+
   // Haul mode (step 4): same guard, plus the gem-threshold prompt and its
   // own schema must not leak eBay numbers either.
   let haulRequestJson = ClaudeClient.buildRequestBody(
