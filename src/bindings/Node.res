@@ -89,9 +89,31 @@ module HttpServer = {
 
   @send external onData: (request, string, Buffer.t => unit) => unit = "on"
   @send external onEnd: (request, string, unit => unit) => unit = "on"
+  // The stub Claude server in ClaudeStream tests: fires when the incoming
+  // request's underlying connection is terminated, so a test can see that
+  // an aborted downstream fetch (StreamRoute.res) really tore down the
+  // upstream connection to it too.
+  @send external onRequestClose: (request, string, unit => unit) => unit = "on"
 
   @send external writeHead: (response, int, dict<string>) => unit = "writeHead"
   @send external endWithBody: (response, string) => unit = "end"
+
+  // StreamRoute.res: write one SSE chunk without ending the response, force
+  // the headers out immediately (tailscale serve, a Go reverse proxy, only
+  // flushes a text/event-stream response once headers are on the wire), and
+  // tell whether "end" was already called — so a late write (a heartbeat, or
+  // an event still in flight when the client disconnects) is a no-op instead
+  // of a write-after-end throw.
+  @send external write: (response, string) => unit = "write"
+  @send external flushHeaders: response => unit = "flushHeaders"
+  @get external writableEnded: response => bool = "writableEnded"
+  // Fires on a premature disconnect (checked via writableEnded above) and
+  // also once normally after our own "end" finishes flushing — the caller
+  // tells the two apart. A no-op "error" listener too: Node treats an
+  // unlistened "error" event as an uncaught exception, and a response
+  // being written to after the client aborted the connection can raise one.
+  @send external onClose: (response, string, unit => unit) => unit = "on"
+  @send external onResponseError: (response, string, unit => unit) => unit = "on"
 
   @module("node:http")
   external createServer: ((request, response) => unit) => server = "createServer"

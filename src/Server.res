@@ -206,6 +206,76 @@ let handleCreateHaul = async (
 
 let maxPhotoBytes = 15 * 1024 * 1024
 
+// Shared by handleScene (/api/scene) and StreamRoute.handle
+// (/api/scene/stream): runs the eBay merge and the box decode, in that
+// order after Claude — CLAUDE.md hard rule 1, eBay numbers never reach the
+// model — then assembles the reply both routes send. Takes sceneId and
+// outputPath already computed rather than writing them itself: the
+// streaming route has no single raw Claude JSON blob to hand SceneLog
+// .writeRaw, since it writes its own data/raw/<sceneId>.events.jsonl
+// instead (StreamRoute.res). Passed into StreamRoute as a parameter so
+// that module does not need to depend on Server.res.
+let buildSceneReply = async (
+  ~config: Config.t,
+  ~model: string,
+  ~sentWidth: int,
+  ~sentHeight: int,
+  ~serverStart: float,
+  ~claudeMs: float,
+  ~sceneId: string,
+  ~outputPath: string,
+  ~items: array<Types.claudeItem>,
+  ~usage: Types.usage,
+): Types.sceneReply => {
+  let ebayStart = Date.now()
+  let merged = await Promise.all(
+    Array.mapWithIndex(items, (item, i) => EbayClient.statsFor(config, i, item)),
+  )
+  let ebayMs = Date.now() -. ebayStart
+  let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
+  // The box was decoded raw off Claude's reply; finishing it needs the sent
+  // photo's size and the model's tier, both known only here. Falls back to
+  // Sonnet 5's tier if `model` somehow is not one of Shared.allModels — it
+  // always is, since it came from Shared.modelId in route below.
+  let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
+  let replyItems = Array.mapWithIndex(items, (item, i) => {
+    let (ebay, _) = Array.getUnsafe(merged, i)
+    {
+      Types.name: item.name,
+      query: item.query,
+      confidence: item.confidence,
+      estimateLowUsd: item.estimateLowUsd,
+      estimateHighUsd: item.estimateHighUsd,
+      basis: item.basis,
+      sources: item.sources,
+      ebay,
+      soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+      box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+    }
+  })
+  let cost = {
+    Types.usd: Pricing.usdCost(~model, ~usage),
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cacheReadTokens: usage.cacheReadInputTokens,
+    cacheWriteTokens: usage.cacheCreationInputTokens,
+    webSearches: usage.webSearchRequests,
+  }
+  let serverMs = Date.now() -. serverStart
+  {
+    Types.sceneId,
+    model,
+    fixture: config.fixtures,
+    outputPath,
+    items: replyItems,
+    imageWidth: sentWidth,
+    imageHeight: sentHeight,
+    timing: {Types.serverMs, claudeMs, ebayMs},
+    cost,
+    ebayNote,
+  }
+}
+
 let handleAddScene = async (
   config: Config.t,
   store: Store.t,
@@ -326,56 +396,20 @@ let handleScene = async (
         jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
       | Ok(decoded) => {
           let claudeMs = Date.now() -. claudeStart
-          let ebayStart = Date.now()
-          let merged = await Promise.all(
-            Array.mapWithIndex(decoded.items, (item, i) => EbayClient.statsFor(config, i, item)),
-          )
-          let ebayMs = Date.now() -. ebayStart
-          let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
-          // The box was decoded raw off Claude's reply (ClaudeClient.decodeItem);
-          // finishing it needs the sent photo's size and the model's tier, both
-          // known only here. Falls back to Sonnet 5's tier if `model` somehow
-          // isn't one of Shared.allModels — it always is, since it came from
-          // Shared.modelId in route below.
-          let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
-          let items = Array.mapWithIndex(decoded.items, (item, i) => {
-            let (ebay, _) = Array.getUnsafe(merged, i)
-            {
-              Types.name: item.name,
-              query: item.query,
-              confidence: item.confidence,
-              estimateLowUsd: item.estimateLowUsd,
-              estimateHighUsd: item.estimateHighUsd,
-              basis: item.basis,
-              sources: item.sources,
-              ebay,
-              soldSearchUrl: EbayClient.soldSearchUrl(item.query),
-              box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
-            }
-          })
           let sceneId = Node.Crypto.randomUUID()
-          let cost = {
-            Types.usd: Pricing.usdCost(~model, ~usage=decoded.usage),
-            inputTokens: decoded.usage.inputTokens,
-            outputTokens: decoded.usage.outputTokens,
-            cacheReadTokens: decoded.usage.cacheReadInputTokens,
-            cacheWriteTokens: decoded.usage.cacheCreationInputTokens,
-            webSearches: decoded.usage.webSearchRequests,
-          }
           let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, decoded.raw)
-          let serverMs = Date.now() -. serverStart
-          let reply: Types.sceneReply = {
-            Types.sceneId,
-            model,
-            fixture: config.fixtures,
-            outputPath,
-            items,
-            imageWidth: sentWidth,
-            imageHeight: sentHeight,
-            timing: {Types.serverMs, claudeMs, ebayMs},
-            cost,
-            ebayNote,
-          }
+          let reply = await buildSceneReply(
+            ~config,
+            ~model,
+            ~sentWidth,
+            ~sentHeight,
+            ~serverStart,
+            ~claudeMs,
+            ~sceneId,
+            ~outputPath,
+            ~items=decoded.items,
+            ~usage=decoded.usage,
+          )
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
           jsonResponse(res, 200, Types.encodeSceneReply(reply))
         }
@@ -401,6 +435,39 @@ let route = async (
   | None =>
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
+  } else if method == "POST" && pathname == "/api/scene/stream" {
+    let rawModel = Node.Url.searchParams(url)->Node.Url.getParam("model")->Nullable.toOption
+    switch rawModel {
+    | Some(id) =>
+      switch Shared.parseModelId(id) {
+      | Some(m) => {
+          let body = await Node.HttpServer.readBody(req)
+          await StreamRoute.handle(~config, ~model=Shared.modelId(m), ~body, ~res, ~buildSceneReply)
+        }
+      | None =>
+        jsonResponse(
+          res,
+          400,
+          Json.obj([
+            ("error", Json.str("unknown model id: " ++ id)),
+            (
+              "validModels",
+              Json.arr(Shared.allModels->Array.map(m => Json.str(Shared.modelId(m)))),
+            ),
+          ]),
+        )
+      }
+    | None => {
+        let body = await Node.HttpServer.readBody(req)
+        await StreamRoute.handle(
+          ~config,
+          ~model=Shared.modelId(Shared.defaultModel),
+          ~body,
+          ~res,
+          ~buildSceneReply,
+        )
+      }
+    }
   } else if method == "POST" && pathname == "/api/scene" {
     let rawModel = Node.Url.searchParams(url)->Node.Url.getParam("model")->Nullable.toOption
     switch rawModel {

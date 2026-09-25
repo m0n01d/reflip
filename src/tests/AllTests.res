@@ -30,6 +30,7 @@ let () =
   ->Promise.then(() => ClaudeTimeoutTest.run())
   ->Promise.then(() => HaulTest.run())
   ->Promise.then(() => HaulEmailTest.run())
+  ->Promise.then(() => StreamRouteTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()
