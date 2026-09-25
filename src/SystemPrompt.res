@@ -16,18 +16,28 @@ For each item, report:
 - basis: one line on why you estimated that range
 - confidence: a number from 0 to 1
 - sources: the source URLs you used, or an empty array if you used none
+- size: the item's size, when size changes what it is or what it sells
+  for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
+  size matters, put it in the query too.
 - box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
   in the photo, in integer pixel coordinates. x1 and y1 are the pixel
   position of the top-left corner. x2 and y2 are the pixel position of the
   bottom-right corner. The photo's width and height in pixels are given
   below.
 
+A single US quarter (24.26 mm across) can lie next to the items as a scale
+reference. If you see one, use it to measure the items near it. Do not
+list the quarter as an item.
+
+Also report a top-level quarterSeen: true if a quarter is in the photo,
+else false.
+
 Use the web_search tool only when you are unsure of an item's value, and at
 most 3 times for this photo. Never search ebay.com; it is blocked there.
 Prefer retailer and enthusiast sites for comparable prices.
 
-Reply with JSON only, shaped as {"items": [...]}. Do not add any commentary
-outside that JSON object.`
+Reply with JSON only, shaped as {"items": [...], "quarterSeen": true or
+false}. Do not add any commentary outside that JSON object.`
 
 let itemSchema: JSON.t = Json.obj([
   ("type", Json.str("object")),
@@ -48,6 +58,7 @@ let itemSchema: JSON.t = Json.obj([
           ("items", Json.obj([("type", Json.str("string"))])),
         ]),
       ),
+      ("size", Json.obj([("type", Json.str("string"))])),
       (
         "box",
         Json.obj([
@@ -68,6 +79,7 @@ let itemSchema: JSON.t = Json.obj([
       Json.str("basis"),
       Json.str("confidence"),
       Json.str("sources"),
+      Json.str("size"),
       Json.str("box"),
     ]),
   ),
@@ -78,9 +90,12 @@ let responseSchema: JSON.t = Json.obj([
   ("type", Json.str("object")),
   (
     "properties",
-    Json.obj([("items", Json.obj([("type", Json.str("array")), ("items", itemSchema)]))]),
+    Json.obj([
+      ("items", Json.obj([("type", Json.str("array")), ("items", itemSchema)])),
+      ("quarterSeen", Json.obj([("type", Json.str("boolean"))])),
+    ]),
   ),
-  ("required", Json.arr([Json.str("items")])),
+  ("required", Json.arr([Json.str("items"), Json.str("quarterSeen")])),
   ("additionalProperties", Json.boolJ(false)),
 ])
 
@@ -94,7 +109,7 @@ let outputFormat: JSON.t = Json.obj([
 // Stamped on every find row (Store.find.promptVersion), so a later prompt
 // change never scrambles history. POST /api/scene uses this one; haul mode
 // uses haulPromptVersion below.
-let promptVersion = "scene-1"
+let promptVersion = "scene-2"
 
 // Haul mode's own words: only list items worth the trip to sell, name
 // where each one sits in the photo, and count the rest instead of
@@ -120,6 +135,13 @@ For each listed item, report:
 - sources: the source URLs you used, or an empty array if you used none
 - where: a short phrase that locates the item in the photo, such as "top
   shelf, fourth spine from the left, red"
+- size: the item's size, when size changes what it is or what it sells
+  for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
+  size matters, put it in the query too.
+
+A single US quarter (24.26 mm across) can lie next to the items as a scale
+reference. If you see one, use it to measure the items near it. Do not
+list the quarter as an item, and do not count it in otherCount.
 
 Count every other visible, resellable item that you did not list above,
 and report that count as otherCount.
@@ -153,6 +175,7 @@ let haulItemSchema: JSON.t = Json.obj([
         ]),
       ),
       ("where", Json.obj([("type", Json.str("string"))])),
+      ("size", Json.obj([("type", Json.str("string"))])),
     ]),
   ),
   (
@@ -167,6 +190,7 @@ let haulItemSchema: JSON.t = Json.obj([
       Json.str("confidence"),
       Json.str("sources"),
       Json.str("where"),
+      Json.str("size"),
     ]),
   ),
   ("additionalProperties", Json.boolJ(false)),
@@ -191,4 +215,4 @@ let haulOutputFormat: JSON.t = Json.obj([
   ("schema", haulResponseSchema),
 ])
 
-let haulPromptVersion = "haul-1"
+let haulPromptVersion = "haul-2"

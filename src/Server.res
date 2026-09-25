@@ -226,6 +226,7 @@ let buildSceneReply = async (
   ~outputPath: string,
   ~items: array<Types.claudeItem>,
   ~usage: Types.usage,
+  ~quarterSeen: bool,
 ): Types.sceneReply => {
   let ebayStart = Date.now()
   let merged = await Promise.all(
@@ -250,6 +251,7 @@ let buildSceneReply = async (
       sources: item.sources,
       ebay,
       soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+      size: item.size,
       box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
     }
   })
@@ -273,6 +275,7 @@ let buildSceneReply = async (
     timing: {Types.serverMs, claudeMs, ebayMs},
     cost,
     ebayNote,
+    quarterSeen,
   }
 }
 
@@ -409,6 +412,7 @@ let handleScene = async (
             ~outputPath,
             ~items=decoded.items,
             ~usage=decoded.usage,
+            ~quarterSeen=decoded.quarterSeen,
           )
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
           jsonResponse(res, 200, Types.encodeSceneReply(reply))

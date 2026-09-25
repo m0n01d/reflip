@@ -53,11 +53,16 @@ module ItemDecode = {
         confidence: field.required("confidence", D.float),
         sources,
         where: field.optional("where", D.string),
+        size: field.optional("size", D.string)->Option.getOr(""),
         box: field.optional("box", D.array(D.float)),
       }
     })
 
   let query: D.t<option<string>> = D.object(field => field.optional("query", D.string))
+
+  let quarterSeen: D.t<bool> = D.object(field =>
+    field.optional("quarterSeen", D.bool)->Option.getOr(false)
+  )
 }
 
 let extractQueryFromJson = (json: JSON.t): option<string> =>
@@ -93,6 +98,21 @@ let init: model = {
 let items = (model: model): array<Types.claudeItem> => model.items
 let usage = (model: model): Types.usage => model.usage
 let finalText = (model: model): string => model.text
+
+// The full structured-output JSON is the text of the last (uninterrupted)
+// text block — see docs/stream-spike.md §2: with search on, Claude writes
+// no JSON until its last code step ends, so no later tool call resets
+// model.text out from under it. Defaults to false on a parse miss, same
+// posture as extractQueryFromText.
+let quarterSeen = (model: model): bool =>
+  switch JsonCombinators.Json.parse(model.text) {
+  | Ok(json) =>
+      switch JsonCombinators.Json.decode(json, ItemDecode.quarterSeen) {
+      | Ok(qs) => qs
+      | Error(_) => false
+      }
+  | Error(_) => false
+  }
 
 let findOpenBlock = (openBlocks: array<(int, openBlock)>, index: int): option<openBlock> =>
   Array.find(openBlocks, ((i, _)) => i == index)->Option.map(((_, b)) => b)

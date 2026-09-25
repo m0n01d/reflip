@@ -29,6 +29,7 @@ let toReplyItemPartial = (item: Types.claudeItem): Types.replyItem => {
   sources: item.sources,
   ebay: None,
   soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+  size: item.size,
   box: None,
 }
 
@@ -65,6 +66,7 @@ let handle = async (
     ~outputPath: string,
     ~items: array<Types.claudeItem>,
     ~usage: Types.usage,
+    ~quarterSeen: bool,
   ) => promise<Types.sceneReply>,
 ): unit =>
   switch JpegSize.dimensions(body) {
@@ -254,6 +256,7 @@ let handle = async (
             ~outputPath,
             ~items=SceneStream.items(m),
             ~usage=SceneStream.usage(m),
+            ~quarterSeen=SceneStream.quarterSeen(m),
           )
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
           writeEvent("scene", Types.encodeSceneReply(reply))

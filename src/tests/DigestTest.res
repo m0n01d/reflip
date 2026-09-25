@@ -13,6 +13,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=weird+thing&LH_Sold=1",
     sceneId: "scene-a",
     ebayMedianUsd: None,
+    size: "",
   }
   let lamp: Digest.gem = {
     name: "Old Lamp",
@@ -23,6 +24,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=old+lamp&LH_Sold=1",
     sceneId: "scene-c",
     ebayMedianUsd: None,
+    size: "",
   }
   let radio: Digest.gem = {
     name: "Vintage Radio",
@@ -33,6 +35,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=vintage+radio&LH_Sold=1",
     sceneId: "scene-b",
     ebayMedianUsd: Some(60.0),
+    size: "12 in",
   }
 
   // Given out of order: [weird(20), lamp(25), radio(35)].
@@ -88,6 +91,23 @@ let run = () => {
   TestKit.check("scene-a's cid appears in the html body", String.includes(digest.html, "cid:cid-scene-a"))
   TestKit.check("scene-b's cid appears in the html body", String.includes(digest.html, "cid:cid-scene-b"))
   TestKit.check("scene-c's cid appears in the html body", String.includes(digest.html, "cid:cid-scene-c"))
+
+  TestKit.check(
+    "a non-empty size shows after the name in the html body",
+    String.includes(digest.html, "Vintage Radio (12 in)"),
+  )
+  TestKit.check(
+    "a non-empty size shows after the name in the text body",
+    String.includes(digest.text, "Vintage Radio (12 in)"),
+  )
+  TestKit.check(
+    "an empty size shows nothing extra after the name in the html body",
+    String.includes(digest.html, "Old Lamp</div>") && !String.includes(digest.html, "Old Lamp ("),
+  )
+  TestKit.check(
+    "an empty size shows nothing extra after the name in the text body",
+    String.includes(digest.text, "Old Lamp\n") && !String.includes(digest.text, "Old Lamp ("),
+  )
 
   TestKit.check("the other-items count appears in the html body", String.includes(digest.html, "7 other items"))
   TestKit.check("the other-items count appears in the text body", String.includes(digest.text, "7 other items"))
