@@ -21,3 +21,28 @@ Bugs found are recorded below the table, not fixed.
 | 6 | Pick and wait for the end (speed-10 server, port 8789, ~12-15s), tap "Show the full log", then collapse | Log expands with per-item lines, then collapses | Scan finished at 0:11, "14 worth a look", "35 items on the table". Tapping "Show the full log" flipped the chevron and expanded to a `0:00  #1 Blue and white floral … $15-35` style line per item (#1-#8+ visible). Tapping again ("Hide the log") collapsed back to the summary row "worth a look  14 - $163-372" | pass | sim-log.png |
 | 7 | From the Ready view, tap the settings (sliders) icon, then Done | Settings sheet opens, then closes | Sheet opened: "MODEL" (Opus 5.5 / Sonnet 5 selected, "median 0:47 and $0.15 a photo" / Haiku 4.5) and "PHOTO SIZE" (1568px selected / 2576px) radio groups, "Done" link top right. Tapping Done closed it cleanly back to the Ready view | pass | sim-settings.png |
 | 8 | Tap the Scan\|Haul toggle to Haul, then back to Scan (no haul started) | Haul mode UI, then back to the Scan Ready view | Haul tab showed "Haul mode", a "Store name (optional)" field, and a "Start haul" button (not tapped). Tapping Scan returned cleanly to the "What's on the table?" ready view | pass | sim-haul.png |
+| 9 | From a finished (Done) scan, tap "Snap another". (The only such control is the top-right "New scan" link. There is no separate "Snap another" button.) | Ready view, or a camera view that can be cancelled | Returned cleanly to the "What's on the table?" ready view, the same as step 5b. No camera view opened | pass | sim-snap-another.png |
+
+## Live run
+
+Date: 2026-09-25. One real scan, live mode (`fixture: false`), server on port 8786, worktree
+`scan-ui-live` off `origin/claude/scan-ui` @ fc18786. Same photo as the fixture runs above (s01,
+the yard-sale table).
+
+- First dots on screen: by 0:05 ("11 found so far", none over $20 yet). shot: live-early.png
+- First price on screen: by 0:19 ("34 found so far, 3 worth a look so far", first sticker $15-35).
+  A midway shot at 0:28 ("35 found so far, 10 worth a look so far") is live-midway.png
+- End: 0:42, "Done". "19 worth a look", "39 items on the table". shot: live-done.png
+- Run receipt (swipe down on the done view): "worth a look 19 · $223-540", full priced list.
+  shot: live-done-list.png
+- Item sheet on a priced sticker (#52, Scalloped glass serving tray, $10-25, rough guess 25%,
+  eBay sold n=50 median $16): shot: live-sheet.png, closed cleanly
+- Item count: 39 items on the table (UI), 19 worth a look. The scene JSON carries 21 priced
+  items. All 21 have eBay stats merged in. Most have n=50 sold comps. A few are thinner: two
+  items have only n=1 and n=2
+- Receipt numbers (from `data/scenes.jsonl`, sceneId `4117e5bb-f0eb-431f-9aa1-23e468d3178f`):
+  model `claude-sonnet-5`. Main pass: serverMs 42138, claudeMs 39383, ebayMs 2684, cost $0.047136
+  (input 5698 tok, output 3574 tok, cacheRead 0, cacheWrite 0, webSearches 0). Spot pass: cost
+  $0.016884 (input 3007 tok, output 1087 tok). Total cost: $0.06402, against a $0.30 budget.
+- Step 9 (Snap another / New scan from Done): pass, see the table above. No retry: this was the
+  one live scan for this PR.
