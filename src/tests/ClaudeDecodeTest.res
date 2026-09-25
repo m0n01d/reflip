@@ -60,6 +60,11 @@ let run = () => {
         Array.get(decoded.items, 0)->Option.flatMap(i => i.where)->Option.isSome,
       )
       TestKit.check("haul fixture otherCount is 12", decoded.otherCount == Some(12))
+      // The haul prompt asks for no box, so a haul item decodes with None.
+      TestKit.check(
+        "haul fixture items have no box",
+        Array.every(decoded.items, i => i.box == None),
+      )
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)
   }

@@ -16,6 +16,11 @@ For each item, report:
 - basis: one line on why you estimated that range
 - confidence: a number from 0 to 1
 - sources: the source URLs you used, or an empty array if you used none
+- box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
+  in the photo, in integer pixel coordinates. x1 and y1 are the pixel
+  position of the top-left corner. x2 and y2 are the pixel position of the
+  bottom-right corner. The photo's width and height in pixels are given
+  below.
 
 Use the web_search tool only when you are unsure of an item's value, and at
 most 3 times for this photo. Never search ebay.com; it is blocked there.
@@ -43,6 +48,13 @@ let itemSchema: JSON.t = Json.obj([
           ("items", Json.obj([("type", Json.str("string"))])),
         ]),
       ),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
     ]),
   ),
   (
@@ -56,6 +68,7 @@ let itemSchema: JSON.t = Json.obj([
       Json.str("basis"),
       Json.str("confidence"),
       Json.str("sources"),
+      Json.str("box"),
     ]),
   ),
   ("additionalProperties", Json.boolJ(false)),

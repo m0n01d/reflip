@@ -13,6 +13,19 @@ type claudeItem = {
   // Haul mode only (step 4): where the item sits in the photo. None for a
   // scene-mode reply.
   where: option<string>,
+  // Raw [x1, y1, x2, y2] from Claude's reply, in pixels of the photo Claude
+  // saw. Not yet validated, clamped, or rescaled — Box.decode does that
+  // once the sent photo's size and the model's tier are known. Scene mode
+  // only: the haul prompt asks for no box, so it is None there.
+  box: option<array<float>>,
+}
+
+// A box in pixels of the photo the page sent (see Box.decode).
+type box = {
+  x1: int,
+  y1: int,
+  x2: int,
+  y2: int,
 }
 
 type ebayStats = {
@@ -34,6 +47,7 @@ type replyItem = {
   sources: array<string>,
   ebay: option<ebayStats>,
   soldSearchUrl: string,
+  box: option<box>,
 }
 
 type usage = {
@@ -108,6 +122,11 @@ type sceneReply = {
   fixture: bool,
   outputPath: string,
   items: array<replyItem>,
+  // The size, in pixels, of the photo the brain sent to Claude (before any
+  // resize Claude applies on its side — see ImageSize.res). Each item's box
+  // is already rescaled onto this size, so the page draws it with no math.
+  imageWidth: int,
+  imageHeight: int,
   timing: timing,
   cost: cost,
   // Additive beyond the brief's reply shape: null unless the eBay stats
@@ -127,6 +146,14 @@ let encodeEbayStats = (s: ebayStats): JSON.t =>
     ("maxUsd", Json.num(s.maxUsd)),
   ])
 
+let encodeBox = (b: box): JSON.t =>
+  Json.arr([
+    Json.num(Int.toFloat(b.x1)),
+    Json.num(Int.toFloat(b.y1)),
+    Json.num(Int.toFloat(b.x2)),
+    Json.num(Int.toFloat(b.y2)),
+  ])
+
 let encodeReplyItem = (it: replyItem): JSON.t =>
   Json.obj([
     ("name", Json.str(it.name)),
@@ -144,6 +171,13 @@ let encodeReplyItem = (it: replyItem): JSON.t =>
       },
     ),
     ("soldSearchUrl", Json.str(it.soldSearchUrl)),
+    (
+      "box",
+      switch it.box {
+      | Some(b) => encodeBox(b)
+      | None => JSON.Encode.null
+      },
+    ),
   ])
 
 let encodeTiming = (t: timing): JSON.t =>
@@ -170,6 +204,8 @@ let encodeSceneReply = (r: sceneReply): JSON.t =>
     ("fixture", Json.boolJ(r.fixture)),
     ("outputPath", Json.str(r.outputPath)),
     ("items", Json.arr(Array.map(r.items, encodeReplyItem))),
+    ("imageWidth", Json.num(Int.toFloat(r.imageWidth))),
+    ("imageHeight", Json.num(Int.toFloat(r.imageHeight))),
     ("timing", encodeTiming(r.timing)),
     ("cost", encodeCost(r.cost)),
     (

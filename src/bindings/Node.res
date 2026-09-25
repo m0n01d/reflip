@@ -8,6 +8,8 @@ module Buffer = {
   @val @scope("Buffer") external concat: array<t> => t = "concat"
   @send external toStringWithEncoding: (t, string) => string = "toString"
   @get external length: t => int = "length"
+  @send external readUInt8: (t, int) => int = "readUInt8"
+  @send external readUInt16BE: (t, int) => int = "readUInt16BE"
 
   @val @scope("Buffer") external fromString: (string, string) => t = "from"
 }

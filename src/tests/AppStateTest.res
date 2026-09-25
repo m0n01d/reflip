@@ -8,6 +8,8 @@ let sampleReply: Types.sceneReply = {
   fixture: true,
   outputPath: "/tmp/test.json",
   items: [],
+  imageWidth: 800,
+  imageHeight: 600,
   timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
   cost: {
     Types.usd: 0.01,

@@ -56,6 +56,9 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/Types.res`: the shared domain types and the HTTP reply's JSON encoder.
 - `src/Shared.res`: the model variant, the model ids and labels, and the `sceneReply` decoder. It has no Node imports, so both the server and the page use it. Neither side copies a model id string.
 - `src/Pricing.res`, `src/Stats.res`: the cost formula and the price-percentile math, both pure and both tested.
+- `src/ImageSize.res`: the reference resize function from the Claude vision guide, and the resolution tier of each model. It gives the size of the photo that Claude sees.
+- `src/JpegSize.res`: reads the width and the height of the uploaded JPEG from its header. The reply sends them back as `imageWidth` and `imageHeight`.
+- `src/Box.res`: decodes the `[x1, y1, x2, y2]` box of an item, clamps it to the photo, and rescales it when Claude saw a resized photo (Haiku 4.5).
 - `src/SystemPrompt.res`: our own prompt text and the JSON schema for structured output.
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.

@@ -3,6 +3,9 @@
 
 StatsTest.run()
 PricingTest.run()
+ImageSizeTest.run()
+JpegSizeTest.run()
+BoxTest.run()
 ClaudeDecodeTest.run()
 EbayDecodeTest.run()
 GuardTest.run()
