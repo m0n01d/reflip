@@ -186,7 +186,10 @@ module ItemCard = {
           imageHeight={Some(imageHeight)}
         />
         <div className="item-info">
-          <div className="item-name"> {React.string(item.name)} </div>
+          <div className="item-name">
+            {React.string(item.name)}
+            {item.size == "" ? React.null : React.string(" (" ++ item.size ++ ")")}
+          </div>
           <div className="item-range">
             {React.string(fmtUsd(item.estimateLowUsd) ++ " – " ++ fmtUsd(item.estimateHighUsd))}
           </div>
@@ -244,6 +247,9 @@ module Footer = {
         )}
       </div>
       <div> {React.string("web searches: " ++ Int.toString(reply.cost.webSearches))} </div>
+      <div>
+        {React.string("Quarter: " ++ (reply.quarterSeen ? "seen" : "not seen"))}
+      </div>
       {switch reply.ebayNote {
       | Some(note) => <div className="ebay-note"> {React.string(note)} </div>
       | None => React.null
@@ -363,48 +369,51 @@ let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
 // click from bubbling up to the card's own onClick.
 module GemCard = {
   @react.component
-    let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
-      <li className="item" onClick={_ => onToggle(gem.findId)}>
-        <div className="item-top">
-          <CropView
-            box={gem.box}
+  let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
+    <li className="item" onClick={_ => onToggle(gem.findId)}>
+      <div className="item-top">
+        <CropView
+          box={gem.box}
+          photoUrl={Api.scenePhotoUrl(gem.sceneId)}
+          imageWidth={gem.imageWidth}
+          imageHeight={gem.imageHeight}
+        />
+        <div className="item-info">
+          <div className="item-name">
+            {React.string(gem.name)}
+            {gem.size == "" ? React.null : React.string(" (" ++ gem.size ++ ")")}
+          </div>
+          <div className="item-range">
+            {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
+          </div>
+          {switch gem.where {
+          | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+          | None => React.null
+          }}
+          <div className="item-confidence">
+            {React.string("confidence " ++ fmtPct(gem.confidence))}
+          </div>
+        </div>
+      </div>
+      <EbayBlock ebay={gem.ebay} />
+      <a
+        className="sold-link"
+        href={gem.soldSearchUrl}
+        target="_blank"
+        rel="noreferrer"
+        onClick={ReactEvent.Mouse.stopPropagation}>
+        {React.string("Sold listings")}
+      </a>
+      {isOpen
+        ? <PhotoView
             photoUrl={Api.scenePhotoUrl(gem.sceneId)}
             imageWidth={gem.imageWidth}
             imageHeight={gem.imageHeight}
+            selectedBox={gem.box}
+            onPhotoTap={_ => ()}
           />
-          <div className="item-info">
-            <div className="item-name"> {React.string(gem.name)} </div>
-            <div className="item-range">
-              {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
-            </div>
-            {switch gem.where {
-            | Some(w) => <div className="item-basis"> {React.string(w)} </div>
-            | None => React.null
-            }}
-            <div className="item-confidence">
-              {React.string("confidence " ++ fmtPct(gem.confidence))}
-            </div>
-          </div>
-        </div>
-        <EbayBlock ebay={gem.ebay} />
-        <a
-          className="sold-link"
-          href={gem.soldSearchUrl}
-          target="_blank"
-          rel="noreferrer"
-          onClick={ReactEvent.Mouse.stopPropagation}>
-          {React.string("Sold listings")}
-        </a>
-        {isOpen
-          ? <PhotoView
-              photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-              imageWidth={gem.imageWidth}
-              imageHeight={gem.imageHeight}
-              selectedBox={gem.box}
-              onPhotoTap={_ => ()}
-            />
-          : React.null}
-      </li>
+        : React.null}
+    </li>
 }
 
 module HaulView = {
@@ -486,6 +495,13 @@ module HaulView = {
           <button className="take-photo" onClick={onDone}>
             {React.string("Done")}
           </button>
+        </div>
+      }}
+      {switch phase {
+      | Finished(_) | Finishing(_) => React.null
+      | _ =>
+        <div className="hint">
+          {React.string("Put a quarter next to small items to show their size.")}
         </div>
       }}
       {Array.length(status.gems) > 0
@@ -746,6 +762,9 @@ let make = () => {
           />
           {React.string("Take photo")}
         </label>
+        <div className="hint">
+          {React.string("Put a quarter next to small items to show their size.")}
+        </div>
         <div className="status"> {React.string(statusText(model.status))} </div>
         {switch (model.reply, model.photoUrl) {
         | (Some(reply), Some(photoUrl)) =>

@@ -18,6 +18,7 @@ type gem = {
   soldSearchUrl: string,
   sceneId: string,
   ebayMedianUsd: option<float>,
+  size: string,
   // This gem's box crop: its mail Content-ID and its real pixel size, e.g.
   // cid "gem-<sceneId>-<n>@reflip" (HaulEmail.gemCidFor). None when the
   // find has no box, or when the crop itself failed to build — either
@@ -182,10 +183,12 @@ let gemHtml = (g: gem): string => {
   | Some(m) => "<div style=\"margin:2px 0;color:#555555\">eBay median: " ++ usd(m) ++ "</div>"
   | None => ""
   }
+  let sizeSuffix = g.size == "" ? "" : " (" ++ escapeHtml(g.size) ++ ")"
   "<div style=\"margin:0 0 20px 0;padding-bottom:16px;border-bottom:1px solid #dddddd\">" ++
   cropHtml ++
   "<div style=\"font-weight:bold;font-size:16px;margin:0 0 4px 0\">" ++
   escapeHtml(g.name) ++
+  sizeSuffix ++
   "</div>" ++
   "<div style=\"margin:2px 0\">" ++
   usd(g.estimateLowUsd) ++
@@ -286,7 +289,9 @@ let gemText = (g: gem): string => {
   | Some(m) => "  eBay median: " ++ usd(m) ++ "\n"
   | None => ""
   }
+  let sizeSuffix = g.size == "" ? "" : " (" ++ g.size ++ ")"
   g.name ++
+  sizeSuffix ++
   "\n  " ++
   usd(g.estimateLowUsd) ++
   "–" ++

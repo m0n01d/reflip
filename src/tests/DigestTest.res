@@ -13,6 +13,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=weird+thing&LH_Sold=1",
     sceneId: "scene-a",
     ebayMedianUsd: None,
+    size: "",
     crop: None,
   }
   let lamp: Digest.gem = {
@@ -24,6 +25,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=old+lamp&LH_Sold=1",
     sceneId: "scene-c",
     ebayMedianUsd: None,
+    size: "",
     crop: None,
   }
   let radio: Digest.gem = {
@@ -35,6 +37,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=vintage+radio&LH_Sold=1",
     sceneId: "scene-b",
     ebayMedianUsd: Some(60.0),
+    size: "12 in",
     crop: None,
   }
 
@@ -92,6 +95,23 @@ let run = () => {
   TestKit.check("scene-b's cid appears in the html body", String.includes(digest.html, "cid:cid-scene-b"))
   TestKit.check("scene-c's cid appears in the html body", String.includes(digest.html, "cid:cid-scene-c"))
 
+  TestKit.check(
+    "a non-empty size shows after the name in the html body",
+    String.includes(digest.html, "Vintage Radio (12 in)"),
+  )
+  TestKit.check(
+    "a non-empty size shows after the name in the text body",
+    String.includes(digest.text, "Vintage Radio (12 in)"),
+  )
+  TestKit.check(
+    "an empty size shows nothing extra after the name in the html body",
+    String.includes(digest.html, "Old Lamp</div>") && !String.includes(digest.html, "Old Lamp ("),
+  )
+  TestKit.check(
+    "an empty size shows nothing extra after the name in the text body",
+    String.includes(digest.text, "Old Lamp\n") && !String.includes(digest.text, "Old Lamp ("),
+  )
+
   TestKit.check("the other-items count appears in the html body", String.includes(digest.html, "7 other items"))
   TestKit.check("the other-items count appears in the text body", String.includes(digest.text, "7 other items"))
 
@@ -141,6 +161,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a1&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
+    size: "",
     crop: Some({Digest.cid: "cid-a1", width: 200, height: 150}),
   }
   let g2: Digest.gem = {
@@ -152,6 +173,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a2&LH_Sold=1",
     sceneId: "scene-1",
     ebayMedianUsd: None,
+    size: "",
     crop: Some({Digest.cid: "cid-a2", width: 180, height: 135}),
   }
   let g3: Digest.gem = {
@@ -163,6 +185,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a3&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
+    size: "",
     crop: Some({Digest.cid: "cid-a3", width: 150, height: 200}),
   }
   let g4: Digest.gem = {
@@ -174,6 +197,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a4&LH_Sold=1",
     sceneId: "scene-3",
     ebayMedianUsd: None,
+    size: "",
     crop: Some({Digest.cid: "cid-a4", width: 120, height: 240}),
   }
   let g5: Digest.gem = {
@@ -185,6 +209,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a5&LH_Sold=1",
     sceneId: "scene-1",
     ebayMedianUsd: None,
+    size: "",
     crop: Some({Digest.cid: "cid-a5", width: 100, height: 80}),
   }
   // A6 has no box (its Store find's box was None, or the crop failed) —
@@ -198,6 +223,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a6&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
+    size: "",
     crop: None,
   }
 

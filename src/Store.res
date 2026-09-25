@@ -53,6 +53,7 @@ type find = {
   soldOn: option<string>,
   soldWhere: option<string>,
   createdAt: string,
+  size: string,
   box: option<Types.box>,
 }
 
@@ -213,6 +214,7 @@ let decodeFind = (json: JSON.t): option<find> =>
       soldOn: Json.stringField(json, "soldOn"),
       soldWhere: Json.stringField(json, "soldWhere"),
       createdAt,
+      size: Json.stringField(json, "size")->Option.getOr(""),
       box,
     })
   | _ => None
@@ -278,6 +280,7 @@ let openAt = (path: string): t => {
       soldOn TEXT,
       soldWhere TEXT,
       createdAt TEXT NOT NULL,
+      size TEXT,
       boxX1 INTEGER,
       boxY1 INTEGER,
       boxX2 INTEGER,
@@ -286,14 +289,18 @@ let openAt = (path: string): t => {
   )
   Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
 
-  // A DB from before item boxes has a `finds` table with no box columns.
-  // CREATE TABLE IF NOT EXISTS above is a no-op on an existing table, so
-  // check PRAGMA table_info and add any column it doesn't already list.
+  // A DB from before item boxes or the size field has a `finds` table
+  // missing those columns. CREATE TABLE IF NOT EXISTS above is a no-op on
+  // an existing table, so check PRAGMA table_info and add any column it
+  // doesn't already list.
   let findsCols =
     Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(finds)`), [])->Array.filterMap(row =>
       Json.stringField(row, "name")
     )
   let hasCol = (name: string): bool => Array.some(findsCols, c => c == name)
+  if !hasCol("size") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN size TEXT`)
+  }
   if !hasCol("boxX1") {
     Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX1 INTEGER`)
   }
@@ -523,9 +530,9 @@ let insertFind = (db: t, find: find): unit => {
     `INSERT INTO finds (
       findId, sceneId, model, fixture, name, query, "where",
       estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
-      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt,
+      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size,
       boxX1, boxY1, boxX2, boxY2
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   Sqlite.run(
     stmt,
@@ -548,6 +555,7 @@ let insertFind = (db: t, find: find): unit => {
       optText(find.soldOn),
       optText(find.soldWhere),
       Sqlite.Text(find.createdAt),
+      Sqlite.Text(find.size),
       optInt(find.box->Option.map(b => b.x1)),
       optInt(find.box->Option.map(b => b.y1)),
       optInt(find.box->Option.map(b => b.x2)),
