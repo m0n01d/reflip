@@ -40,7 +40,7 @@ let cropFor = (
   photoPaths: Dict.t<string>,
   f: Store.find,
   n: int,
-): option<Email.inlineImage> =>
+): option<(Email.inlineImage, int, int)> =>
   switch f.box {
   | None => None
   | Some(box) =>
@@ -58,11 +58,19 @@ let cropFor = (
           | Error(_) => None
           | Ok() =>
             Node.Fs.existsSync(cropPath)
-              ? Some({
-                  Email.cid: gemCidFor(f.sceneId, n),
-                  filename,
-                  jpeg: Node.Fs.readFileBuffer(cropPath),
-                })
+              ? switch Thumb.readDimensions(cropPath) {
+                | Error(_) => None
+                | Ok((cropWidth, cropHeight)) =>
+                  Some((
+                    {
+                      Email.cid: gemCidFor(f.sceneId, n),
+                      filename,
+                      jpeg: Node.Fs.readFileBuffer(cropPath),
+                    },
+                    cropWidth,
+                    cropHeight,
+                  ))
+                }
               : None
           }
         }
@@ -75,9 +83,9 @@ let cropFor = (
 // the eBay median, not the full stats blob.
 //
 // Builds the Digest.gem rows and their box-crop inline images in the same
-// pass: a gem's cropCid has to name the same cid as its crop image, and
-// `n` resets per scene, so both come from one place rather than two that
-// could drift apart.
+// pass: a gem's crop has to name the same cid (and real pixel size) as its
+// crop image, and `n` resets per scene, so both come from one place rather
+// than two that could drift apart.
 let digestGemsOf = (
   config: Config.t,
   finds: array<Store.find>,
@@ -94,7 +102,7 @@ let digestGemsOf = (
         Dict.set(perScene, f.sceneId, n)
         let image = cropFor(config, photoPaths, f, n)
         switch image {
-        | Some(img) => Array.push(images, img)
+        | Some((img, _, _)) => Array.push(images, img)
         | None => ()
         }
         {
@@ -115,7 +123,11 @@ let digestGemsOf = (
             | exception JsExn(_) => None
             }
           ),
-          cropCid: image->Option.map(img => img.cid),
+          crop: image->Option.map(((img, width, height)) => {
+            Digest.cid: img.cid,
+            width,
+            height,
+          }),
         }
       })
   (gems, images)

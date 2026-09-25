@@ -3,6 +3,12 @@
 // DigestTest.res. See docs/spec-haul-mode.md, "Gems" and "The digest and
 // the email".
 
+type gemCrop = {
+  cid: string,
+  width: int,
+  height: int,
+}
+
 type gem = {
   name: string,
   where: option<string>,
@@ -12,11 +18,11 @@ type gem = {
   soldSearchUrl: string,
   sceneId: string,
   ebayMedianUsd: option<float>,
-  // The Content-ID of this gem's box crop, e.g.
-  // "gem-<sceneId>-<n>@reflip" (HaulEmail.gemCidFor). None when the
+  // This gem's box crop: its mail Content-ID and its real pixel size, e.g.
+  // cid "gem-<sceneId>-<n>@reflip" (HaulEmail.gemCidFor). None when the
   // find has no box, or when the crop itself failed to build — either
   // way the card shows "no box" text and adds no image.
-  cropCid: option<string>,
+  crop: option<gemCrop>,
 }
 
 type failedPhoto = {sceneId: string, error: string}
@@ -153,11 +159,15 @@ let subjectLine = (sortedGems: array<gem>, name: option<string>): string =>
 // escaping as before, just without the whole-photo image (the section now
 // carries that once, above every card).
 let gemHtml = (g: gem): string => {
-  let cropHtml = switch g.cropCid {
-  | Some(cid) =>
+  let cropHtml = switch g.crop {
+  | Some(crop) =>
     "<img src=\"cid:" ++
-    cid ++
-    "\" width=\"240\" style=\"display:block;width:240px;max-width:100%;height:auto;margin:0 0 8px 0\" alt=\"" ++
+    crop.cid ++
+    "\" width=\"" ++
+    Int.toString(crop.width) ++
+    "\" height=\"" ++
+    Int.toString(crop.height) ++
+    "\" style=\"display:block;max-width:100%;height:auto;margin:0 0 8px 0\" alt=\"" ++
     escapeHtml(g.name) ++
     "\">"
   | None =>
@@ -200,7 +210,7 @@ let sectionHtml = (n: int, s: section, ~cidFor: string => string): string => {
   let photoHtml =
     "<img src=\"cid:" ++
     cidFor(s.sceneId) ++
-    "\" width=\"100%\" style=\"display:block;width:100%;max-width:100%;height:auto;margin:0 0 12px 0\" alt=\"" ++
+    "\" width=\"100%\" style=\"display:block;width:100%;max-width:640px;height:auto;margin:0 0 12px 0\" alt=\"" ++
     escapeHtml(heading) ++
     "\">"
   "<div style=\"margin:0 0 28px 0\">" ++

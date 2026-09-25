@@ -13,7 +13,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=weird+thing&LH_Sold=1",
     sceneId: "scene-a",
     ebayMedianUsd: None,
-    cropCid: None,
+    crop: None,
   }
   let lamp: Digest.gem = {
     name: "Old Lamp",
@@ -24,7 +24,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=old+lamp&LH_Sold=1",
     sceneId: "scene-c",
     ebayMedianUsd: None,
-    cropCid: None,
+    crop: None,
   }
   let radio: Digest.gem = {
     name: "Vintage Radio",
@@ -35,7 +35,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=vintage+radio&LH_Sold=1",
     sceneId: "scene-b",
     ebayMedianUsd: Some(60.0),
-    cropCid: None,
+    crop: None,
   }
 
   // Given out of order: [weird(20), lamp(25), radio(35)].
@@ -141,7 +141,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a1&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
-    cropCid: Some("cid-a1"),
+    crop: Some({Digest.cid: "cid-a1", width: 200, height: 150}),
   }
   let g2: Digest.gem = {
     name: "Gem A2",
@@ -152,7 +152,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a2&LH_Sold=1",
     sceneId: "scene-1",
     ebayMedianUsd: None,
-    cropCid: Some("cid-a2"),
+    crop: Some({Digest.cid: "cid-a2", width: 180, height: 135}),
   }
   let g3: Digest.gem = {
     name: "Gem A3",
@@ -163,7 +163,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a3&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
-    cropCid: Some("cid-a3"),
+    crop: Some({Digest.cid: "cid-a3", width: 150, height: 200}),
   }
   let g4: Digest.gem = {
     name: "Gem A4",
@@ -174,7 +174,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a4&LH_Sold=1",
     sceneId: "scene-3",
     ebayMedianUsd: None,
-    cropCid: Some("cid-a4"),
+    crop: Some({Digest.cid: "cid-a4", width: 120, height: 240}),
   }
   let g5: Digest.gem = {
     name: "Gem A5",
@@ -185,7 +185,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a5&LH_Sold=1",
     sceneId: "scene-1",
     ebayMedianUsd: None,
-    cropCid: Some("cid-a5"),
+    crop: Some({Digest.cid: "cid-a5", width: 100, height: 80}),
   }
   // A6 has no box (its Store find's box was None, or the crop failed) —
   // Digest.gemHtml shows "no box" and adds no image for it.
@@ -198,7 +198,7 @@ let run = () => {
     soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=gem+a6&LH_Sold=1",
     sceneId: "scene-2",
     ebayMedianUsd: None,
-    cropCid: None,
+    crop: None,
   }
 
   // Given out of order; Digest.make sorts them itself.
@@ -269,6 +269,13 @@ let run = () => {
   )
   TestKit.check("scene-3's whole-photo image sits inside section 3", idxPhotoImgScene3 > idxPhoto3)
 
+  // The whole-photo <img> caps at 640px on a wide desktop client, instead
+  // of stretching to fill it (width="100%" alone has no such cap).
+  TestKit.check(
+    "the whole-photo image style caps at max-width:640px",
+    String.includes(grouped.html, "max-width:640px"),
+  )
+
   // Gem order inside section 1 (scene-2): A1, then A3, then A6 — the same
   // order they appear in the overall sortGems order.
   let idxA1 = String.indexOf(grouped.html, "Gem A1")
@@ -292,6 +299,21 @@ let run = () => {
   TestKit.check("A5's crop cid appears", String.includes(grouped.html, "cid:cid-a5"))
   TestKit.check("A6 has no crop cid (it has no box)", !String.includes(grouped.html, "cid:cid-a6"))
   TestKit.check("A6's card shows \"no box\" in place of a crop", String.includes(grouped.html, "no box"))
+
+  // A4's crop is portrait (120x240, taller than it is wide) — its <img>
+  // must render at its own real size, not the old fixed 240px width that
+  // would have upscaled and mis-sized it.
+  TestKit.check(
+    "A4's portrait crop (120x240) renders width=\"120\" height=\"240\"",
+    String.includes(grouped.html, "width=\"120\" height=\"240\""),
+  )
+  // None of the fixture crops is really 240px wide, so a literal
+  // width="240" would only appear if Digest.gemHtml were still hard-coding
+  // it instead of using each gem's own crop size.
+  TestKit.check(
+    "no crop image is hard-coded to width=\"240\" (none of these is really 240px wide)",
+    !String.includes(grouped.html, "width=\"240\""),
+  )
 
   // The text body is grouped the same way: a heading line per photo, then
   // its gems, with no image lines at all (the text body never had any).
