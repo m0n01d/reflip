@@ -327,6 +327,26 @@ let runConnectionState = () => {
   )
 }
 
+// -- sub(): the reconnecting banner overrides the phase-based line --------
+let runSubReconnecting = () => {
+  TestKit.section("ScanState.sub: \"Connection dropped. Catching up…\" while reconnecting")
+  let live = {...ScanState.initialModel, phase: Live}
+  TestKit.check(
+    "the ordinary Live sub line shows when not reconnecting",
+    ScanState.sub(live) != "Connection dropped. Catching up…",
+  )
+  let dropped = {...live, reconnecting: true}
+  TestKit.check(
+    "sub reads the dropped-connection line once reconnecting flips on",
+    ScanState.sub(dropped) == "Connection dropped. Catching up…",
+  )
+  let recovered = {...dropped, reconnecting: false}
+  TestKit.check(
+    "sub returns to the ordinary Live line once reconnecting clears",
+    ScanState.sub(recovered) == ScanState.sub(live),
+  )
+}
+
 let run = () => {
   runTranscript()
   runNumbering()
@@ -338,4 +358,5 @@ let run = () => {
   runReplaySplit()
   runSendFailed()
   runConnectionState()
+  runSubReconnecting()
 }

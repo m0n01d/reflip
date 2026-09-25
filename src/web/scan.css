@@ -120,6 +120,13 @@ body:has(.scan-shell) {
   animation: scan-live-blink 1.2s steps(1) infinite;
 }
 
+/* Reconnecting: a still, muted dot instead of the blinking orange one —
+   the connection dropped, so nothing is actively landing right now. */
+.scan-live-dot-muted {
+  background-color: var(--scan-muted);
+  animation: none;
+}
+
 .scan-pill-btn {
   height: 44px;
   padding: 0 18px;

@@ -65,10 +65,14 @@ let make = (
         } else {
           switch phase {
           | ScanState.Sending | ScanState.Live =>
+            let reconnecting = ScanState.connectionState(model.scan) == ScanState.Reconnecting
             <>
               <span className="scan-live">
-                <span ariaHidden={true} className="scan-live-dot" />
-                {React.string("LIVE")}
+                <span
+                  ariaHidden={true}
+                  className={"scan-live-dot" ++ (reconnecting ? " scan-live-dot-muted" : "")}
+                />
+                {React.string(reconnecting ? "RECONNECTING" : "LIVE")}
               </span>
               <button type_="button" onClick={onStop} className="scan-pill-btn">
                 {React.string("Stop")}

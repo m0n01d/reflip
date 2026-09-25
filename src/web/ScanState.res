@@ -342,11 +342,12 @@ let isEnded = (m: model): bool =>
 // duplicating the check.
 let isNotPriced = (m: model, s: sticker): bool => s.item->Option.isNone && isEnded(m)
 
-// The network edge's state, derived for display (docs/scan-ui.md; a
-// later pass shows "Reconnecting" in the view). `reconnecting` already
-// tracks a drop in progress; `Ended(Failed)` is the one phase where the
-// network gave up, rather than the scan finishing on purpose (Stopped),
-// on schedule (Done), or by the clock (Timeout).
+// The network edge's state, derived for display (docs/scan-ui.md):
+// ScanShell's header badge and this module's `sub` both read it, to show
+// "Reconnecting" in place of "Live". `reconnecting` already tracks a drop
+// in progress; `Ended(Failed)` is the one phase where the network gave
+// up, rather than the scan finishing on purpose (Stopped), on schedule
+// (Done), or by the clock (Timeout).
 type connectionState = Live | Reconnecting | Failed
 
 let connectionState = (m: model): connectionState =>
@@ -463,7 +464,9 @@ let headline = (m: model): string =>
   }
 
 let sub = (m: model): string =>
-  switch m.phase {
+  connectionState(m) == Reconnecting
+    ? "Connection dropped. Catching up…"
+    : switch m.phase {
   | Ready => "Take a photo of the table."
   | Sending => "Uploading " ++ mb(m.uploadBytes) ++ " MB."
   | Ended(ScanEvent.EndStatus.Done) => plural(Array.length(visibleStickers(m)), "item", "items") ++ " on the table"
