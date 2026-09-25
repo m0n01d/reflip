@@ -372,6 +372,61 @@ let run = async () => {
   Node.HttpServer.close(stub500, () => ())
   Store.close(store4)
 
+  // -- 4b. A cut-off reply fails the scene but keeps its cost ------------------
+  TestKit.section("Haul: a max_tokens reply fails the scene and records its cost")
+
+  let stubCutOff = Node.HttpServer.createServer((_req, res) => {
+    Node.HttpServer.writeHead(res, 200, Dict.fromArray([("Content-Type", "application/json")]))
+    Node.HttpServer.endWithBody(
+      res,
+      `{"stop_reason":"max_tokens","content":[{"type":"text","text":"{\\"items\\": [{\\"name\\": \\"lamp\\""}],"usage":{"input_tokens":3000,"output_tokens":8192}}`,
+    )
+  })
+  let stubCutOffPort = await Promise.make((resolve, _reject) =>
+    Node.HttpServer.listen(stubCutOff, 0, "127.0.0.1", () =>
+      resolve(Node.HttpServer.address(stubCutOff).port)
+    )
+  )
+  let dataDir4b = tmpDataDir()
+  let config4b = {
+    ...baseConfig(~dataDir=dataDir4b, ~fixtures=false),
+    Config.anthropicApiKey: Some("test-key-not-real"),
+    haulConcurrency: 1,
+    claudeUrl: "http://127.0.0.1:" ++ Int.toString(stubCutOffPort) ++ "/v1/messages",
+    claudeTimeoutMs: 5000,
+  }
+  let {Server.server: server4b, port: port4b, store: store4b} = await Server.start(config4b)
+  let base4b = "http://127.0.0.1:" ++ Int.toString(port4b)
+  let (_status, createJson4b) = await postJson(base4b ++ "/api/hauls", Json.obj([]))
+  let haulId4b = Json.stringField(createJson4b, "haulId")->Option.getOr("")
+  let _ = await postScene(base4b, haulId4b, "client-a")
+
+  let failed4b = await pollUntil(~timeoutMs=5000, async () => {
+    let (_status, json) = await getJson(base4b ++ "/api/hauls/" ++ haulId4b)
+    Json.intField(countsOf(json), "failed") == Some(1)
+  })
+  TestKit.check("the cut-off scene is marked failed within 5 s", failed4b)
+  let scene4b = Store.scenesOf(store4b, haulId4b)[0]
+  TestKit.check(
+    "the scene error says the reply was cut off",
+    scene4b->Option.flatMap(s => s.error) == Some("reply cut off"),
+  )
+  TestKit.check(
+    "the failed scene records a cost above 0",
+    switch scene4b->Option.flatMap(s => s.costUsd) {
+    | Some(usd) => usd > 0.0
+    | None => false
+    },
+  )
+  TestKit.check(
+    "the failed scene records claudeMs",
+    scene4b->Option.flatMap(s => s.claudeMs)->Option.isSome,
+  )
+
+  Node.HttpServer.close(server4b, () => ())
+  Node.HttpServer.close(stubCutOff, () => ())
+  Store.close(store4b)
+
   // -- 5. Restart recovers a running scene -------------------------------------
   TestKit.section("Haul: restart resets a running scene back to queued")
 
