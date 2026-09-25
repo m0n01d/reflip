@@ -20,6 +20,7 @@ let run = () => {
     ~model="claude-sonnet-5",
     ~imageBase64="ZmFrZQ==",
     ~structuredOutput=true,
+    ~mode=ClaudeClient.Scene,
   )
   let serialized = JSON.stringify(requestJson)
 
@@ -34,5 +35,36 @@ let run = () => {
       "request body excludes eBay price " ++ price,
       !String.includes(serialized, price),
     )
+  )
+
+  // Haul mode (step 4): same guard, plus the gem-threshold prompt and its
+  // own schema must not leak eBay numbers either.
+  let haulRequestJson = ClaudeClient.buildRequestBody(
+    ~model="claude-sonnet-5",
+    ~imageBase64="ZmFrZQ==",
+    ~structuredOutput=true,
+    ~mode=ClaudeClient.Haul(20.0),
+  )
+  let haulSerialized = JSON.stringify(haulRequestJson)
+
+  Array.forEach(titles, title =>
+    TestKit.check(
+      "haul request body excludes eBay title \"" ++ title ++ "\"",
+      !String.includes(haulSerialized, title),
+    )
+  )
+  Array.forEach(prices, price =>
+    TestKit.check(
+      "haul request body excludes eBay price " ++ price,
+      !String.includes(haulSerialized, price),
+    )
+  )
+  TestKit.check(
+    "haul request still blocks ebay.com",
+    String.includes(haulSerialized, "blocked_domains") && String.includes(haulSerialized, "ebay.com"),
+  )
+  TestKit.check(
+    "haul system text names the $20 gem threshold",
+    String.includes(haulSerialized, "$20"),
   )
 }

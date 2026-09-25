@@ -56,3 +56,93 @@ let postRtt = async (sceneId: string, rttMs: float, resizeMs: float): result<uni
   | JsExn(_) => Error("could not reach the server")
   }
 }
+
+// -- Haul mode (docs/spec-haul-mode.md "Step 5: phone") -------------------
+// Same error convention as postScene above: a readable {"error": ...} body
+// when the brain sends one (a 404, a 409, a 503 with no API key, ...),
+// else the bare status code.
+
+let readErrorReason = async (resp: WebApi.response): string => {
+  let said = "the server said " ++ Int.toString(WebApi.responseStatus(resp))
+  let reason = try {
+    Json.stringField(await WebApi.responseJson(resp), "error")
+  } catch {
+  | JsExn(_) => None
+  }
+  reason->Option.mapOr(said, r => said ++ ": " ++ r)
+}
+
+let decodeHaulResponse = async (resp: WebApi.response): result<Types.haulStatus, string> =>
+  if WebApi.responseOk(resp) {
+    switch Shared.decodeHaulStatus(await WebApi.responseJson(resp)) {
+    | Ok(status) => Ok(status)
+    | Error(msg) => Error("could not read the haul: " ++ msg)
+    }
+  } else {
+    Error(await readErrorReason(resp))
+  }
+
+let postHaul = async (storeName: string): result<Types.haulStatus, string> =>
+  try {
+    let body = storeName == "" ? "" : JSON.stringify(Json.obj([("name", Json.str(storeName))]))
+    let resp = await WebApi.fetchString(
+      "/api/hauls",
+      {
+        WebApi.method: "POST",
+        headers: Dict.fromArray([("Content-Type", "application/json")]),
+        body,
+      },
+    )
+    await decodeHaulResponse(resp)
+  } catch {
+  | JsExn(_) => Error("could not reach the server")
+  }
+
+let getHaulStatus = async (haulId: string): result<Types.haulStatus, string> =>
+  try {
+    let resp = await WebApi.fetchGet("/api/hauls/" ++ haulId)
+    await decodeHaulResponse(resp)
+  } catch {
+  | JsExn(_) => Error("could not reach the server")
+  }
+
+let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
+  try {
+    let resp = await WebApi.fetchString(
+      "/api/hauls/" ++ haulId ++ "/done",
+      {WebApi.method: "POST", headers: Dict.make(), body: ""},
+    )
+    await decodeHaulResponse(resp)
+  } catch {
+  | JsExn(_) => Error("could not reach the server")
+  }
+
+// Posts one queued photo. The brain answers 202 with {"sceneId", ...} and,
+// for a client id it has already seen, "duplicate": true — a retried
+// upload then costs nothing.
+let postHaulScene = async (
+  haulId: string,
+  clientId: string,
+  blob: WebApi.blob,
+): result<(string, bool), string> =>
+  try {
+    let resp = await WebApi.fetchBlob(
+      "/api/hauls/" ++ haulId ++ "/scenes",
+      {
+        WebApi.method: "POST",
+        headers: Dict.fromArray([("Content-Type", "image/jpeg"), ("x-client-id", clientId)]),
+        body: blob,
+      },
+    )
+    if WebApi.responseOk(resp) {
+      let json = await WebApi.responseJson(resp)
+      switch Json.stringField(json, "sceneId") {
+      | Some(sceneId) => Ok((sceneId, Json.boolField(json, "duplicate")->Option.getOr(false)))
+      | None => Error("could not read the reply: missing sceneId")
+      }
+    } else {
+      Error(await readErrorReason(resp))
+    }
+  } catch {
+  | JsExn(_) => Error("could not reach the server")
+  }

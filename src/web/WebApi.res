@@ -54,3 +54,66 @@ type requestInitString = {method: string, headers: Dict.t<string>, body: string}
 @get external responseOk: response => bool = "ok"
 @get external responseStatus: response => int = "status"
 @send external responseJson: response => promise<JSON.t> = "json"
+@val external fetchGet: string => promise<response> = "fetch"
+
+// -- Haul mode (docs/spec-haul-mode.md "Step 5: phone") -------------------
+
+// crypto.randomUUID gives each queued photo its own client id, independent
+// of the server's scene id (the server echoes the same scene id back for a
+// retried client id, so this never costs a duplicate Claude call).
+@scope("crypto") @val external randomUUID: unit => string = "randomUUID"
+
+// Browser timers, for the upload retry backoff and the status poll. The
+// handle is window.setTimeout/setInterval's return value (a number) — this
+// file is browser-only, so it is never Node's Timeout object.
+@val external setTimeout: (unit => unit, int) => float = "setTimeout"
+@val external clearTimeout: float => unit = "clearTimeout"
+@val external setInterval: (unit => unit, int) => float = "setInterval"
+@val external clearInterval: float => unit = "clearInterval"
+
+@get external blobType: blob => string = "type"
+
+// A Blob constructor: lets AppStateTest build a real queue item without a
+// cast, and lets product code make a typed placeholder blob if it ever
+// needs one.
+type blobOptions = {@as("type") type_: string}
+@new external makeBlobWithType: (array<string>, blobOptions) => blob = "Blob"
+
+// Turn the "Add photos" multi-picker's FileList into a plain array, in
+// order. Reuses the same fileListItem/fileListLength externals as the
+// single-photo picker.
+let fileListToArray = (files: fileList): array<blob> => {
+  let result = []
+  for i in 0 to fileListLength(files) - 1 {
+    switch fileListItem(files, i)->Nullable.toOption {
+    | Some(f) => Array.push(result, f)
+    | None => ()
+    }
+  }
+  result
+}
+
+// -- idb-keyval, typed honestly --------------------------------------------
+// idb-keyval's get/set/keys are generic over `any` at the JS side. Rather
+// than assert our own blob/string type onto whatever comes back — that
+// would be Obj.magic under another name — `idbValue` is a fully opaque
+// "value of unknown shape". The only way to use one is to reify it through
+// the platform: `new Response(value)` accepts any BodyInit-ish value, and
+// `.text()` / `.blob()` genuinely re-derive a real string or Blob from it.
+// That is a runtime conversion, not a type-level cast: if the stored value
+// were not blob-shaped, `.blob()` would still hand back *some* real Blob
+// (never our asserted type for free), which is exactly the honesty this
+// file's own header comment asks for.
+type idbValue
+@module("idb-keyval") external idbGetUnknown: string => promise<Nullable.t<idbValue>> = "get"
+@module("idb-keyval") external idbSetBlob: (string, blob) => promise<unit> = "set"
+@module("idb-keyval") external idbSetString: (string, string) => promise<unit> = "set"
+@module("idb-keyval") external idbDel: string => promise<unit> = "del"
+@module("idb-keyval") external idbKeysUnknown: unit => promise<array<idbValue>> = "keys"
+
+@new external responseOfUnknown: idbValue => response = "Response"
+@send external responseBlob: response => promise<blob> = "blob"
+@send external responseText: response => promise<string> = "text"
+
+let unknownToBlob = (v: idbValue): promise<blob> => responseOfUnknown(v)->responseBlob
+let unknownToText = (v: idbValue): promise<string> => responseOfUnknown(v)->responseText

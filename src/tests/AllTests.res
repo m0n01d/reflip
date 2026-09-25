@@ -6,16 +6,23 @@ PricingTest.run()
 ClaudeDecodeTest.run()
 EbayDecodeTest.run()
 GuardTest.run()
+StoreTest.run()
 AppStateTest.run()
+DigestTest.run()
+ThumbTest.run()
 Console.log("all sync tests passed")
 
-// Async suite (the live HTTP server): a rejection here fails the process
-// exit code (node >= 15), same as dippa's src/tests/AllTests.res.
+// Async suite (the live HTTP server, plus EmailTest's stream-transport
+// send): a rejection here fails the process exit code (node >= 15), same
+// as dippa's src/tests/AllTests.res.
 let () =
-  ServerTest.run()
+  EmailTest.run()
+  ->Promise.then(() => ServerTest.run())
   ->Promise.then(() => SharedDecodeTest.run())
   ->Promise.then(() => StaticServeTest.run())
   ->Promise.then(() => ClaudeTimeoutTest.run())
+  ->Promise.then(() => HaulTest.run())
+  ->Promise.then(() => HaulEmailTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()

@@ -23,6 +23,9 @@ let run = async () => {
     structuredOutput: true,
     distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
     distDir: Node.Path.join([cwd, "dist"]),
+    haulConcurrency: 4,
+    haulMaxUsd: 10.0,
+    haulGemMinUsd: 20.0,
     claudeUrl: "http://127.0.0.1:" ++ Int.toString(stubPort) ++ "/v1/messages",
     claudeTimeoutMs: 300,
   }
