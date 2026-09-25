@@ -103,6 +103,14 @@ let runTakeover = () => {
   // Box A [0,0,100,100] (area 10000) vs box B [0,0,100,50] (area 5000):
   // intersection is B itself (5000), union is 10000, IoU = 0.5 exactly.
   let atThreshold: array<ScanEvent.t> = [
+    // sets sentWidth/sentHeight so toBox below actually decodes the raw
+    // boxes instead of short-circuiting to None (initialModel starts at
+    // 0x0; a real transcript always sends photo-received first, per
+    // docs/scan-ui.md §2). 1000x1000 fits Sonnet5's high tier
+    // (ImageSize.highTier, maxEdge 2576), so no resize happens and the
+    // scale factor is exactly 1.0 — the raw box coordinates below pass
+    // through unchanged, matching the IoU arithmetic in the comments.
+    ScanEvent.PhotoReceived({sceneId: "test-scene", bytes: 50000, width: 1000, height: 1000}),
     ScanEvent.SpotItem({t: 100.0, index: 0, name: "Something", box: [0, 0, 100, 100]}), // sticker 1 (spot)
     ScanEvent.Box({t: 200.0, index: 5, box: [0, 0, 100, 50]}), // sticker 2 (its own box)
     ScanEvent.Item({t: 300.0, index: 5, item: testItem(~name="Priced", ())}),
@@ -131,6 +139,7 @@ let runTakeover = () => {
   // Box A [0,0,100,100] (area 10000) vs box B [50,0,150,100] (area 10000):
   // intersection [50,0,100,100] = 5000, union = 15000, IoU = 1/3 < 0.5.
   let belowThreshold: array<ScanEvent.t> = [
+    ScanEvent.PhotoReceived({sceneId: "test-scene", bytes: 50000, width: 1000, height: 1000}),
     ScanEvent.SpotItem({t: 100.0, index: 0, name: "Something else", box: [0, 0, 100, 100]}), // sticker 1 (spot)
     ScanEvent.Box({t: 200.0, index: 5, box: [50, 0, 150, 100]}), // sticker 2 (its own box)
     ScanEvent.Item({t: 300.0, index: 5, item: testItem(~name="Also priced", ())}),
