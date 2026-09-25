@@ -201,7 +201,13 @@ let make = (
         }}
       </>
     } else {
-      <ScanView model={model.scan} dispatch={scanDispatch} onNewPhoto={onScanFileChange} />
+      <ScanView
+        model={model.scan}
+        dispatch={scanDispatch}
+        onNewPhoto={onScanFileChange}
+        resizeMs={model.resizeMs}
+        rttMs={model.rttMs}
+      />
     }}
     {switch model.settingsOpen {
     | false => React.null

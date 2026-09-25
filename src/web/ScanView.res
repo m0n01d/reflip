@@ -111,7 +111,13 @@ let chevron = (~className: string) =>
   </svg>
 
 @react.component
-let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPhoto: ReactEvent.Form.t => unit) => {
+let make = (
+  ~model: ScanState.model,
+  ~dispatch: ScanState.msg => unit,
+  ~onNewPhoto: ReactEvent.Form.t => unit,
+  ~resizeMs: option<float>,
+  ~rttMs: option<float>,
+) => {
   let (logOpen, setLogOpen) = React.useState(() => false)
   let (alsoOpen, setAlsoOpen) = React.useState(() => false)
   let onSheetClose = (_: ReactEvent.Mouse.t) => dispatch(ScanState.SheetClosed)
@@ -382,13 +388,16 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                 <div className="scan-receipt-label"> {React.string("RUN RECEIPT")} </div>
                 <div className="scan-receipt-rows">
                   {[
-                    ("Model", r.modelLabel),
-                    ("Photo", r.photoSize),
-                    ("Claude", r.claude),
-                    ("Tokens", r.tokens),
-                    ("Web searches", Int.toString(r.webSearches)),
-                    ("Cost", r.cost),
+                    Some(("Model", r.modelLabel)),
+                    Some(("Photo", r.photoSize)),
+                    resizeMs->Option.map(ms => ("Resize", ScanState.mss(ms))),
+                    Some(("Claude", r.claude)),
+                    rttMs->Option.map(ms => ("Round trip", ScanState.mss(ms))),
+                    Some(("Tokens", r.tokens)),
+                    Some(("Web searches", Int.toString(r.webSearches))),
+                    Some(("Cost", r.cost)),
                   ]
+                  ->Array.filterMap(x => x)
                   ->Array.map(((key, value)) =>
                     <div key={key} className="scan-receipt-row">
                       <span className="scan-receipt-key"> {React.string(key)} </span>
