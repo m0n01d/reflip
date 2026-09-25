@@ -18,6 +18,7 @@ let sampleReply: Types.sceneReply = {
     webSearches: 0,
   },
   ebayNote: None,
+  quarterSeen: false,
 }
 
 let sampleHaulStatus: Types.haulStatus = {

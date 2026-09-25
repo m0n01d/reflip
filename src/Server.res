@@ -329,6 +329,7 @@ let handleScene = async (
           sources: item.sources,
           ebay,
           soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+          size: item.size,
         }
       })
       let sceneId = Node.Crypto.randomUUID()
@@ -351,6 +352,7 @@ let handleScene = async (
         timing: {Types.serverMs, claudeMs, ebayMs},
         cost,
         ebayNote,
+        quarterSeen: decoded.quarterSeen,
       }
       SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
       jsonResponse(res, 200, Types.encodeSceneReply(reply))

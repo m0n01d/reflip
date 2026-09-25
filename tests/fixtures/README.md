@@ -10,3 +10,7 @@ default $20 gem threshold on purpose, to prove the threshold is code, not
 the prompt. We shaped each `ebay-search-*.json` from the eBay Browse API,
 per `~/code/yard-sale/worker/ebay.ts` and eBay's own docs. `table.jpg` is a
 small generated image, not a real photo.
+
+Per `docs/spec-scale-ref.md`, `claude-scene.json` has `quarterSeen: true`
+at the top level, and each fixture's items mix a `size` value, an empty
+`size`, and a missing `size` key, so a decode exercises all three cases.

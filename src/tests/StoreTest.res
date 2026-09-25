@@ -207,6 +207,7 @@ let run = () => {
     soldOn: None,
     soldWhere: None,
     createdAt: "2026-09-24T09:10:00.000Z",
+    size: "10 in skillet",
   }
   Store.insertFind(db, find)
 
@@ -221,9 +222,82 @@ let run = () => {
         f.where == Some(trickyWhere),
       )
       TestKit.approx("findsOf round-trips estimateLowUsd", f.estimateLowUsd, 20.0, ~eps=1e-9)
+      TestKit.check("findsOf round-trips size", f.size == "10 in skillet")
     }
   | None => TestKit.check("findsOf returned a row", false)
   }
+
+  // -- openAt migrates an old finds table with no size column ------------------
+  TestKit.section("Store: openAt adds a missing size column")
+
+  let migPath = Node.Path.join([Node.Os.tmpdir(), "reflip-test-mig-" ++ Node.Crypto.randomUUID() ++ ".db"])
+  let rawDb = Sqlite.make(migPath)
+  Sqlite.exec(
+    rawDb,
+    `CREATE TABLE finds (
+      findId TEXT PRIMARY KEY,
+      sceneId TEXT NOT NULL,
+      model TEXT NOT NULL,
+      fixture INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      query TEXT NOT NULL,
+      "where" TEXT,
+      estimateLowUsd REAL NOT NULL,
+      estimateHighUsd REAL NOT NULL,
+      confidence REAL NOT NULL,
+      category TEXT,
+      promptVersion TEXT NOT NULL,
+      ebayJson TEXT,
+      paidUsd REAL,
+      soldUsd REAL,
+      soldOn TEXT,
+      soldWhere TEXT,
+      createdAt TEXT NOT NULL
+    )`,
+  )
+  Sqlite.close(rawDb)
+
+  let migratedDb = Store.openAt(migPath)
+  let migratedFind: Store.find = {
+    findId: "find-mig-1",
+    sceneId: "scene-mig",
+    model: "claude-sonnet-5",
+    fixture: false,
+    name: "Cast iron skillet",
+    query: "cast iron skillet 10 in",
+    where: None,
+    estimateLowUsd: 15.0,
+    estimateHighUsd: 30.0,
+    confidence: 0.7,
+    category: None,
+    promptVersion: "haul-2",
+    ebayJson: None,
+    paidUsd: None,
+    soldUsd: None,
+    soldOn: None,
+    soldWhere: None,
+    createdAt: "2026-09-25T09:00:00.000Z",
+    size: "10 in",
+  }
+  Store.insertFind(migratedDb, migratedFind)
+
+  let selectFind = db =>
+    Sqlite.get(Sqlite.prepare(db, "SELECT * FROM finds WHERE findId = ?"), [Sqlite.Text("find-mig-1")])
+    ->Option.flatMap(Store.decodeFind)
+
+  switch selectFind(migratedDb) {
+  | Some(f) => TestKit.check("a find inserted right after migration keeps its size", f.size == "10 in")
+  | None => TestKit.check("the migrated find round-trips", false)
+  }
+  Store.close(migratedDb)
+
+  // Opening the same file again must not fail now that size already exists.
+  let reopened = Store.openAt(migPath)
+  switch selectFind(reopened) {
+  | Some(f) => TestKit.check("a second open keeps the find and its size", f.size == "10 in")
+  | None => TestKit.check("the find survives a second open", false)
+  }
+  Store.close(reopened)
 
   // -- counts -------------------------------------------------------------------
   TestKit.section("Store: counts")

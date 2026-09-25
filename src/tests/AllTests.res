@@ -10,6 +10,7 @@ StoreTest.run()
 AppStateTest.run()
 DigestTest.run()
 ThumbTest.run()
+ScaleRefTest.run()
 Console.log("all sync tests passed")
 
 // Async suite (the live HTTP server, plus EmailTest's stream-transport
