@@ -10,7 +10,8 @@
     "dev:web": "vite",
     "test": "npm run build && node src/tests/AllTests.res.mjs",
     "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs",
-    "email:check": "node --env-file-if-exists=$HOME/.config/reflip/env src/EmailCheck.res.mjs"
+    "email:check": "node --env-file-if-exists=$HOME/.config/reflip/env src/EmailCheck.res.mjs",
+    "spike:stream": "node --env-file-if-exists=$HOME/.config/reflip/env src/spike/StreamSpike.res.mjs"
   },
   "dependencies": {
     "@glennsl/rescript-json-combinators": "^1.5.1",
