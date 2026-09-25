@@ -173,7 +173,13 @@ body:has(.scan-shell) {
 /* -- Ready screen --------------------------------------------------------- */
 
 .scan-ready {
-  min-height: calc(100vh - 56px - 2px);
+  /* svh (small viewport height): the guaranteed-visible height with iOS
+     Safari's toolbars shown. 100vh there is the LARGER toolbars-hidden
+     height, so a min-height keyed to it pushes .scan-ready-actions's
+     flex-grow spacer (and the settings chip after it) past what's
+     actually on screen with toolbars showing (gap 1). svh never assumes
+     the toolbars collapse, unlike dvh. */
+  min-height: calc(100svh - 56px - 2px);
   display: flex;
   flex-direction: column;
   padding: 0 16px;
