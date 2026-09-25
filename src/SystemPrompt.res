@@ -222,3 +222,56 @@ let haulOutputFormat: JSON.t = Json.obj([
 ])
 
 let haulPromptVersion = "haul-2"
+
+let spotPrompt = `You are a fast item spotter for Flip Scout, a personal resale
+scanner. You will receive one photo of items on a table, shelf, or floor.
+
+Find each distinct sellable item in the photo. Skip clutter, trash, and
+anything that is not resellable. List at most ${Int.toString(maxSceneItems)}
+items. If the photo has more, list the ${Int.toString(maxSceneItems)} that
+are easiest to sell.
+
+For each item, report only:
+- name: a short name for the item
+- box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
+  in the photo, in integer pixel coordinates. x1 and y1 are the pixel
+  position of the top-left corner. x2 and y2 are the pixel position of the
+  bottom-right corner. The photo's width and height in pixels are given
+  below.
+
+Do not estimate a price. Do not search the web. Only name and box each
+item.
+
+Reply with JSON only, shaped as {"items": [...]}. Do not add any
+commentary outside that JSON object.`
+
+let spotItemSchema: JSON.t = Json.obj([
+  ("type", Json.str("object")),
+  (
+    "properties",
+    Json.obj([
+      ("name", Json.obj([("type", Json.str("string"))])),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
+    ]),
+  ),
+  ("required", Json.arr([Json.str("name"), Json.str("box")])),
+  ("additionalProperties", Json.boolJ(false)),
+])
+
+let spotSchema: JSON.t = Json.obj([
+  ("type", Json.str("object")),
+  ("properties", Json.obj([("items", Json.obj([("type", Json.str("array")), ("items", spotItemSchema)]))])),
+  ("required", Json.arr([Json.str("items")])),
+  ("additionalProperties", Json.boolJ(false)),
+])
+
+let spotOutputFormat: JSON.t = Json.obj([
+  ("type", Json.str("json_schema")),
+  ("schema", spotSchema),
+])

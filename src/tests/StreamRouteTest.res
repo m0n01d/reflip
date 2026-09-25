@@ -25,6 +25,10 @@ let expectedKinds = [
   "item",
   "done",
   "scene",
+  // No tests/fixtures/claude-spot fixture exists, so the spot pass ends in
+  // SpotPass.NoFixture and finishSpot (StreamRoute.handle) writes exactly
+  // this one event, right before `end`.
+  "spot-failed",
   "end",
 ]
 
