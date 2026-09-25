@@ -394,6 +394,9 @@ let run = async () => {
     haulConcurrency: 1,
     claudeUrl: "http://127.0.0.1:" ++ Int.toString(stubCutOffPort) ++ "/v1/messages",
     claudeTimeoutMs: 5000,
+    // One cut-off scene costs about $0.088 on claude-sonnet-5, so it alone
+    // reaches this budget.
+    haulMaxUsd: 0.05,
   }
   let {Server.server: server4b, port: port4b, store: store4b} = await Server.start(config4b)
   let base4b = "http://127.0.0.1:" ++ Int.toString(port4b)
@@ -421,6 +424,21 @@ let run = async () => {
   TestKit.check(
     "the failed scene records claudeMs",
     scene4b->Option.flatMap(s => s.claudeMs)->Option.isSome,
+  )
+  let (_status, statusJson4b) = await getJson(base4b ++ "/api/hauls/" ++ haulId4b)
+  TestKit.check(
+    "the cut-off cost counts toward the haul cost",
+    switch Json.floatField(statusJson4b, "costUsd") {
+    | Some(usd) => usd > 0.0
+    | None => false
+    },
+  )
+  TestKit.check(
+    "a cut-off scene over the budget stops the haul with budget reached",
+    switch Json.stringField(statusJson4b, "stopReason") {
+    | Some(r) => String.startsWith(r, "budget reached")
+    | None => false
+    },
   )
 
   Node.HttpServer.close(server4b, () => ())
