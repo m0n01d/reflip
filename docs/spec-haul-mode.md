@@ -114,7 +114,7 @@ In order:
 - The web search tool has no parameter that limits the result size of one search. Only `max_uses` limits the count (the web search tool page, read 2026-09-24).
 - A cheap mode for a haul with no hurry: the Message Batches API. It costs 50% less, and most batches finish in less than 1 hour. It accepts the web search tool. The docs do not say whether it accepts `output_config.format` (the batch processing page, read 2026-09-24).
 - A shutter in the page through `getUserMedia`, which is faster than the file picker. First make sure that iOS 27 does not ask for the camera again at each start.
-- A thumbnail cropped to the gem. Claude gives no reliable boxes today.
+- A thumbnail cropped to the gem, from the boxes in `docs/spec-item-boxes.md`. ~~Claude gives no reliable boxes today.~~ Struck 2026-09-24: the Claude vision docs have a guide for boxes in pixel coordinates (platform.claude.com/docs/en/build-with-claude/vision-coordinates). The docs call the coordinates approximate.
 - The haul as CSV through the share sheet, as `flip-scout.md` asks.
 - Web Push when the digest is ready.
 - Price tags read from the photo, so that the digest shows the profit.
