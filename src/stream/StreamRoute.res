@@ -392,8 +392,8 @@ let handle = async (
         // `end`, and the rejection reached Server.res's top-level catch.
         // Matches every exception, not only a JS Error. Before this fix the
         // catch pattern was `JsExn(e)` alone, so a plain ReScript exception
-        // raised anywhere in here missed the catch and reached Node
-        // unhandled instead of ending the scene.
+        // thrown anywhere in here missed the catch. It reached Server.res's
+        // top-level catch, and the scene never got its `end`.
         try {
           // Tests only, same STREAM_DROP_AFTER_MS pattern above: fixture
           // mode raises a plain ReScript exception before the Claude call,
@@ -598,6 +598,9 @@ let handle = async (
             | JsExn(e) => JsExn.message(e)->Option.getOr("unknown error")
             | _ => "unknown error"
             }
+            // The server log gets the exception itself, with its stack, as
+            // Server.res's top-level catch logged it before this fix.
+            Console.error2("reflip: scene " ++ sceneId ++ " failed", exn)
             write(ScanEvent.ErrorEvent({t: ms, message: "scene failed: " ++ message}))
             write(ScanEvent.End({t: ms, status: ScanEvent.EndStatus.Failed}))
           }
