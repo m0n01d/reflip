@@ -39,5 +39,21 @@ let run = async () => {
   let traversalResp = await Fetch.fetch(base ++ "/../package.json")
   TestKit.check("a path that leaves dist/ returns 404", Fetch.status(traversalResp) == 404)
 
+  // GET /api/scenes/:id/photo (docs/spec-haul-mode.md "The routes"): the id
+  // gets the same 1-to-64-of-[A-Za-z0-9-] check as a client id, and the
+  // resolved path is guarded the same way dist/ is guarded above.
+  TestKit.section("Server: GET /api/scenes/:id/photo")
+
+  let badIdResp = await Fetch.fetch(base ++ "/api/scenes/..%2F../photo")
+  TestKit.check("a scene id outside [A-Za-z0-9-] is 400", Fetch.status(badIdResp) == 400)
+
+  let unknownIdResp = await Fetch.fetch(base ++ "/api/scenes/no-such-scene/photo")
+  TestKit.check("an unknown scene id is 404", Fetch.status(unknownIdResp) == 404)
+  let unknownIdJson = await Fetch.json(unknownIdResp)
+  TestKit.check(
+    "the 404 reply has an error field, same shape as the 400",
+    Json.stringField(unknownIdJson, "error")->Option.isSome,
+  )
+
   Node.HttpServer.close(server, () => ())
 }

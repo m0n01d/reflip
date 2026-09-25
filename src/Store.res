@@ -30,6 +30,8 @@ type scene = {
   claudeMs: option<float>,
   otherCount: option<int>,
   createdAt: string,
+  imageWidth: option<int>,
+  imageHeight: option<int>,
 }
 
 type find = {
@@ -148,6 +150,8 @@ let decodeScene = (json: JSON.t): option<scene> =>
       claudeMs: Json.floatField(json, "claudeMs"),
       otherCount: Json.intField(json, "otherCount"),
       createdAt,
+      imageWidth: Json.intField(json, "imageWidth"),
+      imageHeight: Json.intField(json, "imageHeight"),
     })
   | _ => None
   }
@@ -248,6 +252,8 @@ let openAt = (path: string): t => {
       claudeMs REAL,
       otherCount INTEGER,
       createdAt TEXT NOT NULL,
+      imageWidth INTEGER,
+      imageHeight INTEGER,
       UNIQUE (haulId, clientId)
     )`,
   )
@@ -306,6 +312,21 @@ let openAt = (path: string): t => {
   }
   if !hasCol("boxY2") {
     Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY2 INTEGER`)
+  }
+
+  // A DB from before the scene photo size (docs/spec-item-boxes.md /
+  // docs/spec-haul-mode.md, 2026-09-25) has a `scenes` table with no size
+  // columns. Same PRAGMA table_info check as the finds migration above.
+  let scenesCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(scenes)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasScenesCol = (name: string): bool => Array.some(scenesCols, c => c == name)
+  if !hasScenesCol("imageWidth") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageWidth INTEGER`)
+  }
+  if !hasScenesCol("imageHeight") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageHeight INTEGER`)
   }
 
   db
@@ -383,13 +404,15 @@ let addScene = (
   ~sceneId: string,
   ~photoPath: string,
   ~now: string,
+  ~imageWidth: option<int>,
+  ~imageHeight: option<int>,
 ): scene =>
   switch sceneByClient(db, ~haulId, ~clientId) {
   | Some(existing) => existing
   | None => {
       let stmt = Sqlite.prepare(
         db,
-        "INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt) VALUES (?, ?, ?, 'queued', ?, ?)",
+        "INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt, imageWidth, imageHeight) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)",
       )
       Sqlite.run(
         stmt,
@@ -399,6 +422,8 @@ let addScene = (
           Sqlite.Text(clientId),
           Sqlite.Text(photoPath),
           Sqlite.Text(now),
+          optInt(imageWidth),
+          optInt(imageHeight),
         ],
       )->ignore
       {
@@ -412,6 +437,8 @@ let addScene = (
         claudeMs: None,
         otherCount: None,
         createdAt: now,
+        imageWidth,
+        imageHeight,
       }
     }
   }

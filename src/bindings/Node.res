@@ -12,6 +12,11 @@ module Buffer = {
   @send external readUInt16BE: (t, int) => int = "readUInt16BE"
 
   @val @scope("Buffer") external fromString: (string, string) => t = "from"
+
+  // For a fetch response body read with `.arrayBuffer()` (Fetch.res) —
+  // opaque on this side, since nothing here inspects it, only converts it.
+  type arrayBufferLike
+  @val @scope("Buffer") external fromArrayBuffer: arrayBufferLike => t = "from"
 }
 
 module Fs = {

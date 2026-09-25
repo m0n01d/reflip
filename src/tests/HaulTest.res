@@ -139,6 +139,39 @@ let run = async () => {
     Node.Fs.existsSync(Node.Path.join([dataDir1, "photos", sceneId1 ++ ".jpg"])),
   )
 
+  // The upload read the real fixture JPEG's size (table.jpg is 64x48) and
+  // stored it on the scene row — docs/spec-haul-mode.md "The routes",
+  // GET /api/hauls/:id/scenes.
+  switch Store.sceneByClient(store1, ~haulId=haulId1, ~clientId="client-a") {
+  | Some(s) =>
+    TestKit.check(
+      "the upload stores the photo's size on the scene",
+      s.imageWidth == Some(64) && s.imageHeight == Some(48),
+    )
+  | None => TestKit.check("sceneByClient found the uploaded scene", false)
+  }
+
+  // GET /api/scenes/:id/photo serves the same bytes back, with the two
+  // headers the spec asks for.
+  let photoResp = await Fetch.fetch(base1 ++ "/api/scenes/" ++ sceneId1 ++ "/photo")
+  TestKit.check("GET the scene's photo responds 200", Fetch.status(photoResp) == 200)
+  TestKit.check(
+    "the photo response is image/jpeg",
+    Fetch.getHeader(Fetch.responseHeaders(photoResp), "content-type")->Nullable.toOption ==
+      Some("image/jpeg"),
+  )
+  TestKit.check(
+    "the photo response is cacheable, private and immutable",
+    Fetch.getHeader(Fetch.responseHeaders(photoResp), "cache-control")->Nullable.toOption ==
+      Some("private, max-age=31536000, immutable"),
+  )
+  let photoBuf = Node.Buffer.fromArrayBuffer(await Fetch.arrayBuffer(photoResp))
+  TestKit.check(
+    "the photo bytes match what was uploaded",
+    Node.Buffer.toStringWithEncoding(photoBuf, "base64") ==
+      Node.Buffer.toStringWithEncoding(tablePhotoBuffer, "base64"),
+  )
+
   let reachedValued3 = await pollUntil(~timeoutMs=5000, async () => {
     let (_status, json) = await getJson(base1 ++ "/api/hauls/" ++ haulId1)
     valuedCount(json) == Some(3)
@@ -159,6 +192,36 @@ let run = async () => {
   TestKit.check("every gem got its eBay stats (fixture mode)", hasEbay)
   let hasWhere = Array.every(gems1, g => Json.stringField(g, "where")->Option.isSome)
   TestKit.check("every gem carries a where", hasWhere)
+
+  // Each gem's status JSON carries its find's box, and the size of the
+  // photo it came from (table.jpg is 64x48 — table.jpg's own README, and
+  // ServerTest.res's own check of the M0 /api/scene reply against it).
+  let gemByName = (gems: array<JSON.t>, name: string): option<JSON.t> =>
+    Array.find(gems, g => Json.stringField(g, "name") == Some(name))
+
+  switch gemByName(gems1, "Brass table lamp") {
+  | Some(g) => {
+      let box = Json.field(g, "box")->Option.flatMap(Shared.decodeBox)
+      TestKit.check(
+        "the lamp gem's status JSON carries the fixture's box",
+        box == Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      )
+      TestKit.check(
+        "the lamp gem's status JSON carries the photo size",
+        Json.intField(g, "imageWidth") == Some(64) && Json.intField(g, "imageHeight") == Some(48),
+      )
+    }
+  | None => TestKit.check("found the lamp gem in the status JSON", false)
+  }
+  switch gemByName(gems1, "Griswold cast iron skillet") {
+  | Some(g) =>
+    TestKit.check(
+      "the skillet gem's status JSON has a null box, its fixture box was degenerate",
+      Json.field(g, "box") == Some(JSON.Encode.null),
+    )
+  | None => TestKit.check("found the skillet gem in the status JSON", false)
+  }
+
   TestKit.approx(
     "cost is 3 x the fixture's per-scene cost",
     Json.floatField(statusJson1, "costUsd")->Option.getOr(0.0),
@@ -497,6 +560,8 @@ let run = async () => {
     ~sceneId="scene-restart",
     ~photoPath=photoPath5,
     ~now="2026-09-24T00:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   Store.setStatus(preStore, ~sceneId=scene5.sceneId, Store.Running)
   Store.close(preStore)

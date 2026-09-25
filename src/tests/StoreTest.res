@@ -34,6 +34,8 @@ let run = () => {
     ~sceneId="scene-1",
     ~photoPath="data/photos/scene-1.jpg",
     ~now="2026-09-24T10:01:00.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   TestKit.check("addScene inserts as queued", s1.status == Store.Queued)
 
@@ -44,6 +46,8 @@ let run = () => {
     ~sceneId="scene-1-retry",
     ~photoPath="data/photos/scene-1-retry.jpg",
     ~now="2026-09-24T10:01:05.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   TestKit.check("a retried upload returns the same sceneId", s1retry.sceneId == "scene-1")
   TestKit.check(
@@ -55,6 +59,55 @@ let run = () => {
     Array.length(Store.scenesOf(db, "haul-1")) == 1,
   )
 
+  // -- addScene: the photo size round-trips ------------------------------------
+  TestKit.section("Store: addScene stores and round-trips the photo size")
+
+  let sSized = Store.addScene(
+    db,
+    ~haulId="haul-1",
+    ~clientId="client-sized",
+    ~sceneId="scene-sized",
+    ~photoPath="data/photos/scene-sized.jpg",
+    ~now="2026-09-24T10:02:00.000Z",
+    ~imageWidth=Some(800),
+    ~imageHeight=Some(600),
+  )
+  TestKit.check(
+    "addScene returns the size it was given",
+    sSized.imageWidth == Some(800) && sSized.imageHeight == Some(600),
+  )
+  switch Store.sceneByClient(db, ~haulId="haul-1", ~clientId="client-sized") {
+  | Some(s) =>
+    TestKit.check(
+      "the size round-trips through a fresh read",
+      s.imageWidth == Some(800) && s.imageHeight == Some(600),
+    )
+  | None => TestKit.check("sceneByClient found the sized scene", false)
+  }
+
+  let sNoSize = Store.addScene(
+    db,
+    ~haulId="haul-1",
+    ~clientId="client-nosize",
+    ~sceneId="scene-nosize",
+    ~photoPath="data/photos/scene-nosize.jpg",
+    ~now="2026-09-24T10:03:00.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
+  )
+  TestKit.check(
+    "addScene with no size leaves both fields None",
+    sNoSize.imageWidth == None && sNoSize.imageHeight == None,
+  )
+  switch Store.sceneByClient(db, ~haulId="haul-1", ~clientId="client-nosize") {
+  | Some(s) =>
+    TestKit.check(
+      "a fresh read of the no-size scene keeps both fields None",
+      s.imageWidth == None && s.imageHeight == None,
+    )
+  | None => TestKit.check("sceneByClient found the no-size scene", false)
+  }
+
   // -- nextQueued: FIFO and skips a stopped haul -----------------------------
   TestKit.section("Store: nextQueued is FIFO and skips a stopped haul")
 
@@ -65,6 +118,8 @@ let run = () => {
     ~sceneId="f1",
     ~photoPath="data/photos/f1.jpg",
     ~now="2026-09-24T09:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   let _f2 = Store.addScene(
     db,
@@ -73,6 +128,8 @@ let run = () => {
     ~sceneId="f2",
     ~photoPath="data/photos/f2.jpg",
     ~now="2026-09-24T09:00:02.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   let _f3 = Store.addScene(
     db,
@@ -81,6 +138,8 @@ let run = () => {
     ~sceneId="f3",
     ~photoPath="data/photos/f3.jpg",
     ~now="2026-09-24T09:00:03.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
 
   switch Store.nextQueued(db) {
@@ -108,6 +167,8 @@ let run = () => {
     ~sceneId="st1",
     ~photoPath="data/photos/st1.jpg",
     ~now="2026-09-24T08:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   Store.stopHaul(db, ~haulId="haul-stopped", ~reason="budget")
   switch Store.nextQueued(db) {
@@ -173,6 +234,8 @@ let run = () => {
     ~sceneId="n1",
     ~photoPath="data/photos/n1.jpg",
     ~now="2026-09-24T09:30:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )
   Store.failScene(db, ~sceneId="n1", ~error="network", ~costUsd=None, ~claudeMs=None)
   switch Store.sceneByClient(db, ~haulId="haul-fail-none", ~clientId="n-1") {
@@ -279,6 +342,8 @@ let run = () => {
     ~sceneId="scene-mig",
     ~photoPath="data/photos/scene-mig.jpg",
     ~now="2026-09-24T12:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
   )->ignore
   Store.insertFind(
     migDb,
@@ -334,6 +399,76 @@ let run = () => {
   | None => TestKit.check("the find survives a second open", false)
   }
   Store.close(reopened)
+
+  // -- migrating a pre-size scenes table on open --------------------------------
+  TestKit.section("Store: migrates a scenes table with no size columns")
+
+  let migDir2 = Node.Path.join([Node.Os.tmpdir(), "reflip-store-test-" ++ Node.Crypto.randomUUID()])
+  Node.Fs.mkdirSync(migDir2, {recursive: true})
+  let migPath2 = Node.Path.join([migDir2, "old.db"])
+
+  // The pre-size `scenes` schema, hand-built with the raw Sqlite binding —
+  // the same shape Store.openAt's own CREATE TABLE IF NOT EXISTS wrote
+  // before this change, and so a no-op against a DB that already has it.
+  let oldDb2 = Sqlite.make(migPath2)
+  Sqlite.exec(
+    oldDb2,
+    `CREATE TABLE scenes (
+      sceneId TEXT PRIMARY KEY,
+      haulId TEXT NOT NULL,
+      clientId TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued','running','done','failed')),
+      photoPath TEXT NOT NULL,
+      error TEXT,
+      costUsd REAL,
+      claudeMs REAL,
+      otherCount INTEGER,
+      createdAt TEXT NOT NULL,
+      UNIQUE (haulId, clientId)
+    )`,
+  )
+  // A scene row written under the old schema, before the size columns
+  // existed — the shape a pre-2026-09-25 scene has on disk today.
+  Sqlite.exec(
+    oldDb2,
+    `INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt)
+     VALUES ('scene-presize', 'haul-mig2', 'client-presize', 'queued', 'data/photos/scene-presize.jpg', '2026-09-25T11:59:00.000Z')`,
+  )
+  Sqlite.close(oldDb2)
+
+  let migDb2 = Store.openAt(migPath2)
+  switch Store.sceneByClient(migDb2, ~haulId="haul-mig2", ~clientId="client-presize") {
+  | Some(s) =>
+    TestKit.check(
+      "a pre-migration scene with no size columns reads back with None sizes",
+      s.imageWidth == None && s.imageHeight == None,
+    )
+  | None => TestKit.check("sceneByClient found the pre-migration scene", false)
+  }
+  Store.createHaul(migDb2, ~haulId="haul-mig2", ~name=None, ~now="2026-09-25T12:00:00.000Z")->ignore
+  let migScene = Store.addScene(
+    migDb2,
+    ~haulId="haul-mig2",
+    ~clientId="client-mig2",
+    ~sceneId="scene-mig2",
+    ~photoPath="data/photos/scene-mig2.jpg",
+    ~now="2026-09-25T12:00:01.000Z",
+    ~imageWidth=Some(64),
+    ~imageHeight=Some(48),
+  )
+  TestKit.check(
+    "a DB with the old scenes schema opens and stores a scene's size",
+    migScene.imageWidth == Some(64) && migScene.imageHeight == Some(48),
+  )
+  switch Store.sceneByClient(migDb2, ~haulId="haul-mig2", ~clientId="client-mig2") {
+  | Some(s) =>
+    TestKit.check(
+      "the migrated size columns round-trip through a fresh read",
+      s.imageWidth == Some(64) && s.imageHeight == Some(48),
+    )
+  | None => TestKit.check("sceneByClient found the migrated scene", false)
+  }
+  Store.close(migDb2)
 
   // -- counts -------------------------------------------------------------------
   TestKit.section("Store: counts")

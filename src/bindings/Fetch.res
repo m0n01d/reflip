@@ -36,6 +36,11 @@ type requestInitBuffer = {
 @get external ok: response => bool = "ok"
 @send external text: response => promise<string> = "text"
 @send external json: response => promise<JSON.t> = "json"
+// A binary response body (a JPEG served back from GET /api/scenes/:id/photo,
+// per docs/spec-haul-mode.md "The routes") — `text` above would corrupt any
+// byte over 0x7f, same reason `fetchBuffer` exists for a binary request
+// body. `Node.Buffer.fromArrayBuffer` converts what this resolves to.
+@send external arrayBuffer: response => promise<Node.Buffer.arrayBufferLike> = "arrayBuffer"
 
 // Basic-auth header value for the eBay client-credentials grant.
 @val external btoa: string => string = "btoa"
