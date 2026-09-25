@@ -122,3 +122,4 @@ If resq cannot be installed, nothing here breaks. Just edit the `.res` files dir
 - A real `~/.config/reflip/env` with live keys. Nobody has set one up yet, so every real run so far used `FIXTURES=1`.
 - `tailscale serve` in front of this server.
 - The haul-summary email and the Chrome extension side of Flip Scout. Those are later spec work, not this spike.
+- M1: the find ledger in SQLite, the paid and sold entry on the phone page, and the calibration readout. It needs no eBay access. The spec is [`docs/spec-lite-m1.md`](docs/spec-lite-m1.md). Its first experiment, 10 real scenes on Sonnet 5, comes before any M1 code.
