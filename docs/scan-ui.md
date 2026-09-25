@@ -1,8 +1,8 @@
 # Scan UI: plan and hand-off
 
 This document plans the scan UI for reflip. It records the decisions for
-this track, the event contract, the planned routes, the page flow, and the
-wave split for the work still to do.
+this track, the event contract, the routes, the page flow, and the wave
+split.
 
 ## 1. Decisions
 
@@ -115,13 +115,16 @@ full reply: name, price range, eBay stats, and the sold-search link.
 An `error` event, then an `end` event with status `timeout`, arrive. The
 page shows a timeout state.
 
-**Stopped.** The user leaves the page, or cancels. The connection closes.
-Today, this also stops the Claude call (§3). The page shows what it found
-so far.
+**Stopped.** The user taps Stop. The page sends `POST /api/scene/:id/stop`,
+and the stream ends with status `stopped`. The page reads `Stopping`, then
+`Stopped` with the items that it found. When the user leaves the page, the
+connection closes, but the scene keeps running (decision 3).
 
-**Reconnecting (planned).** Per decision 3, if the connection drops, the
-page reconnects with the scene id, through `GET /api/scene/:id/events`. It
-replays past events, then catches up live.
+**Reconnecting.** Per decision 3, if the connection drops, the page shows
+a RECONNECTING badge. It reconnects with the scene id, through
+`GET /api/scene/:id/events?from=<n>`. It replays the events that it missed,
+then follows the scene live. If the replay gets a 404, the page shows
+`Could not finish`.
 
 ## 5. Waves and file ownership
 
@@ -131,12 +134,12 @@ wave 2 and wave 3 at the same time without editing the same file.
 **Wave 1 (this track, done).** `src/stream/ScanEvent.res`, `src/Overlap.res`,
 their tests, and the `end` event wired into `src/stream/StreamRoute.res`.
 
-**Wave 2 (brain, planned).** The spot pass and the two new routes from §3.
+**Wave 2 (brain, done).** The spot pass and the two new routes from §3.
 Files: `src/stream` (all files), `src/SystemPrompt.res`,
 `src/ClaudeClient.res`, `src/Server.res`, `src/Config.res`,
 `tests/fixtures` and their tests.
 
-**Wave 3 (page, planned).** The page flow from §4. Files: `src/web` (all
+**Wave 3 (page, done).** The page flow from §4. Files: `src/web` (all
 files) and a new `ScanStateTest.res`, for a `ScanState.res` model built the
 same way as `AppState.res`.
 
@@ -145,10 +148,8 @@ both, but wave 2 owns their edits.
 
 ## 6. Hand-off
 
-- Status on 2026-09-25 at 17:58 UTC: `claude/scan-ui` is at `49cdf33`. It holds waves 1 and 2, the edge fixes, the spot pass, the design pass and the view fixes (`2f06826`, `58f538a`). It also holds main at `ddb30f5`, merged through `claude/scan-ui-merge-main` (`3fe612e`). 739 checks pass.
-- Before shots: `docs/shots/scan-ui/before-*.png` (`6bbf04e`). The Simulator camera gives no photo, so the before result shot comes from headless Chromium.
-- In progress: brain fixes 2 to 4 on `claude/scan-ui-fix-brain`. Item 1 is `fd707ef`. That branch conflicts with main's failure handling (`8aba628`) in `src/Server.res`, `src/bindings/Node.res` and `src/stream/StreamRoute.res`.
-- In progress: an Opus review of the main merge and the view fixes, the Safari smoke on the iPhone 16e (`claude/scan-ui-smoke-sim`), and the Chromium edge smoke (`claude/scan-ui-smoke-edge`).
-- Next step: merge the brain fixes and both smoke branches, and fix the review findings. Then take the live shots with one live scan (about $0.30). Then open a draft PR with before, after and design shots.
-- Follow-ups: cap the spot schema at 30 items, because the demo sent 31. An eBay failure after Stop or a timeout ends the scene as failed. A comment in `AppState.res` sits on the wrong line.
-- Merge: `claude/stream-merge` merged into main as `ddb30f5` (PR 17). This track can merge to main after the review and the smoke tests.
+- Status on 2026-09-25 at 20:45 UTC: `claude/scan-ui` holds waves 1 to 3, the spot pass, the brain and view fixes, main at `ddb30f5`, the Snap another fix (`c665f34`) and every smoke run. 787 checks pass on `44e3ec1`.
+- Draft PR: to be linked here.
+- Evidence is in `docs/shots/scan-ui/`. `sim-smoke.md` is Safari on the iPhone 16e, and it has the live run. `edge-smoke.md` has the Chromium edge cases. `taps-smoke.md` is the Chromium tap audit.
+- Next step: Dwight reviews the draft PR. Then it merges to main.
+- Follow-ups are in the PR body.
