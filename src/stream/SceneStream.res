@@ -79,13 +79,22 @@ let finalText = (model: model): string => model.text
 
 // The top-level quarterSeen the final text's JSON carries, read the same
 // way ClaudeClient.decodeResponse reads it from the non-streaming reply:
-// Json.boolField with the same false fallback. False when the text is not
-// (yet) valid JSON, such as a scene that stopped before quarterSeen ever
+// try the whole text, then Json.firstJsonObjectSpan on it, both through
+// Json.boolField with the same false fallback. False when neither parse
+// finds it, such as a scene that stopped before quarterSeen ever
 // streamed.
 let quarterSeen = (model: model): bool =>
   switch JSON.parseOrThrow(model.text) {
   | parsed => Json.boolField(parsed, "quarterSeen")->Option.getOr(false)
-  | exception JsExn(_) => false
+  | exception JsExn(_) =>
+    switch Json.firstJsonObjectSpan(model.text) {
+    | None => false
+    | Some(span) =>
+      switch JSON.parseOrThrow(span) {
+      | parsed2 => Json.boolField(parsed2, "quarterSeen")->Option.getOr(false)
+      | exception JsExn(_) => false
+      }
+    }
   }
 
 let findOpenBlock = (openBlocks: array<(int, openBlock)>, index: int): option<openBlock> =>

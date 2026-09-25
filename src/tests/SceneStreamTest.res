@@ -169,4 +169,12 @@ let run = () => {
   checkAtChunkSize(len)
   checkAtChunkSize(97)
   checkAtChunkSize(5)
+
+  TestKit.section("SceneStream.quarterSeen (wrapped JSON fallback)")
+  let wrapped = "Here is the result:\n{\"quarterSeen\": true, \"items\": []}\nEnd of output."
+  let wrappedModel = {...SceneStream.init, text: wrapped}
+  TestKit.check(
+    "quarterSeen is true when the final text has prose around the JSON",
+    SceneStream.quarterSeen(wrappedModel) == true,
+  )
 }
