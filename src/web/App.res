@@ -99,14 +99,17 @@ module EbayBlock = {
   }
 }
 
-// The photo, shown once at the top at the width of the screen, with the
-// selected item's box drawn over it in percent (docs/spec-item-boxes.md
-// "How it works" #3). A tap anywhere on the photo runs the hit test.
+// The photo, shown once at the top at the width of the screen, with a
+// box drawn over it in percent (docs/spec-item-boxes.md "How it works" #3).
+// A tap anywhere on the photo runs the hit test. Takes the photo's own
+// pixel size directly (not a full sceneReply) so the haul view's open gem
+// card can reuse it too — it has a box and a size, but no sceneReply.
 module PhotoView = {
   @react.component
   let make = (
     ~photoUrl: string,
-    ~reply: Types.sceneReply,
+    ~imageWidth: int,
+    ~imageHeight: int,
     ~selectedBox: option<Types.box>,
     ~onPhotoTap: ReactEvent.Mouse.t => unit,
   ) =>
@@ -118,14 +121,46 @@ module PhotoView = {
         <div
           className="photo-box"
           style={{
-            JsxDOMStyle.left: pct(b.x1, reply.imageWidth),
-            top: pct(b.y1, reply.imageHeight),
-            width: pct(b.x2 - b.x1, reply.imageWidth),
-            height: pct(b.y2 - b.y1, reply.imageHeight),
+            JsxDOMStyle.left: pct(b.x1, imageWidth),
+            top: pct(b.y1, imageHeight),
+            width: pct(b.x2 - b.x1, imageWidth),
+            height: pct(b.y2 - b.y1, imageHeight),
           }}
         />
       }}
     </div>
+}
+
+// The crop of one item's box out of its photo: a 10% margin around the box,
+// scaled to fit a small fixed size (BoxLayout.cropOf). Shared by ItemCard
+// (the scene view) and GemCard (the haul view), so both render the same
+// crop the same way. No box, or a missing photo size, shows "no box".
+module CropView = {
+  @react.component
+  let make = (
+    ~box: option<Types.box>,
+    ~photoUrl: string,
+    ~imageWidth: option<int>,
+    ~imageHeight: option<int>,
+  ) =>
+    switch (box, imageWidth, imageHeight) {
+    | (Some(box), Some(imageWidth), Some(imageHeight)) =>
+      let crop = BoxLayout.cropOf(box, imageWidth, imageHeight)
+      <div
+        className="item-crop"
+        style={{
+          JsxDOMStyle.width: toFixed(crop.divWidth, 1) ++ "px",
+          height: toFixed(crop.divHeight, 1) ++ "px",
+          backgroundImage: "url(" ++ photoUrl ++ ")",
+          backgroundSize: toFixed(crop.bgWidth, 1) ++ "px " ++ toFixed(crop.bgHeight, 1) ++ "px",
+          backgroundPosition: "-" ++
+          toFixed(crop.bgX, 1) ++
+          "px -" ++
+          toFixed(crop.bgY, 1) ++ "px",
+        }}
+      />
+    | _ => <div className="item-crop item-crop-missing"> {React.string("no box")} </div>
+    }
 }
 
 module ItemCard = {
@@ -144,24 +179,12 @@ module ItemCard = {
       className={"item" ++ (selected ? " item-selected" : "")}
       onClick={_ => onSelect(index)}>
       <div className="item-top">
-        {switch item.box {
-        | None => <div className="item-crop item-crop-missing"> {React.string("no box")} </div>
-        | Some(box) =>
-          let crop = BoxLayout.cropOf(box, imageWidth, imageHeight)
-          <div
-            className="item-crop"
-            style={{
-              JsxDOMStyle.width: toFixed(crop.divWidth, 1) ++ "px",
-              height: toFixed(crop.divHeight, 1) ++ "px",
-              backgroundImage: "url(" ++ photoUrl ++ ")",
-              backgroundSize: toFixed(crop.bgWidth, 1) ++ "px " ++ toFixed(crop.bgHeight, 1) ++ "px",
-              backgroundPosition: "-" ++
-              toFixed(crop.bgX, 1) ++
-              "px -" ++
-              toFixed(crop.bgY, 1) ++ "px",
-            }}
-          />
-        }}
+        <CropView
+          box={item.box}
+          photoUrl
+          imageWidth={Some(imageWidth)}
+          imageHeight={Some(imageHeight)}
+        />
         <div className="item-info">
           <div className="item-name"> {React.string(item.name)} </div>
           <div className="item-range">
@@ -333,25 +356,58 @@ let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
   | Error(msg) => dispatch(AppState.DoneFailed(msg))
   }
 
+// A gem card: a crop next to its info, same layout as ItemCard's scene
+// view. A tap on the card opens or closes its full photo underneath, with
+// its box drawn on it (PhotoView, reused from the scene view) — a tap on
+// the sold link must not also toggle the card, so that link stops the
+// click from bubbling up to the card's own onClick.
 module GemCard = {
   @react.component
-  let make = (~gem: Types.haulGem) =>
-    <li className="item">
-      <div className="item-name"> {React.string(gem.name)} </div>
-      <div className="item-range">
-        {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
-      </div>
-      {switch gem.where {
-      | Some(w) => <div className="item-basis"> {React.string(w)} </div>
-      | None => React.null
-      }}
-      <div className="item-confidence">
-        {React.string("confidence " ++ fmtPct(gem.confidence))}
+  let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
+    <li className="item" onClick={_ => onToggle(gem.findId)}>
+      <div className="item-top">
+        <CropView
+          box={gem.box}
+          photoUrl={Api.scenePhotoUrl(gem.sceneId)}
+          imageWidth={gem.imageWidth}
+          imageHeight={gem.imageHeight}
+        />
+        <div className="item-info">
+          <div className="item-name"> {React.string(gem.name)} </div>
+          <div className="item-range">
+            {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
+          </div>
+          {switch gem.where {
+          | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+          | None => React.null
+          }}
+          <div className="item-confidence">
+            {React.string("confidence " ++ fmtPct(gem.confidence))}
+          </div>
+        </div>
       </div>
       <EbayBlock ebay={gem.ebay} />
-      <a className="sold-link" href={gem.soldSearchUrl} target="_blank" rel="noreferrer">
+      <a
+        className="sold-link"
+        href={gem.soldSearchUrl}
+        target="_blank"
+        rel="noreferrer"
+        onClick={ReactEvent.Mouse.stopPropagation}>
         {React.string("Sold listings")}
       </a>
+      {isOpen
+        ? switch (gem.imageWidth, gem.imageHeight) {
+          | (Some(imageWidth), Some(imageHeight)) =>
+            <PhotoView
+              photoUrl={Api.scenePhotoUrl(gem.sceneId)}
+              imageWidth
+              imageHeight
+              selectedBox={gem.box}
+              onPhotoTap={_ => ()}
+            />
+          | _ => React.null
+          }
+        : React.null}
     </li>
 }
 
@@ -365,6 +421,7 @@ module HaulView = {
     ~onAddPhotos: ReactEvent.Form.t => unit,
     ~onDone: ReactEvent.Mouse.t => unit,
     ~onNewHaul: ReactEvent.Mouse.t => unit,
+    ~onToggleGem: string => unit,
   ) => {
     let onPhone = Array.length(model.queue)
     <div className="haul-view">
@@ -437,7 +494,16 @@ module HaulView = {
       }}
       {Array.length(status.gems) > 0
         ? <ul className="items">
-            {status.gems->Array.map(gem => <GemCard key={gem.findId} gem />)->React.array}
+            {status.gems
+            ->Array.map(gem =>
+              <GemCard
+                key={gem.findId}
+                gem
+                isOpen={model.openGem == Some(gem.findId)}
+                onToggle=onToggleGem
+              />
+            )
+            ->React.array}
           </ul>
         : React.null}
       {status.otherCount > 0
@@ -557,6 +623,8 @@ let make = () => {
 
   let onStartHaul = (_event: ReactEvent.Mouse.t) =>
     startHaul(dispatch, String.trim(model.storeName))->Promise.ignore
+
+  let onToggleGem = (findId: string) => dispatch(AppState.ToggleGem(findId))
 
   let onDone = (_event: ReactEvent.Mouse.t) => dispatch(AppState.DoneTapped)
   let onNewHaul = (_event: ReactEvent.Mouse.t) => {
@@ -686,7 +754,13 @@ let make = () => {
         {switch (model.reply, model.photoUrl) {
         | (Some(reply), Some(photoUrl)) =>
           <>
-            <PhotoView photoUrl reply selectedBox onPhotoTap />
+            <PhotoView
+              photoUrl
+              imageWidth={reply.imageWidth}
+              imageHeight={reply.imageHeight}
+              selectedBox
+              onPhotoTap
+            />
             <ul className="items">
               {reply.items
               ->Array.mapWithIndex((item, i) =>
@@ -721,6 +795,7 @@ let make = () => {
         onAddPhotos={onAddHaulPhotos}
         onDone
         onNewHaul
+        onToggleGem
       />
     }}
   </div>

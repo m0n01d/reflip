@@ -54,6 +54,9 @@ type model = {
   // The index into reply.items of the tapped card, or the item whose box
   // holds a tapped point on the photo. A new photo clears it.
   selected: option<int>,
+  // The findId of the open gem card in haul mode, or None if every card is
+  // closed. At most one card is open at a time (AppState.update, ToggleGem).
+  openGem: option<string>,
 }
 
 type msg =
@@ -89,6 +92,7 @@ type msg =
   | DoneFailed(string)
   | NewHaul // start over once the haul is emailed
   | SelectItem(int)
+  | ToggleGem(string) // a tap on a gem card's findId — same id closes, another switches, None opens
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -106,6 +110,7 @@ let initialModel: model = {
   haulError: None,
   photoUrl: None,
   selected: None,
+  openGem: None,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -254,4 +259,11 @@ let update = (model: model, msg: msg): model =>
       haulError: None,
     }
   | SelectItem(i) => {...model, selected: Some(i)}
+  | ToggleGem(findId) => {
+      ...model,
+      openGem: switch model.openGem {
+      | Some(current) if current == findId => None
+      | _ => Some(findId)
+      },
+    }
   }
