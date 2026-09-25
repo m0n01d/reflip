@@ -179,6 +179,22 @@ let runScene = async (t: t, scene: Store.scene): outcome =>
     }
   }
 
+// Adds a scene's Claude spend to the haul and stops the haul when the total
+// reaches the budget. A cut-off (failed) scene is real spend too.
+let addCostAndCheckBudget = (t: t, ~haulId: string, costUsd: float): unit => {
+  let total = Store.addHaulCost(t.store, ~haulId, costUsd)
+  if total >= t.config.haulMaxUsd {
+    Store.stopHaul(
+      t.store,
+      ~haulId,
+      ~reason="budget reached: $" ++
+      Float.toFixed(total, ~digits=2) ++
+      " of $" ++
+      Float.toFixed(t.config.haulMaxUsd, ~digits=2),
+    )
+  }
+}
+
 let rec kick = (t: t): unit =>
   if t.running < t.config.haulConcurrency && Date.now() >= t.pausedUntil {
     switch Store.nextQueued(t.store) {
@@ -201,17 +217,7 @@ and process = async (t: t, scene: Store.scene): unit => {
   switch outcome {
   | Success(costUsd, _claudeMs) => {
       resetStreak(t, scene.haulId)
-      let total = Store.addHaulCost(t.store, ~haulId=scene.haulId, costUsd)
-      if total >= t.config.haulMaxUsd {
-        Store.stopHaul(
-          t.store,
-          ~haulId=scene.haulId,
-          ~reason="budget reached: $" ++
-          Float.toFixed(total, ~digits=2) ++
-          " of $" ++
-          Float.toFixed(t.config.haulMaxUsd, ~digits=2),
-        )
-      }
+      addCostAndCheckBudget(t, ~haulId=scene.haulId, costUsd)
     }
   | RetryLater(msg) => {
       Store.setStatus(t.store, ~sceneId=scene.sceneId, Store.Queued)
@@ -229,6 +235,9 @@ and process = async (t: t, scene: Store.scene): unit => {
     }
   | Failed(msg, costUsd, claudeMs) => {
       Store.failScene(t.store, ~sceneId=scene.sceneId, ~error=msg, ~costUsd, ~claudeMs)
+      // The budget check runs first. stopHaul keeps the first reason, so when
+      // one scene hits both limits, "budget reached" wins over the streak.
+      costUsd->Option.forEach(usd => addCostAndCheckBudget(t, ~haulId=scene.haulId, usd))
       let streak = bumpStreak(t, scene.haulId)
       if streak >= failStreakLimit {
         Store.stopHaul(
