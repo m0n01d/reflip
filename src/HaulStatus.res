@@ -5,28 +5,48 @@
 
 // Gems, best first (highest estimateLowUsd). A find is a gem when its
 // estimateHighUsd meets the haul's gem threshold, per "Gems" in the spec.
-let gemsOf = (finds: array<Store.find>, gemMinUsd: float): array<Types.haulGem> =>
+// sceneSizes maps a scene's id to the width/height stored at upload
+// (Store.res "How it fits together"), so a gem's crop can scale against the
+// same photo its box was measured on, without gemsOf re-querying the store.
+let sceneSizesOf = (scenes: array<Store.scene>): Dict.t<(option<int>, option<int>)> => {
+  let d = Dict.make()
+  Array.forEach(scenes, s => Dict.set(d, s.sceneId, (s.imageWidth, s.imageHeight)))
+  d
+}
+
+let gemsOf = (
+  finds: array<Store.find>,
+  gemMinUsd: float,
+  sceneSizes: Dict.t<(option<int>, option<int>)>,
+): array<Types.haulGem> =>
   finds
   ->Array.filter(f => f.estimateHighUsd >= gemMinUsd)
   ->Array.map(f => {
-      Types.findId: f.findId,
-      sceneId: f.sceneId,
-      name: f.name,
-      where: f.where,
-      estimateLowUsd: f.estimateLowUsd,
-      estimateHighUsd: f.estimateHighUsd,
-      confidence: f.confidence,
-      soldSearchUrl: EbayClient.soldSearchUrl(f.query),
-      ebay: f.ebayJson->Option.flatMap(text =>
-        switch JSON.parseOrThrow(text) {
-        | json =>
-          switch Shared.decodeEbayStats(json) {
-          | Ok(stats) => Some(stats)
-          | Error(_) => None
+      let (imageWidth, imageHeight) =
+        Dict.get(sceneSizes, f.sceneId)->Option.getOr((None, None))
+      {
+        Types.findId: f.findId,
+        sceneId: f.sceneId,
+        name: f.name,
+        where: f.where,
+        estimateLowUsd: f.estimateLowUsd,
+        estimateHighUsd: f.estimateHighUsd,
+        confidence: f.confidence,
+        soldSearchUrl: EbayClient.soldSearchUrl(f.query),
+        ebay: f.ebayJson->Option.flatMap(text =>
+          switch JSON.parseOrThrow(text) {
+          | json =>
+            switch Shared.decodeEbayStats(json) {
+            | Ok(stats) => Some(stats)
+            | Error(_) => None
+            }
+          | exception JsExn(_) => None
           }
-        | exception JsExn(_) => None
-        }
-      ),
+        ),
+        box: f.box,
+        imageWidth,
+        imageHeight,
+      }
     })
   ->Array.toSorted((a, b) => Float.compare(b.Types.estimateLowUsd, a.Types.estimateLowUsd))
 
@@ -42,7 +62,7 @@ let build = (db: Store.t, config: Config.t, haulId: string): option<Types.haulSt
       let counts = Store.counts(db, haulId)
       let scenes = Store.scenesOf(db, haulId)
       let finds = Store.findsOf(db, haulId)
-      let gems = gemsOf(finds, config.haulGemMinUsd)
+      let gems = gemsOf(finds, config.haulGemMinUsd, sceneSizesOf(scenes))
       // Other items: finds below the gem threshold, plus each scene's own
       // otherCount (the items the haul prompt only counted, step 4). None
       // (no haul prompt used yet, or a scene that isn't done) reads as 0.

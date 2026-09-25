@@ -213,6 +213,7 @@ let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
       | Error(_) => None
       }
     }
+    let box = Json.field(json, "box")->Option.flatMap(decodeBox)
     Ok({
       Types.findId,
       sceneId,
@@ -223,6 +224,9 @@ let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
       confidence,
       soldSearchUrl,
       ebay,
+      box,
+      imageWidth: Json.intField(json, "imageWidth"),
+      imageHeight: Json.intField(json, "imageHeight"),
     })
   | _ => Error("gem missing a required field")
   }
