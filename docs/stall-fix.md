@@ -4,6 +4,8 @@ Date: 2026-09-25. Branch: `claude/stall-fix`. Model: `claude-sonnet-5`.
 
 `docs/stream-spike.md`, recommendation 3, is to remove the stall before the UI build, with a docs check before each candidate fix, then a measurement. This report is that docs check and that measurement.
 
+This branch sets `allowed_callers: ["direct"]` on the web search tool. Claude then searches with no code step, so the 90-second limit on a code step cannot apply. On one photo, the three direct runs that searched reached the first item in 17 to 51 s. The two control runs took 60 to 89 s. The direct runs cost $0.14 to $0.17, and the control runs cost $0.20 to $0.27. The stall did not happen in the control runs, so no run today proves the fix.
+
 ## The fault
 
 `docs/stream-spike.md`, section "The stall", has the first report of this fault.
@@ -100,7 +102,7 @@ Every run in this test used `claude-sonnet-5`, the schema `box-second`, and `blo
 
 `first item` and `done` show milliseconds from the start of the request. `IoU>=0.5` counts each item box that matches a baseline box at an IoU of 0.5 or more. IoU (intersection over union) is the overlap area divided by the union area. The match is one to one. `median IoU` is the median over those matched pairs.
 
-For scale, two baseline runs (`box-last-1` against `box-second-1`) matched 18 boxes at a median IoU of 0.83. This is the normal spread between two runs.
+For scale, two runs of `docs/stream-spike.md` (`box-last-1` against `box-second-1`) matched 18 boxes at a median IoU of 0.83. This is the normal spread between two runs.
 
 The table below covers the runs that made no code step. It shows the gap from the last search result to the first item, and the output tokens:
 
@@ -121,7 +123,7 @@ The table below covers the runs that made no code step. It shows the gap from th
 - `direct-2` made no search. The model chose not to search. Its time and cost do not compare to the runs that did search. Later runs must report their search count.
 - The `direct` and `ws0305` runs overlap in speed and in the gap times above. The difference between them is noise.
 - Matches at IoU 0.5 or more ranged from 13 to 18 for the no-code-step runs, and 15 to 20 for the control runs. The median IoU was 0.77 to 0.88 in every variant, near the 0.83 of the baseline pair. Item counts ranged from 20 to 25 for the no-code-step runs, and 18 to 27 for the control runs. This test had few runs. It shows no clear difference.
-- The `onestep` candidate kept its code steps. `onestep-2` ran four code steps, although its prompt asked for one. If the model obeys a prompt line, this fix works. It was the slowest candidate on average.
+- The `onestep` candidate kept its code steps. `onestep-2` ran four code steps, although its prompt asked for one. This fix depends on the model obeying a prompt line. It was the slowest candidate on average.
 
 ## The choice
 
@@ -164,15 +166,15 @@ This test made 12 live requests, for a total of $1.83.
 - Round 3: $0.5827
 - `direct-4`: $0.1352
 
-The `noparallel` request failed with a 400 error and cost $0.
+The `noparallel` request failed with a 400 error and cost $0. The four field-check requests went to the token count endpoint, which runs no model.
 
 ## Evidence
 
-Each file in `docs/stall-fix/events/` is a gzip of a `data/spike/<label>.events.jsonl` file, for each label in the results table with a matching file. `data/spike/` is not in git, so this gzip is the only copy of the raw stream events for these runs.
+Each file in `docs/stall-fix/events/` is a gzip of a `data/spike/<label>.events.jsonl` file, for each label in the results table with a matching file. `data/spike/` is not in git, so these files are the only copy of the raw stream events in git.
 
 `box-second-1` has no file in `data/spike/`. Its raw events are already gzipped, at `docs/stream-spike/events/box-second-1.events.jsonl.gz`.
 
-Before staging, this check searched every file under `docs/stall-fix/`, plain text and gzip. It found no `sk-ant` text and no `/9j/` text.
+Before staging, this check searched every file under `docs/stall-fix/`, plain text and gzip. It found no API key text (`sk-ant`) and no photo in base64 (`/9j/`).
 
 ## To measure again
 
@@ -184,7 +186,7 @@ npm run --silent spike:stream -- --photo <photo.jpg> --label control-4 --dynamic
 python3 scripts/compare_runs.py --baseline box-second-1 docs/stream-spike/box-second-1.out docs/stream-spike/events/box-second-1.events.jsonl.gz --run direct-5 docs/stall-fix/direct-5.out data/spike/direct-5.events.jsonl
 ```
 
-Each live run costs $0.03 to $0.27. Never start one without a reason.
+Each live run costs $0.03 to $0.27.
 
 This report ran the compare command above with `direct-4` in place of `direct-5`, against the gzip files this report commits. The output matched the `direct-4` row of the results table:
 
