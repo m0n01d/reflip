@@ -39,6 +39,16 @@ module Fs = {
   @module("node:fs") external unlinkSync: string => unit = "unlinkSync"
   // Used by CropTest.res to prove the intermediate crop file is gone.
   @module("node:fs") external readdirSync: string => array<string> = "readdirSync"
+
+  // A throwaway per-test directory under the OS temp dir, with a unique
+  // suffix Node itself generates -- used by StreamRouteSpotTest.res so a
+  // scene-log read-back cannot collide with another test run.
+  @module("node:fs") external mkdtempSync: string => string = "mkdtempSync"
+
+  type rmOptions = {recursive: bool, force: bool}
+  // Recursively removes that throwaway directory again once a test is
+  // done reading it.
+  @module("node:fs") external rmSync: (string, rmOptions) => unit = "rmSync"
 }
 
 module Path = {

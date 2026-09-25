@@ -277,9 +277,26 @@ let spotItemSchema: JSON.t = Json.obj([
   ("additionalProperties", Json.boolJ(false)),
 ])
 
+// Structured-outputs arrays support only minItems 0 or 1 (checked 2026-09-25,
+// https://platform.claude.com/docs/en/build-with-claude/structured-outputs).
+// The cap goes in the description instead.
+let spotMaxItems = 30
+
 let spotSchema: JSON.t = Json.obj([
   ("type", Json.str("object")),
-  ("properties", Json.obj([("items", Json.obj([("type", Json.str("array")), ("items", spotItemSchema)]))])),
+  (
+    "properties",
+    Json.obj([
+      (
+        "items",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", spotItemSchema),
+          ("description", Json.str("At most " ++ Int.toString(spotMaxItems) ++ " items.")),
+        ]),
+      ),
+    ]),
+  ),
   ("required", Json.arr([Json.str("items")])),
   ("additionalProperties", Json.boolJ(false)),
 ])

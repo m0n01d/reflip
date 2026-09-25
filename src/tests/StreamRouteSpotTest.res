@@ -221,7 +221,166 @@ let runSpotFailureLeavesSceneDone = async () => {
   Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "")
 }
 
+// Covers: the SceneLog.appendLine write inside finishSpot for the spot
+// pass token usage (StreamRoute.res, near lines 274-290) -- a scene whose
+// spot pass finishes writes exactly one scene-log line, with the same
+// usage the spot-done SSE event already reported.
+let runSpotUsageLoggedOnFinish = async () => {
+  TestKit.section("StreamRoute: a finished spot pass logs its usage once")
+
+  Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "10")
+
+  let dataDir = Node.Fs.mkdtempSync(Node.Path.join([Node.Os.tmpdir(), "reflip-test-"]))
+  // The recorded spot fixture timeline runs to its message_stop at 8200
+  // ms of real time, the default 1x speed runInterleaveAndAbort relies on
+  // above for its cutoff. streamFixtureSpeed=50 compresses that to about
+  // 164 ms, well inside the roughly 870 ms priced pass (87 events at 10
+  // ms apart) -- so the spot pass reaches Finished on its own, before the
+  // end-of-scene abort inside finishSpot ever reaches it.
+  let config = {
+    ...baseConfig(~fixturesDir=Node.Path.join([cwd, "tests/fixtures/spot"]), ~dataDir),
+    streamFixtureSpeed: 50.0,
+  }
+  let {Server.server: server, port} = await Server.start(config)
+
+  let resp = await postPhoto(port)
+  TestKit.check("POST /api/scene/stream responds 200", Fetch.status(resp) == 200)
+
+  let received = await readAllEvents(resp)
+
+  TestKit.check("the spot pass finished on its own", hasEvent(received, "spot-done"))
+  TestKit.check("the priced pass still finished normally", hasEvent(received, "done"))
+
+  let sceneId = switch Array.find(received, e => e.event == "photo-received") {
+  | None => {
+      TestKit.check("a photo-received event exists to read sceneId from", false)
+      ""
+    }
+  | Some(e) =>
+    switch JsonCombinators.Json.parse(e.data) {
+    | Error(_) => {
+        TestKit.check("photo-received event data parses as JSON", false)
+        ""
+      }
+    | Ok(json) => Json.stringField(json, "sceneId")->Option.getOr("")
+    }
+  }
+
+  let (spotInputTokens, spotOutputTokens, spotUsd) = switch Array.find(received, e =>
+    e.event == "spot-done"
+  ) {
+  | None => {
+      TestKit.check("a spot-done event exists to read usage from", false)
+      (0, 0, 0.0)
+    }
+  | Some(e) =>
+    switch JsonCombinators.Json.parse(e.data) {
+    | Error(_) => {
+        TestKit.check("spot-done event data parses as JSON", false)
+        (0, 0, 0.0)
+      }
+    | Ok(json) => (
+        Json.intField(json, "inputTokens")->Option.getOr(0),
+        Json.intField(json, "outputTokens")->Option.getOr(0),
+        Json.floatField(json, "usd")->Option.getOr(0.0),
+      )
+    }
+  }
+
+  let logPath = Node.Path.join([dataDir, "scenes.jsonl"])
+  TestKit.check("scenes.jsonl was written", Node.Fs.existsSync(logPath))
+  let logLines =
+    String.trim(Node.Fs.readFileUtf8(logPath, "utf8"))
+    ->String.split("\n")
+    ->Array.filter(l => l != "")
+  let spotLines = Array.filter(logLines, line =>
+    switch JsonCombinators.Json.parse(line) {
+    | Error(_) => false
+    | Ok(json) =>
+      Json.stringField(json, "sceneId") == Some(sceneId) &&
+        Option.isSome(Json.intField(json, "spotInputTokens"))
+    }
+  )
+  TestKit.check(
+    "exactly one scene-log line has the spot fields for this scene",
+    Array.length(spotLines) == 1,
+  )
+
+  switch Array.get(spotLines, 0) {
+  | None => TestKit.check("a spot scene-log line exists to check its fields", false)
+  | Some(line) =>
+    switch JsonCombinators.Json.parse(line) {
+    | Error(_) => TestKit.check("the spot scene-log line parses as JSON", false)
+    | Ok(json) => {
+        TestKit.check(
+          "spotInputTokens matches the spot-done event",
+          Json.intField(json, "spotInputTokens") == Some(spotInputTokens),
+        )
+        TestKit.check(
+          "spotOutputTokens matches the spot-done event",
+          Json.intField(json, "spotOutputTokens") == Some(spotOutputTokens),
+        )
+        TestKit.approx(
+          "spotUsd matches the spot-done event",
+          Json.floatField(json, "spotUsd")->Option.getOr(-1.0),
+          spotUsd,
+          ~eps=0.0000001,
+        )
+      }
+    }
+  }
+
+  Node.HttpServer.close(server, () => ())
+  Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "")
+  Node.Fs.rmSync(dataDir, {recursive: true, force: true})
+}
+
+// Covers: a spot pass that never starts (no claude-spot fixture, the same
+// NoFixture path runSpotFailureLeavesSceneDone above already checks)
+// writes no SceneLog line for spot fields -- the write inside finishSpot
+// is gated on spotUsageRef, which only a real Finished sets.
+let runSpotFailureWritesNoLogLine = async () => {
+  TestKit.section("StreamRoute: a spot pass that never finishes logs no spot-usage line")
+
+  Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "5")
+
+  let dataDir = Node.Fs.mkdtempSync(Node.Path.join([Node.Os.tmpdir(), "reflip-test-"]))
+  let config = baseConfig(~fixturesDir=Node.Path.join([cwd, "tests/fixtures"]), ~dataDir)
+  let {Server.server: server, port} = await Server.start(config)
+
+  let resp = await postPhoto(port)
+  TestKit.check("POST /api/scene/stream responds 200", Fetch.status(resp) == 200)
+
+  let received = await readAllEvents(resp)
+
+  TestKit.check(
+    "spot-failed arrived (no claude-spot fixture in tests/fixtures)",
+    hasEvent(received, "spot-failed"),
+  )
+  TestKit.check("no spot-done arrived", !hasEvent(received, "spot-done"))
+
+  let logPath = Node.Path.join([dataDir, "scenes.jsonl"])
+  TestKit.check("scenes.jsonl was written", Node.Fs.existsSync(logPath))
+  let logLines =
+    String.trim(Node.Fs.readFileUtf8(logPath, "utf8"))
+    ->String.split("\n")
+    ->Array.filter(l => l != "")
+  let hasSpotFields = Array.some(logLines, line =>
+    switch JsonCombinators.Json.parse(line) {
+    | Error(_) => false
+    | Ok(json) => Option.isSome(Json.intField(json, "spotInputTokens"))
+    }
+  )
+  TestKit.check("no scene-log line has the spot fields", !hasSpotFields)
+
+  Node.HttpServer.close(server, () => ())
+  Dict.set(Node.Process.env, "STREAM_FIXTURE_DELAY_MS", "")
+  Node.Fs.rmSync(dataDir, {recursive: true, force: true})
+}
+
 let run = async () => {
   await runInterleaveAndAbort()
   await runSpotFailureLeavesSceneDone()
+  await runSpotUsageLoggedOnFinish()
+  await runSpotFailureWritesNoLogLine()
 }

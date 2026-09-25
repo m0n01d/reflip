@@ -47,7 +47,7 @@ call that runs next to the priced call (decision 1 above).
 | `error` | t, message | On a decode error for one item, or on a Claude API failure, a timeout, or a missing API key |
 | `stop` | t | When a stop request arrives through `POST /api/scene/:id/stop` |
 | `spot-started` | t, inputTokens | When the spot pass's Claude stream sends `message_start` |
-| `spot-item` | t, index, name, box | Once for each item the spot pass finds |
+| `spot-item` | t, index, name, box | Once for each item the spot pass finds, at most 30 (indexes 0 to 29) |
 | `spot-done` | t, claudeMs, inputTokens, outputTokens, usd | When the spot pass's Claude stream sends `message_stop` |
 | `spot-failed` | t, message | If the spot pass fails, times out, or finds no fixture in fixture mode |
 | `end` | t, status (`done`, `stopped`, `failed`, or `timeout`) | Always last, once for every scene |
