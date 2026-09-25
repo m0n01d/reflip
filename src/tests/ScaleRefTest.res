@@ -60,8 +60,11 @@ let run = () => {
         ebay: None,
         soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=dutch+oven&LH_Sold=1",
         size: "5.5 qt",
+        box: None,
       },
     ],
+    imageWidth: 800,
+    imageHeight: 600,
     timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
     cost: {
       Types.usd: 0.01,

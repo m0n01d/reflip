@@ -47,6 +47,13 @@ type model = {
   uploadedCount: int,
   pollCount: int,
   haulError: option<string>,
+  // The resized photo (the blob the page sends), as an object URL — set
+  // once the resize finishes, cleared by a new photo. App.res revokes the
+  // old URL as a side effect when it replaces this.
+  photoUrl: option<string>,
+  // The index into reply.items of the tapped card, or the item whose box
+  // holds a tapped point on the photo. A new photo clears it.
+  selected: option<int>,
 }
 
 type msg =
@@ -56,6 +63,7 @@ type msg =
   | StartPhoto
   | ResizeOk(float, int)
   | ResizeErr(string)
+  | PhotoUrlReady(string)
   | UploadOk(Types.sceneReply, float)
   | UploadErr(string)
   | RttSent
@@ -80,6 +88,7 @@ type msg =
   | DoneSent(Types.haulStatus)
   | DoneFailed(string)
   | NewHaul // start over once the haul is emailed
+  | SelectItem(int)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -95,6 +104,8 @@ let initialModel: model = {
   uploadedCount: 0,
   pollCount: 0,
   haulError: None,
+  photoUrl: None,
+  selected: None,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -161,6 +172,8 @@ let update = (model: model, msg: msg): model =>
       uploadBytes: None,
       resizeMs: None,
       rttMs: None,
+      photoUrl: None,
+      selected: None,
     }
   | ResizeOk(resizeMs, uploadBytes) => {
       ...model,
@@ -169,6 +182,7 @@ let update = (model: model, msg: msg): model =>
       uploadBytes: Some(uploadBytes),
     }
   | ResizeErr(errMsg) => {...model, status: ErrorStatus(errMsg)}
+  | PhotoUrlReady(url) => {...model, photoUrl: Some(url)}
   | UploadOk(reply, rttMs) => {...model, status: Waiting, reply: Some(reply), rttMs: Some(rttMs)}
   | UploadErr(errMsg) => {...model, status: ErrorStatus(errMsg)}
   | RttSent => {...model, status: Idle}
@@ -239,4 +253,5 @@ let update = (model: model, msg: msg): model =>
       pollCount: 0,
       haulError: None,
     }
+  | SelectItem(i) => {...model, selected: Some(i)}
   }

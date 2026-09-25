@@ -24,24 +24,39 @@ let run = async () => {
 
   let {Server.server: server, port} = await Server.start(config)
 
-  // Fixture mode never reads the request body — it always loads
-  // tests/fixtures/claude-scene.json instead — so a placeholder body is
-  // enough here. The brief's own curl verification POSTs the real
-  // tests/fixtures/table.jpg against a live `npm start`.
-  let resp = await Fetch.fetch(
+  // Fixture mode never reads the request body for the Claude call — it
+  // always loads tests/fixtures/claude-scene.json instead — but the size
+  // now comes off the real bytes (JpegSize.res), so this POSTs the real
+  // fixture photo. The brief's own curl verification does the same against
+  // a live `npm start`.
+  let photo = Node.Fs.readFileBuffer(Node.Path.join([cwd, "tests/fixtures/table.jpg"]))
+  let resp = await Fetch.fetchBuffer(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene",
     ~init={
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg")]),
-      body: "fixture-mode-ignores-this-body",
+      body: photo,
     },
   )
   TestKit.check("POST /api/scene responds 200", Fetch.status(resp) == 200)
   let json = await Fetch.json(resp)
   TestKit.check("reply has a sceneId", Json.stringField(json, "sceneId")->Option.isSome)
   TestKit.check("reply is marked fixture=true", Json.boolField(json, "fixture") == Some(true))
+  TestKit.check(
+    "reply's imageWidth/imageHeight match the real fixture photo (64x48)",
+    Json.intField(json, "imageWidth") == Some(64) && Json.intField(json, "imageHeight") == Some(48),
+  )
   let items = Json.arrayField(json, "items")->Option.getOr([])
   TestKit.check("reply has 3 items (fixture)", Array.length(items) == 3)
+  TestKit.check(
+    "each fixture item decodes a box that holds it inside the 64x48 photo",
+    Array.every(items, item =>
+      switch Json.field(item, "box")->Option.flatMap(Shared.decodeBox) {
+      | Some(b) => b.x1 >= 0 && (b.y1 >= 0 && (b.x2 <= 64 && b.y2 <= 48))
+      | None => false
+      }
+    ),
+  )
 
   let logPath = Node.Path.join([dataDir, "scenes.jsonl"])
   TestKit.check("scenes.jsonl was written", Node.Fs.existsSync(logPath))

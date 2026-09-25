@@ -42,6 +42,20 @@ let decodeEbayStats = (json: JSON.t): result<Types.ebayStats, string> =>
   | _ => Error("ebay stats missing a required field")
   }
 
+// A well-formed box is 4 numbers; anything else (missing, wrong length, not
+// numbers) decodes as None — a page with no box for an item shows "no box"
+// rather than failing the whole item.
+let decodeBox = (json: JSON.t): option<Types.box> =>
+  switch JSON.Decode.array(json) {
+  | Some(arr) if Array.length(arr) == 4 =>
+    switch Array.filterMap(arr, JSON.Decode.float) {
+    | [x1, y1, x2, y2] =>
+      Some({Types.x1: Float.toInt(x1), y1: Float.toInt(y1), x2: Float.toInt(x2), y2: Float.toInt(y2)})
+    | _ => None
+    }
+  | _ => None
+  }
+
 let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
   switch (
     Json.stringField(json, "name"),
@@ -75,6 +89,7 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       | Error(_) => None
       }
     }
+    let box = Json.field(json, "box")->Option.flatMap(decodeBox)
     Ok({
       Types.name,
       query,
@@ -86,6 +101,7 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       ebay,
       soldSearchUrl,
       size: Json.stringField(json, "size")->Option.getOr(""),
+      box,
     })
   | _ => Error("item missing a required field")
   }
@@ -128,6 +144,8 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
     Json.boolField(json, "fixture"),
     Json.stringField(json, "outputPath"),
     Json.arrayField(json, "items"),
+    Json.intField(json, "imageWidth"),
+    Json.intField(json, "imageHeight"),
     Json.field(json, "timing"),
     Json.field(json, "cost"),
   ) {
@@ -137,6 +155,8 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
       Some(fixture),
       Some(outputPath),
       Some(itemsJson),
+      Some(imageWidth),
+      Some(imageHeight),
       Some(timingJson),
       Some(costJson),
     ) =>
@@ -152,6 +172,8 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
         fixture,
         outputPath,
         items,
+        imageWidth,
+        imageHeight,
         timing,
         cost,
         ebayNote: Json.stringField(json, "ebayNote"),

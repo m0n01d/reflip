@@ -77,6 +77,11 @@ let run = () => {
         "haul fixture's brooch has no size key, decoded as an empty string",
         Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
       )
+      // The haul prompt asks for no box, so a haul item decodes with None.
+      TestKit.check(
+        "haul fixture items have no box",
+        Array.every(decoded.items, i => i.box == None),
+      )
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)
   }

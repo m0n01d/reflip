@@ -19,6 +19,11 @@ For each item, report:
 - size: the item's size, when size changes what it is or what it sells
   for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
   size matters, put it in the query too.
+- box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
+  in the photo, in integer pixel coordinates. x1 and y1 are the pixel
+  position of the top-left corner. x2 and y2 are the pixel position of the
+  bottom-right corner. The photo's width and height in pixels are given
+  below.
 
 A single US quarter (24.26 mm across) can lie next to the items as a scale
 reference. If you see one, use it to measure the items near it. Do not
@@ -54,6 +59,13 @@ let itemSchema: JSON.t = Json.obj([
         ]),
       ),
       ("size", Json.obj([("type", Json.str("string"))])),
+      (
+        "box",
+        Json.obj([
+          ("type", Json.str("array")),
+          ("items", Json.obj([("type", Json.str("integer"))])),
+        ]),
+      ),
     ]),
   ),
   (
@@ -68,6 +80,7 @@ let itemSchema: JSON.t = Json.obj([
       Json.str("confidence"),
       Json.str("sources"),
       Json.str("size"),
+      Json.str("box"),
     ]),
   ),
   ("additionalProperties", Json.boolJ(false)),

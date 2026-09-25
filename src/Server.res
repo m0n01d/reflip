@@ -281,84 +281,109 @@ let handleScene = async (
   model: string,
   body: Node.Buffer.t,
   res: Node.HttpServer.response,
-): unit => {
-  let serverStart = Date.now()
-  let imageBase64 = Node.Buffer.toStringWithEncoding(body, "base64")
-  let claudeStart = Date.now()
-  switch await ClaudeClient.call(~config, ~model, ~imageBase64, ~mode=ClaudeClient.Scene) {
-  | Error(ClaudeClient.NoApiKey) =>
+): unit =>
+  switch JpegSize.dimensions(body) {
+  | None =>
     jsonResponse(
       res,
-      503,
-      Json.obj([("error", Json.str("no ANTHROPIC_API_KEY set and FIXTURES is not 1"))]),
+      400,
+      Json.obj([("error", Json.str("could not read the photo's width and height"))]),
     )
-  | Error(ClaudeClient.HttpError(status, msg)) =>
-    jsonResponse(
-      res,
-      502,
-      Json.obj([
-        ("error", Json.str("Claude request failed (" ++ Int.toString(status) ++ "): " ++ msg)),
-      ]),
-    )
-  | Error(ClaudeClient.Timeout(ms)) => {
-      let msg = "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
-      Console.error("reflip: " ++ msg ++ ", answering 504")
-      jsonResponse(res, 504, Json.obj([("error", Json.str(msg))]))
-    }
-  | Error(ClaudeClient.DecodeFailed(_)) =>
-    jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
-  | Error(ClaudeClient.CutOff) =>
-    jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
-  | Ok(decoded) => {
-      let claudeMs = Date.now() -. claudeStart
-      let ebayStart = Date.now()
-      let merged = await Promise.all(
-        Array.mapWithIndex(decoded.items, (item, i) => EbayClient.statsFor(config, i, item)),
-      )
-      let ebayMs = Date.now() -. ebayStart
-      let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
-      let items = Array.mapWithIndex(decoded.items, (item, i) => {
-        let (ebay, _) = Array.getUnsafe(merged, i)
-        {
-          Types.name: item.name,
-          query: item.query,
-          confidence: item.confidence,
-          estimateLowUsd: item.estimateLowUsd,
-          estimateHighUsd: item.estimateHighUsd,
-          basis: item.basis,
-          sources: item.sources,
-          ebay,
-          soldSearchUrl: EbayClient.soldSearchUrl(item.query),
-          size: item.size,
+  | Some((sentWidth, sentHeight)) => {
+      let serverStart = Date.now()
+      let imageBase64 = Node.Buffer.toStringWithEncoding(body, "base64")
+      let claudeStart = Date.now()
+      switch (
+        await ClaudeClient.call(
+          ~config,
+          ~model,
+          ~imageBase64,
+          ~mode=ClaudeClient.Scene({width: sentWidth, height: sentHeight}),
+        )
+      ) {
+      | Error(ClaudeClient.NoApiKey) =>
+        jsonResponse(
+          res,
+          503,
+          Json.obj([("error", Json.str("no ANTHROPIC_API_KEY set and FIXTURES is not 1"))]),
+        )
+      | Error(ClaudeClient.HttpError(status, msg)) =>
+        jsonResponse(
+          res,
+          502,
+          Json.obj([
+            ("error", Json.str("Claude request failed (" ++ Int.toString(status) ++ "): " ++ msg)),
+          ]),
+        )
+      | Error(ClaudeClient.Timeout(ms)) => {
+          let msg = "Claude took longer than " ++ Float.toString(Int.toFloat(ms) /. 1000.0) ++ " s"
+          Console.error("reflip: " ++ msg ++ ", answering 504")
+          jsonResponse(res, 504, Json.obj([("error", Json.str(msg))]))
         }
-      })
-      let sceneId = Node.Crypto.randomUUID()
-      let cost = {
-        Types.usd: Pricing.usdCost(~model, ~usage=decoded.usage),
-        inputTokens: decoded.usage.inputTokens,
-        outputTokens: decoded.usage.outputTokens,
-        cacheReadTokens: decoded.usage.cacheReadInputTokens,
-        cacheWriteTokens: decoded.usage.cacheCreationInputTokens,
-        webSearches: decoded.usage.webSearchRequests,
+      | Error(ClaudeClient.DecodeFailed(_)) =>
+        jsonResponse(res, 502, Json.obj([("error", Json.str("could not decode Claude's reply"))]))
+      | Error(ClaudeClient.CutOff) =>
+        jsonResponse(res, 502, Json.obj([("error", Json.str("reply cut off"))]))
+      | Ok(decoded) => {
+          let claudeMs = Date.now() -. claudeStart
+          let ebayStart = Date.now()
+          let merged = await Promise.all(
+            Array.mapWithIndex(decoded.items, (item, i) => EbayClient.statsFor(config, i, item)),
+          )
+          let ebayMs = Date.now() -. ebayStart
+          let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
+          // The box was decoded raw off Claude's reply (ClaudeClient.decodeItem);
+          // finishing it needs the sent photo's size and the model's tier, both
+          // known only here. Falls back to Sonnet 5's tier if `model` somehow
+          // isn't one of Shared.allModels — it always is, since it came from
+          // Shared.modelId in route below.
+          let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
+          let items = Array.mapWithIndex(decoded.items, (item, i) => {
+            let (ebay, _) = Array.getUnsafe(merged, i)
+            {
+              Types.name: item.name,
+              query: item.query,
+              confidence: item.confidence,
+              estimateLowUsd: item.estimateLowUsd,
+              estimateHighUsd: item.estimateHighUsd,
+              basis: item.basis,
+              sources: item.sources,
+              ebay,
+              soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+              size: item.size,
+              box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+            }
+          })
+          let sceneId = Node.Crypto.randomUUID()
+          let cost = {
+            Types.usd: Pricing.usdCost(~model, ~usage=decoded.usage),
+            inputTokens: decoded.usage.inputTokens,
+            outputTokens: decoded.usage.outputTokens,
+            cacheReadTokens: decoded.usage.cacheReadInputTokens,
+            cacheWriteTokens: decoded.usage.cacheCreationInputTokens,
+            webSearches: decoded.usage.webSearchRequests,
+          }
+          let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, decoded.raw)
+          let serverMs = Date.now() -. serverStart
+          let reply: Types.sceneReply = {
+            Types.sceneId,
+            model,
+            fixture: config.fixtures,
+            outputPath,
+            items,
+            imageWidth: sentWidth,
+            imageHeight: sentHeight,
+            timing: {Types.serverMs, claudeMs, ebayMs},
+            cost,
+            ebayNote,
+            quarterSeen: decoded.quarterSeen,
+          }
+          SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
+          jsonResponse(res, 200, Types.encodeSceneReply(reply))
+        }
       }
-      let outputPath = SceneLog.writeRaw(config.dataDir, sceneId, decoded.raw)
-      let serverMs = Date.now() -. serverStart
-      let reply: Types.sceneReply = {
-        Types.sceneId,
-        model,
-        fixture: config.fixtures,
-        outputPath,
-        items,
-        timing: {Types.serverMs, claudeMs, ebayMs},
-        cost,
-        ebayNote,
-        quarterSeen: decoded.quarterSeen,
-      }
-      SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
-      jsonResponse(res, 200, Types.encodeSceneReply(reply))
     }
   }
-}
 
 let route = async (
   config: Config.t,
