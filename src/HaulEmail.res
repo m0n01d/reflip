@@ -49,6 +49,7 @@ let digestGemsOf = (finds: array<Store.find>, gemMinUsd: float): array<Digest.ge
         | exception JsExn(_) => None
         }
       ),
+      size: f.size,
     })
 
 let digestFailedOf = (scenes: array<Store.scene>): array<Digest.failedPhoto> =>

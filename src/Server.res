@@ -350,6 +350,7 @@ let handleScene = async (
               sources: item.sources,
               ebay,
               soldSearchUrl: EbayClient.soldSearchUrl(item.query),
+              size: item.size,
               box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
             }
           })
@@ -375,6 +376,7 @@ let handleScene = async (
             timing: {Types.serverMs, claudeMs, ebayMs},
             cost,
             ebayNote,
+            quarterSeen: decoded.quarterSeen,
           }
           SceneLog.appendLine(config.dataDir, Types.encodeSceneReply(reply))
           jsonResponse(res, 200, Types.encodeSceneReply(reply))

@@ -13,6 +13,7 @@ StoreTest.run()
 AppStateTest.run()
 DigestTest.run()
 ThumbTest.run()
+ScaleRefTest.run()
 BoxLayoutTest.run()
 Console.log("all sync tests passed")
 

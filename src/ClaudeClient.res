@@ -15,6 +15,10 @@ type decoded = {
   // None for a scene-mode reply, or any reply whose JSON left it out.
   otherCount: option<int>,
   raw: JSON.t,
+  // Scene mode only: true if the model reported a quarter in the photo.
+  // False when the reply's JSON left the field out (haul mode, or an
+  // older log line).
+  quarterSeen: bool,
 }
 
 type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int) | CutOff
@@ -91,6 +95,7 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       confidence,
       sources,
       where: Json.stringField(json, "where"),
+      size: Json.stringField(json, "size")->Option.getOr(""),
       box,
     })
   | _ => Error("item missing a required field")
@@ -127,6 +132,7 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
           usage,
           otherCount: Json.intField(parsed, "otherCount"),
           raw: responseJson,
+          quarterSeen: Json.boolField(parsed, "quarterSeen")->Option.getOr(false),
         })
       | exception JsExn(_) =>
         switch Json.firstJsonObjectSpan(text) {
@@ -139,6 +145,7 @@ let decodeResponse = (responseJson: JSON.t): result<decoded, decodeError> => {
               usage,
               otherCount: Json.intField(parsed2, "otherCount"),
               raw: responseJson,
+              quarterSeen: Json.boolField(parsed2, "quarterSeen")->Option.getOr(false),
             })
           | exception JsExn(_) => Error(InvalidJson(text))
           }

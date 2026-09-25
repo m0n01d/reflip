@@ -120,6 +120,7 @@ let insertFinds = async (t: t, scene: Store.scene, decoded: ClaudeClient.decoded
         soldOn: None,
         soldWhere: None,
         createdAt: now,
+        size: item.size,
       },
     )
   })

@@ -51,6 +51,7 @@ type find = {
   soldOn: option<string>,
   soldWhere: option<string>,
   createdAt: string,
+  size: string,
 }
 
 type counts = {
@@ -196,6 +197,7 @@ let decodeFind = (json: JSON.t): option<find> =>
       soldOn: Json.stringField(json, "soldOn"),
       soldWhere: Json.stringField(json, "soldWhere"),
       createdAt,
+      size: Json.stringField(json, "size")->Option.getOr(""),
     })
   | _ => None
   }
@@ -257,10 +259,19 @@ let openAt = (path: string): t => {
       soldUsd REAL,
       soldOn TEXT,
       soldWhere TEXT,
-      createdAt TEXT NOT NULL
+      createdAt TEXT NOT NULL,
+      size TEXT
     )`,
   )
   Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
+
+  // CREATE TABLE IF NOT EXISTS does not add a column to a finds table that
+  // predates it, so check for it and migrate an old database in place.
+  let columnInfo = Sqlite.all(Sqlite.prepare(db, "PRAGMA table_info(finds)"), [])
+  let hasSizeColumn = Array.some(columnInfo, row => Json.stringField(row, "name") == Some("size"))
+  if !hasSizeColumn {
+    Sqlite.exec(db, "ALTER TABLE finds ADD COLUMN size TEXT")
+  }
 
   db
 }
@@ -457,8 +468,8 @@ let insertFind = (db: t, find: find): unit => {
     `INSERT INTO finds (
       findId, sceneId, model, fixture, name, query, "where",
       estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
-      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   Sqlite.run(
     stmt,
@@ -481,6 +492,7 @@ let insertFind = (db: t, find: find): unit => {
       optText(find.soldOn),
       optText(find.soldWhere),
       Sqlite.Text(find.createdAt),
+      Sqlite.Text(find.size),
     ],
   )->ignore
 }
