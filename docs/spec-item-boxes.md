@@ -22,7 +22,7 @@ Read on 2026-09-24, in the vision guide "Coordinates and bounding boxes" (platfo
 - The docs call the coordinates approximate. They say to state the format in the prompt and to look at the results before use at scale.
 - Claude resizes an image that is over the limits of its model. Claude 4.7 and later models are on the high-resolution tier: 2576px on the long edge and 4,784 visual tokens. Other models are on the standard tier: 1568px and 1,568 tokens.
 - Claude also pads the image to a multiple of 28px on the bottom and right. The padding does not move the origin. Rescale by the resized size, not the padded size.
-- An image block can set `"transformations": {"oversized_image": "error"}`. A request that would resize that image then returns a 400.
+- An image block can set `"transformations": {"oversized_image": "error"}`. If Claude must resize that image, the request returns a 400.
 
 What this means for reflip:
 
@@ -35,7 +35,7 @@ What this means for reflip:
 - Schema: each item gets `box`, an array of four integers `[x1, y1, x2, y2]`, in pixels of the photo that the brain sent. The prompt gives the width and the height of that photo and asks for pixel coordinates.
 - `Types.replyItem` gets `box: option<box>`. The decode returns `None` if the box is missing, has `x2 <= x1` or `y2 <= y1`, or lies fully outside the photo. It clamps a box that is partly outside.
 - The reply gets `imageWidth` and `imageHeight`: the size of the photo that the brain sent.
-- `ImageSize.res` ports the reference resize function from the guide. It is pure, with a test on the guide's examples: 1075×1520 becomes 924×1307 on the standard tier, and 1920×1080 becomes 1456×819 on the standard tier and is not resized on the high-resolution tier.
+- `ImageSize.res` ports the reference resize function from the guide. It is pure, with a test on the guide's examples. On the standard tier, 1075×1520 becomes 924×1307, and 1920×1080 becomes 1456×819. The high-resolution tier does not resize 1920×1080.
 - The brain computes the size that Claude sees for the model of the request. If that size is not the size of the sent photo, the brain rescales each box to the sent photo.
 - The page keeps the resized photo as an object URL in the model. It revokes the old URL when a new photo comes. This is an effect in `App.res`.
 - The page draws the box as a `div` over the `<img>`, placed in percent: `left` is `x1 / imageWidth`, and so on. The crop is a `div` with the photo as its `background-image`, and `background-size` and `background-position` come from the box. Neither needs a canvas.
@@ -54,7 +54,7 @@ Before any page code, measure the boxes on real photos. This is rule 6 for fan-o
 5. Dwight marks each box as good (it holds the item), loose (it holds the item and much else) or wrong.
 6. Write the counts and the date into this spec.
 
-The pass bar is a proposal: 8 of 10 boxes good or loose, on the median photo. If the photos fail the bar, show a point at the center of each box instead of the box, or keep only the `where` phrase from the haul spec.
+The pass bar is a proposal: 8 of 10 boxes good or loose, on the median photo. If the photos fail the bar, show a point at the center of each box. Or keep only the `where` phrase from the haul spec.
 
 The spike costs about $0.03 a call. With 13 photos at 2 sizes, that is 26 calls, under $1.
 
@@ -64,7 +64,7 @@ In order:
 
 1. The spike, with the results in this spec.
 2. The schema, the decode with the clamp, `ImageSize.res` and the rescale, each with a test. `GuardTest.res` still passes.
-3. The page: the photo at the top, the crop on each card, the box on select, and a tap in a box that selects its card.
+3. The page: the photo at the top, the crop on each card, and the box on select. A tap in a box selects its card.
 4. Smoke test: dev-browser at 390x844, in fixture mode, then with one live photo. Tap each card and each box, and look at a screenshot of each state.
 5. A PR with before and after screenshots, as the PR rules in `~/code/CLAUDE.md` say.
 
