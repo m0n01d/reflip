@@ -31,6 +31,7 @@ let () =
   ->Promise.then(() => SharedDecodeTest.run())
   ->Promise.then(() => StaticServeTest.run())
   ->Promise.then(() => ClaudeTimeoutTest.run())
+  ->Promise.then(() => FixtureReplayTest.run())
   ->Promise.then(() => ClaudeCutOffTest.run())
   ->Promise.then(() => HaulTest.run())
   ->Promise.then(() => HaulEmailTest.run())
