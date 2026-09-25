@@ -12,6 +12,11 @@ type t = {
   structuredOutput: bool,
   distIndexPath: string,
   distDir: string,
+  // Tests only: send the Claude call to a local stub with a short timeout.
+  // fromEnv leaves both unset, so ClaudeClient uses the real API and
+  // ClaudeClient.timeoutMs.
+  claudeUrl?: string,
+  claudeTimeoutMs?: int,
 }
 
 let getEnv = (key: string): option<string> =>

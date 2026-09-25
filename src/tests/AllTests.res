@@ -15,6 +15,7 @@ let () =
   ServerTest.run()
   ->Promise.then(() => SharedDecodeTest.run())
   ->Promise.then(() => StaticServeTest.run())
+  ->Promise.then(() => ClaudeTimeoutTest.run())
   ->Promise.then(() => {
       Console.log("all tests passed")
       Promise.resolve()

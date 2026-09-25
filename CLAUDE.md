@@ -57,7 +57,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `src/Shared.res`: the model variant, the model ids and labels, and the `sceneReply` decoder. It has no Node imports, so both the server and the page use it. Neither side copies a model id string.
 - `src/Pricing.res`, `src/Stats.res`: the cost formula and the price-percentile math, both pure and both tested.
 - `src/SystemPrompt.res`: our own prompt text and the JSON schema for structured output.
-- `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it.
+- `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.
 - `src/SceneLog.res`: appends one JSON line per scene to `data/scenes.jsonl`, and writes the raw Claude response to `data/raw/<sceneId>.json`. `data/` is gitignored.
 - `src/Server.res`: the routes are `GET /`, `POST /api/scene`, and `POST /api/scene/:id/rtt`. `GET` also serves any file under `dist/`. A guard blocks a path that leaves that folder. The rtt route logs `resizeMs` next to `rttMs`.

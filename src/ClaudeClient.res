@@ -14,7 +14,7 @@ type decoded = {
   raw: JSON.t,
 }
 
-type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError)
+type callError = NoApiKey | HttpError(int, string) | DecodeFailed(decodeError) | Timeout(int)
 
 let decodeUsage = (json: JSON.t): Types.usage => {
   let webSearchRequests =
@@ -164,19 +164,29 @@ let buildRequestBody = (~model: string, ~imageBase64: string, ~structuredOutput:
   Json.obj(fields)
 }
 
-let postToClaude = async (apiKey: string, bodyJson: JSON.t) => {
+let messagesUrl = "https://api.anthropic.com/v1/messages"
+
+// 10 real scenes on claude-sonnet-5 with web search (2026-09-24) took 11.9 s
+// to 143.2 s in Claude, median 47.1 s. 180 s covers the slowest one. It
+// stays under the 300 s headers timeout that Node's fetch (undici) applies
+// on its own.
+let timeoutMs = 180_000
+
+let timeoutFor = (config: Config.t) => config.claudeTimeoutMs->Option.getOr(timeoutMs)
+
+let postToClaude = async (~config: Config.t, apiKey: string, bodyJson: JSON.t) => {
   let headers = Dict.fromArray([
     ("content-type", "application/json"),
     ("x-api-key", apiKey),
     ("anthropic-version", "2023-06-01"),
   ])
   await Fetch.fetch(
-    "https://api.anthropic.com/v1/messages",
+    config.claudeUrl->Option.getOr(messagesUrl),
     ~init={
       Fetch.method: "POST",
       headers,
       body: JSON.stringify(bodyJson),
-      signal: Fetch.AbortSignal.timeout(60_000),
+      signal: Fetch.AbortSignal.timeout(timeoutFor(config)),
     },
   )
 }
@@ -185,7 +195,7 @@ let postToClaude = async (apiKey: string, bodyJson: JSON.t) => {
 // Otherwise: no ANTHROPIC_API_KEY -> NoApiKey (the server turns this into a
 // 503). On a 400 naming output_config, retry once without it, per CLAUDE.md
 // rule: "nobody confirmed output_config works together with web search."
-let call = async (~config: Config.t, ~model: string, ~imageBase64: string): result<decoded, callError> =>
+let send = async (~config: Config.t, ~model: string, ~imageBase64: string): result<decoded, callError> =>
   if config.fixtures {
     let text = Node.Fs.readFileUtf8(Node.Path.join([config.fixturesDir, "claude-scene.json"]), "utf8")
     switch decodeResponse(JSON.parseOrThrow(text)) {
@@ -201,6 +211,7 @@ let call = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
           (config.structuredOutput ? "on" : "off") ++ ")",
         )
         let resp = await postToClaude(
+          ~config,
           apiKey,
           buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput),
         )
@@ -214,6 +225,7 @@ let call = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
           if String.includes(errText, "output_config") {
             Console.log("claude: retrying without output_config after 400")
             let resp2 = await postToClaude(
+              ~config,
               apiKey,
               buildRequestBody(~model, ~imageBase64, ~structuredOutput=false),
             )
@@ -233,4 +245,17 @@ let call = async (~config: Config.t, ~model: string, ~imageBase64: string): resu
         }
       }
     }
+  }
+
+// A scene that runs past the timeout makes fetch reject with a DOMException
+// named TimeoutError. Return Timeout(ms) for it, so that the scene route
+// answers 504 with a JSON error and not the generic 500.
+let call = async (~config: Config.t, ~model: string, ~imageBase64: string): result<
+  decoded,
+  callError,
+> =>
+  try {
+    await send(~config, ~model, ~imageBase64)
+  } catch {
+  | JsExn(e) if JsExn.name(e) == Some("TimeoutError") => Error(Timeout(timeoutFor(config)))
   }

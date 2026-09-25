@@ -24,7 +24,16 @@ let postScene = async (modelId: string, blob: WebApi.blob): result<
       | Error(msg) => Error("could not read the reply: " ++ msg)
       }
     } else {
-      Error("the server said " ++ Int.toString(WebApi.responseStatus(resp)))
+      // The brain puts a readable reason in {"error": ...}, for example the 504
+      // after a Claude timeout. A body that is not JSON (the generic 500) falls
+      // back to the status code alone.
+      let said = "the server said " ++ Int.toString(WebApi.responseStatus(resp))
+      let reason = try {
+        Json.stringField(await WebApi.responseJson(resp), "error")
+      } catch {
+      | JsExn(_) => None
+      }
+      Error(reason->Option.mapOr(said, r => said ++ ": " ++ r))
     }
   } catch {
   | JsExn(_) => Error("could not reach the server")
