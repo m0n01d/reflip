@@ -53,55 +53,85 @@ let run = () => {
   )
 
   // -- pinHalfSizes: two pins 20px apart split the gap evenly ---------------
-  // Chebyshev distance is 20 (only x differs); half of that is 10, inside
-  // [minHalf=4, maxHalf=22], so no clamp fires.
+  // Chebyshev distance is 20 (only x differs); half of that is 10 — no
+  // clamp anymore, so this is exact, not "inside [minHalf, maxHalf]".
   TestKit.check(
-    "two pins 20px apart both get half-size 10",
-    BoxLayout.pinHalfSizes([(100.0, 100.0), (120.0, 100.0)]) == [10.0, 10.0],
+    "two pins 20px apart both get half-size Some(10)",
+    BoxLayout.pinHalfSizes([(100.0, 100.0), (120.0, 100.0)]) == [Some(10.0), Some(10.0)],
   )
 
-  // -- pinHalfSizes: a lone pin has no neighbor, so it gets the max ---------
+  // -- pinHalfSizes: a lone pin has no neighbor, so it is unbounded ---------
+  // `None`, not a fixed max — pinSizeCss (below) is what turns this into
+  // the flat 44px CSS ceiling; this module itself picks no number for it.
   TestKit.check(
-    "a lone pin gets the max half-size 22 (no other center to measure against)",
-    BoxLayout.pinHalfSizes([(50.0, 50.0)]) == [22.0],
+    "a lone pin gets None (no other center to measure against, so no limit)",
+    BoxLayout.pinHalfSizes([(50.0, 50.0)]) == [None],
   )
 
-  // -- pinHalfSizes: coincident pins (distance 0) both clamp to the floor ---
-  // The documented can't-fix case: two pins on the exact same spot cannot
-  // both get non-overlapping boxes, so both clamp to minHalf.
+  // -- pinHalfSizes: coincident pins (distance 0) both get exactly 0 -------
+  // With no clamp, this is no longer a documented can't-fix exception — it
+  // is just the formula at d=0: h = 0/2 = 0 for both.
   TestKit.check(
-    "two pins at the same spot both get the floor half-size 4",
-    BoxLayout.pinHalfSizes([(70.0, 70.0), (70.0, 70.0)]) == [4.0, 4.0],
+    "two pins at the same spot both get Some(0)",
+    BoxLayout.pinHalfSizes([(70.0, 70.0), (70.0, 70.0)]) == [Some(0.0), Some(0.0)],
   )
 
   // -- pinHalfSizes: a dense generated grid never lets two boxes overlap ----
-  // A 5x5 grid at 10px spacing (>= 2*minHalf=8, so the floor cannot force
-  // an overlap). For every pair i,j, h_i + h_j <= chebyshev(i,j) must hold,
-  // or the two axis-aligned squares centered on i and j would overlap.
+  // A 5x5 grid at 3px spacing — tighter than the OLD minHalf*2=8px floor,
+  // which would have forced an overlap here before this fix (the floor
+  // pushed h up past d/2 for the nearest pair). With no clamp left in this
+  // module, the proof holds unconditionally: for every pair i,j,
+  // h_i + h_j <= chebyshev(i,j), so no two axis-aligned squares overlap,
+  // however dense the grid.
   let gridRows = [0, 1, 2, 3, 4]
   let gridCols = [0, 1, 2, 3, 4]
   let grid = gridRows->Array.reduce([], (acc, row) =>
     Array.concat(
       acc,
-      gridCols->Array.map(col => (Int.toFloat(col) *. 10.0, Int.toFloat(row) *. 10.0)),
+      gridCols->Array.map(col => (Int.toFloat(col) *. 3.0, Int.toFloat(row) *. 3.0)),
     )
   )
   let gridHalves = BoxLayout.pinHalfSizes(grid)
   let chebyshev = (x1: float, y1: float, x2: float, y2: float): float =>
     Math.max(Math.abs(x1 -. x2), Math.abs(y1 -. y2))
+  let halfAt = (halves: array<option<float>>, idx: int): float =>
+    switch Array.get(halves, idx) {
+    | Some(Some(h)) => h
+    | _ => 0.0
+    }
   let epsilon = 0.001
   let noOverlap = grid->Array.reduceWithIndex(true, (okSoFar, p1, i) => {
     let (x1, y1) = p1
-    let hi = Option.getOr(Array.get(gridHalves, i), 0.0)
+    let hi = halfAt(gridHalves, i)
     grid->Array.reduceWithIndex(okSoFar, (ok, p2, j) =>
       if j <= i {
         ok
       } else {
         let (x2, y2) = p2
-        let hj = Option.getOr(Array.get(gridHalves, j), 0.0)
+        let hj = halfAt(gridHalves, j)
         ok && (hi +. hj <= chebyshev(x1, y1, x2, y2) +. epsilon)
       }
     )
   })
-  TestKit.check("no two boxes overlap on a dense 5x5 grid at 10px spacing", noOverlap)
+  TestKit.check("no two boxes overlap on a dense 5x5 grid at 3px spacing", noOverlap)
+
+  // -- pinSizeCss: a lone pin (None) gets the flat 44px ceiling -------------
+  TestKit.check(
+    "pinSizeCss(None, _) is the flat 44px ceiling",
+    BoxLayout.pinSizeCss(None, 1568.0) == "44px",
+  )
+
+  // -- pinSizeCss: a real half-size becomes a CSS clamp(8px, P%, 44px) -----
+  // half=10, total=1000 -> (10*2)/1000*100 = 2.00%.
+  TestKit.check(
+    "pinSizeCss(Some(10), 1000) is max(8px, min(44px, 2.00%))",
+    BoxLayout.pinSizeCss(Some(10.0), 1000.0) == "max(8px, min(44px, 2.00%))",
+  )
+
+  // -- pinSizeCss: an unknown (zero) total degrades to 0%, which the outer
+  // max(8px, ...) then floors to a valid 8px CSS value, never a div-by-0 --
+  TestKit.check(
+    "pinSizeCss(Some(_), 0.0) is max(8px, min(44px, 0.00%)), never a division error",
+    BoxLayout.pinSizeCss(Some(5.0), 0.0) == "max(8px, min(44px, 0.00%))",
+  )
 }
