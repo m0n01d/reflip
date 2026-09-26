@@ -1818,8 +1818,9 @@ body:has(.scan-shell) {
   align-items: baseline;
   gap: 6px;
   flex-wrap: wrap;
-  color: var(--scan-mode-track);
-  font-size: 13px;
+  color: var(--scan-muted);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
   line-height: 1.4;
 }
 
@@ -1828,7 +1829,6 @@ body:has(.scan-shell) {
   border: none;
   padding: 0;
   font: inherit;
-  font-size: 13px;
   color: var(--scan-link);
   text-decoration: underline;
   text-underline-offset: 2px;
