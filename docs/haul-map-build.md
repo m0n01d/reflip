@@ -122,9 +122,7 @@ ClaudeClient.buildRequestBody(~model, ~imageBase64, ~structuredOutput=t.config.s
 ~mode))`. `runScene` calls `prepared` instead of inlining those steps, `Error(msg) =>
 Failed(msg, None, None)` (same as today), `Ok((model, imageBase64, mode)) => switch await
 ClaudeClient.call(~config=t.config, ~model, ~imageBase64, ~mode) { ...unchanged rest... }`. This
-keeps `ClaudeClient.call`/`send` (400 retry, timeout, every error branch) completely untouched —
-`requestBodyFor`'s output is provably identical to what `send` independently rebuilds, since both
-call the same pure `buildRequestBody` with the same inputs.
+keeps `ClaudeClient.call`/`send` (400 retry, timeout, every error branch) completely untouched.
 
 **GuardTest.res** (step 7): new section after the existing haul-mode guard checks. Build a
 `Store.openAt(":memory:")`, `Store.createHaul`, `Store.addScene` with `photoPath` pointed straight
@@ -438,12 +436,16 @@ A reviewer read the diff to `7d47a4d`. The brain half is sound. Do these, then r
       Do R4 (haul id on the same three msgs) as a separate step/commit after R2 is green — R4
       changes `PlaceSent`/`PlaceSendFailed`/`PlaceRejected`'s payload again (prepend `string`),
       touching the same `update` arms and the same `sendPlace` call site, so finish R2 first.
-- [ ] R3. The worker sends the body from `requestBodyFor`. ClaudeClient gets a send that takes a
-      body. Its 400 retry removes the "output_config" key from that same body. The old
-      `send`/`call` go through it, so the scan route is unchanged. HaulWorker gets
-      `requestFor(t, scene)`, which gives the model, the mode and the body. `requestBodyFor` maps it
-      to the body, and runScene sends that body. Test: the body with structuredOutput true,
-      minus "output_config", equals the body with structuredOutput false.
+- [x] R3 (commits 6fab184, 8a8a68a). `ClaudeClient` gets `sendBody`/`callBody`, which take a body;
+      the 400 retry removes the "output_config" key from that same body via a copied, typed
+      `Dict`, no `Obj.magic`. `send`/`call` become thin wrappers over them via `buildRequestBody`,
+      so the scan route is unchanged. `HaulWorker` gets `requestFor(t, scene)`, giving the model,
+      the mode and the body; `requestBodyFor` maps it to the body, and `runScene` sends that same
+      body through `callBody`. Test (in `ClaudeCutOffTest.res`, which already mixes a stub server
+      with direct `buildRequestBody` checks): the body with structuredOutput true, minus
+      "output_config", stringifies equal to the body with structuredOutput false; a stub server
+      counts requests to confirm `callBody` retries once on a 400 naming output_config. `npm
+      test`: 1013 ok, 0 not ok.
 - [x] R4 (commit 37314a9). The send-result msgs (sent, send failed, rejected) carry the haul id.
       `update` ignores a msg whose haul id is not the current haul's.
 - [x] R5 (commit 6a8f1c5). `Place.decodeInput` rejects a lat, lon or accuracyM that is not finite
