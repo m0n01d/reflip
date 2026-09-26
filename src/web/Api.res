@@ -117,6 +117,36 @@ let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
   | JsExn(_) => Error("could not reach the server")
   }
 
+type placeResult = Sent(Types.place) | Rejected(int) | NotSent(string)
+
+let postPlace = async (haulId: string, body: string): placeResult =>
+  try {
+    let resp = await WebApi.fetchString(
+      "/api/hauls/" ++ haulId ++ "/place",
+      {
+        WebApi.method: "POST",
+        headers: Dict.fromArray([("Content-Type", "application/json")]),
+        body,
+      },
+    )
+    if WebApi.responseOk(resp) {
+      let json = await WebApi.responseJson(resp)
+      switch Json.field(json, "place")->Option.flatMap(Shared.decodePlace) {
+      | Some(p) => Sent(p)
+      | None => NotSent("could not read the reply: missing place")
+      }
+    } else {
+      let status = WebApi.responseStatus(resp)
+      if status == 400 || status == 404 {
+        Rejected(status)
+      } else {
+        NotSent(await readErrorReason(resp))
+      }
+    }
+  } catch {
+  | JsExn(_) => NotSent("could not reach the server")
+  }
+
 // Posts one queued photo. The brain answers 202 with {"sceneId", ...} and,
 // for a client id it has already seen, "duplicate": true — a retried
 // upload then costs nothing.
