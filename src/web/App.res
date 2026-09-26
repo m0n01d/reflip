@@ -625,23 +625,27 @@ let make = () => {
 
   // -- Stop: the view only dispatches StopTapped; this is the edge effect
   // that actually asks the brain to stop, once stopRequested flips true.
+  // It reads rewind.live, not model: while rewind is paused, model is a
+  // past state, and a past StopTapped must not stop the live scan.
   React.useEffect1(() => {
-    if model.scan.stopRequested {
+    if rewind.live.scan.stopRequested {
       switch scanHandleRef.current {
       | Some(handle) => handle.stop()->Promise.ignore
       | None => ()
       }
     }
     None
-  }, [model.scan.stopRequested])
+  }, [rewind.live.scan.stopRequested])
 
   // -- New scan: the view only dispatches NewScan, which resets model.scan
   // back to ScanState.initialModel (phase Ready). This is the edge effect
   // that tears down any live connection and revokes the finished photo's
   // object URL once that reset lands (a no-op on first mount — Ready is
   // also the very first phase, before any handle or photo URL exists).
+  // It reads rewind.live too: a jump to a past Ready entry must not abort
+  // the live scan.
   React.useEffect1(() => {
-    if model.scan.phase == ScanState.Ready {
+    if rewind.live.scan.phase == ScanState.Ready {
       switch scanHandleRef.current {
       | Some(handle) =>
         handle.abort()
@@ -656,7 +660,7 @@ let make = () => {
       }
     }
     None
-  }, [model.scan.phase])
+  }, [rewind.live.scan.phase])
 
   // A new photo for the scan flow: revoke the previous scan's object URL
   // and abort any live connection first (same guard runPhotoFlow's onChange
