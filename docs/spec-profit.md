@@ -14,17 +14,18 @@ When a find sells, nothing compares the result with the estimate. M1 lite compar
 - Net: a sale price, minus the eBay fee, minus the postage.
 - Profit: the net minus the paid price.
 - Shipping class: a size group that sets the postage of a find.
+- Tag price: a price in the photo, on a tag, a sticker or a sign, for one item.
 - Miss: the real profit minus the estimated profit.
 
 ## How it works
 
-1. Scan. Claude gives each item a shipping class, next to its range. Code computes the net at the low end, the midpoint and the high end.
-2. Look. The item sheet and the gem card show "Net $5 to $14". After Dwight types a paid price, they also show the profit.
+1. Scan. Claude gives each item a shipping class, next to its range. If a price for the item shows in the photo, Claude also reads it as the tag price. Code computes the net at the low end, the midpoint and the high end.
+2. Look. The item sheet and the gem card show "Net $5 to $14". If the item has a tag price, they also show the profit at that price. After Dwight types a paid price, the profit uses the paid price.
 3. Keep. The ledger row of each find stores the fee and the postage that code estimated at scan time. A later rate change does not change an old estimate.
 4. Sell. Dwight records the sale in the Sold sheet of the budget spec: the sold price, the buyer shipping, and one Fees value for the eBay fee plus the postage.
 5. Learn. The profit readout compares each eBay sale with its estimate. It shows how far off the estimates are, and whether the price or the costs caused the miss.
 
-All the math runs in code. Nothing new goes into a Claude request, except the `shipClass` field in the output schema.
+All the math runs in code. Nothing new goes into a Claude request, except the `shipClass` and `tagPriceUsd` fields in the output schema. The tag price comes out of Claude. No paid price goes into a request, as the budget spec requires.
 
 ## The math
 
@@ -79,11 +80,13 @@ Code uses classes, not weights. Claude can name a size group from a photo more r
 
 - `Profit.res`: pure functions, the rate constants, and the date on which someone last read their sources. It follows `Pricing.res`, and it has no Node imports.
 - `ProfitTest.res`: the two cases above, at a tolerance of $0.001.
-- `SystemPrompt.res`: the schemas of the scene prompt and the haul prompt get a `shipClass` enum with the four values. The prompt describes each class in one line. The spot pass does not change.
-- Decode: `Types.claudeItem` gets `shipClass`. If the value is missing or unknown, code uses `medium`.
-- Reply: each item in `/api/scene`, each item event of `/api/scene/stream`, and each gem of `GET /api/hauls/:id` get a `profit` object. Its fields are `shipClass`, `postageUsd`, `feeMidUsd`, `netLowUsd`, `netMidUsd` and `netHighUsd`.
-- Ledger: table `finds` gets `shipClass` (TEXT), `feeEstUsd` (REAL) and `postageEstUsd` (REAL). The fee is at the midpoint. `Store.openAt` adds the columns to an old database in place, as it does for `size`. Each path that writes a `finds` row also fills them.
-- Haul email: each gem in `Digest.res` shows its net range.
+- `SystemPrompt.res`: the schemas of the scene prompt and the haul prompt get a `shipClass` enum with the four values. They also get `tagPriceUsd`, an `anyOf` of a number and `null`, listed in `required`. The prompt describes each class in one line. The spot pass does not change.
+- Tag price in the prompt: Claude reads the price of this one item. For a sign such as "3 for $10", or for no price, Claude writes `null`. For the range, Claude ignores the tag price.
+- Decode: `Types.claudeItem` gets `shipClass` and `tagPriceUsd` (an option). If `shipClass` is missing or unknown, code uses `medium`. A missing or `null` tag price decodes to `None`.
+- Reply: each item in `/api/scene`, each item event of `/api/scene/stream`, and each gem of `GET /api/hauls/:id` get a `profit` object. Its fields are `shipClass`, `postageUsd`, `feeMidUsd`, `netLowUsd`, `netMidUsd`, `netHighUsd` and `tagPriceUsd`. With no price in the photo, the tag price is `null`.
+- Ledger: table `finds` gets `shipClass` (TEXT), `feeEstUsd` (REAL), `postageEstUsd` (REAL) and `tagPriceUsd` (REAL). The fee is at the midpoint. `Store.openAt` adds the columns to an old database in place, as it does for `size`. Each path that writes a `finds` row also fills them.
+- A tag price does not record a buy. `paidUsd` stays empty until Dwight types a paid price.
+- Haul email: each gem in `Digest.res` shows its net range. If the gem has a tag price, the email also shows the profit at that price. This does the Later item "Price tags read from the photo" of `docs/spec-haul-mode.md`.
 - Readout: `GET /api/profit-readout`, plus a section in the Budget view, next to the calibration readout of M1 lite.
 
 ## The profit readout
@@ -127,7 +130,7 @@ For each eBay sale, type the Fees value from the eBay order. If Dwight keeps the
 Do the steps in this order. Steps 1 to 3 do not need the budget spec.
 
 1. Make sure that the eBay fee and the USPS prices are still current. Then write `Profit.res` and `ProfitTest.res`.
-2. Add `shipClass` to the schema, the decode, the reply, the stream events and the ledger.
+2. Add `shipClass` and `tagPriceUsd` to the schema, the prompt, the decode, the reply, the stream events and the ledger.
 3. Show the net on the item sheet, on the gem card and in the haul email. Take the layout from the haul redesign.
 4. After the budget spec builds its Sold sheet, add the readout: the route, a test with hand-made rows, and the view.
 5. Run a smoke test with dev-browser at phone width. The test scans the fixture photo and reads the net on the item sheet and on a gem card. Then it types a paid price and reads the profit.
@@ -138,6 +141,7 @@ Only real sales can test the readout from end to end, because fixture finds neve
 
 - Each item and each gem carries the `profit` object. The page computes no fee.
 - One line under the range: "Net $5 to $14". With a paid price: "Profit $1 to $10".
+- If a gem has a tag price and no paid price, the line reads "Profit $1 to $10 at the $4 tag". The form for the paid price starts with the tag price in it.
 - A tap on that line shows the parts at the midpoint: the price, the eBay fee, the postage with its class, and the paid price.
 - A net below $0 is a loss. Show it in the warning style of the design.
 
@@ -146,6 +150,7 @@ Only real sales can test the readout from end to end, because fixture finds neve
 - Category fee rates, after M1 lite adds its `category` field. The rates are in Facts and sources.
 - Class postage from Dwight's own labels: after 5 sales in a class, use the median real postage.
 - Exact postage by ZIP code from the USPS Domestic Prices 3.0 API, with the origin ZIP from the environment. M1 lite lists it in Later too.
+- Barcode digits for the eBay search. A UPC, EAN or ISBN names the exact product, but it holds no price. Not confirmed: the `gtin` parameter of the Browse API search. The site developer.ebay.com returned 403 to a fetch on 2026-09-26.
 - The walk-away price of M1 lite: the net minus a minimum profit. `Profit.res` gives it with one more subtraction.
 - The cost of boxes and mailers, and a promoted listing fee.
 
@@ -174,6 +179,7 @@ Only real sales can test the readout from end to end, because fixture finds neve
 | 7 | Denver (802), Phoenix (850) |
 | 8 | Los Angeles (900), San Francisco (941), Seattle (981) |
 
+- Structured output: its list of supported JSON Schema features includes `anyOf` and the `null` type. Read on [platform.claude.com](https://platform.claude.com/docs/en/build-with-claude/structured-outputs) with a fetch tool on 2026-09-26.
 - Not confirmed: the price of an eBay label. eBay's [Seller Center page](https://www.ebay.com/sellercenter/shipping/choosing-a-carrier-and-service/usps-and-ebay-labels) shows a calculator and no price table (read 2026-09-26). eBay Community posts say that eBay label prices for Ground Advantage changed on 2026-07-25 and on 2026-08-08. They also say that eBay keeps four weight tiers under 1 lb, but Notice 123 has one price for all of them. So a `small` label from eBay can cost less than $7.69. Before step 1, read one real eBay label price for each class.
 - Sales tax: the [Tax Foundation](https://taxfoundation.org/data/all/state/2026-sales-tax-rates-midyear/) gives 7.53% for 2026. It is the average of state and local rates, weighted by population. This figure came from a search summary on 2026-09-25, not from the page. Code rounds it to 7.5%.
 
@@ -181,6 +187,8 @@ Only real sales can test the readout from end to end, because fixture finds neve
 
 - Zone 5 is the middle of the zones from prefix 320, not the real mix of buyers. Line 4 of the readout shows the real postage for each class.
 - Claude can pick the wrong class. A light item in a large box costs more than its weight suggests.
+- A tag price can pull Claude's range toward the tag. The prompt tells Claude to ignore the tag for the range. With `tagPriceUsd` in the ledger, M1 lite can compare the hit rate of finds with a tag and without one.
+- Claude can misread a tag, or read the tag of the next item. The sheet shows the tag price, so Dwight can see the error and type the paid price.
 - The real tax rate changes with the address of the buyer. On a $25 sale, that moves the real postage by up to $0.26.
 - A few sales tell little. M1 lite gives the numbers: at 20 sales, the interval of its hit rate is still wide.
 - Rates change. USPS prices changed on 2026-07-12, and eBay label prices changed twice after that. `Profit.res` keeps the date of its sources.
