@@ -149,45 +149,65 @@ let claudeErrorText = (err: ClaudeClient.callError): string =>
   | ClaudeClient.CutOff(_) => "reply cut off"
   }
 
-let runScene = async (t: t, scene: Store.scene): outcome =>
+let prepared = (t: t, scene: Store.scene): result<(string, string, ClaudeClient.mode), string> =>
   switch readPhotoBuffer(scene.photoPath) {
-  | None => Failed("could not read photo: " ++ scene.photoPath, None, None)
+  | None => Error("could not read photo: " ++ scene.photoPath)
   | Some(buf) =>
     switch JpegSize.dimensions(buf) {
-    | None =>
-      Failed("could not read the photo's width and height: " ++ scene.photoPath, None, None)
+    | None => Error("could not read the photo's width and height: " ++ scene.photoPath)
     | Some((width, height)) => {
         let imageBase64 = Node.Buffer.toStringWithEncoding(buf, "base64")
         let model = Shared.modelId(Shared.defaultModel)
-        let claudeStart = Date.now()
-        switch await ClaudeClient.call(
-          ~config=t.config,
-          ~model,
-          ~imageBase64,
-          ~mode=ClaudeClient.Haul({gemMinUsd: t.config.haulGemMinUsd, width, height}),
-        ) {
-        | Ok(decoded) => {
-            let claudeMs = Date.now() -. claudeStart
-            let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
-            await insertFinds(t, scene, decoded, ~sentWidth=width, ~sentHeight=height)
-            Store.finishScene(
-              t.store,
-              ~sceneId=scene.sceneId,
-              ~costUsd,
-              ~claudeMs,
-              ~otherCount=decoded.otherCount,
-            )
-            Success(costUsd, claudeMs)
-          }
-        | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
-          RetryLater(claudeErrorText(err))
-        | Error(ClaudeClient.CutOff(raw) as err) => {
-            let claudeMs = Date.now() -. claudeStart
-            let costUsd = Pricing.usdCost(~model, ~usage=ClaudeClient.usageOfResponse(raw))
-            Failed(claudeErrorText(err), Some(costUsd), Some(claudeMs))
-          }
-        | Error(err) => Failed(claudeErrorText(err), None, None)
+        Ok((
+          model,
+          imageBase64,
+          ClaudeClient.Haul({gemMinUsd: t.config.haulGemMinUsd, width, height}),
+        ))
+      }
+    }
+  }
+
+let requestBodyFor = (t: t, scene: Store.scene): result<JSON.t, string> =>
+  prepared(t, scene)->Result.map(((model, imageBase64, mode)) =>
+    ClaudeClient.buildRequestBody(
+      ~model,
+      ~imageBase64,
+      ~structuredOutput=t.config.structuredOutput,
+      ~mode,
+    )
+  )
+
+let runScene = async (t: t, scene: Store.scene): outcome =>
+  switch prepared(t, scene) {
+  | Error(msg) => Failed(msg, None, None)
+  | Ok((model, imageBase64, mode)) => {
+      let (width, height) = switch mode {
+      | ClaudeClient.Haul({width, height}) => (width, height)
+      | ClaudeClient.Scene({width, height}) => (width, height)
+      }
+      let claudeStart = Date.now()
+      switch await ClaudeClient.call(~config=t.config, ~model, ~imageBase64, ~mode) {
+      | Ok(decoded) => {
+          let claudeMs = Date.now() -. claudeStart
+          let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
+          await insertFinds(t, scene, decoded, ~sentWidth=width, ~sentHeight=height)
+          Store.finishScene(
+            t.store,
+            ~sceneId=scene.sceneId,
+            ~costUsd,
+            ~claudeMs,
+            ~otherCount=decoded.otherCount,
+          )
+          Success(costUsd, claudeMs)
         }
+      | Error(ClaudeClient.HttpError(status, _) as err) if status == 429 || status == 529 =>
+        RetryLater(claudeErrorText(err))
+      | Error(ClaudeClient.CutOff(raw) as err) => {
+          let claudeMs = Date.now() -. claudeStart
+          let costUsd = Pricing.usdCost(~model, ~usage=ClaudeClient.usageOfResponse(raw))
+          Failed(claudeErrorText(err), Some(costUsd), Some(claudeMs))
+        }
+      | Error(err) => Failed(claudeErrorText(err), None, None)
       }
     }
   }
