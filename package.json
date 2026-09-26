@@ -20,12 +20,12 @@
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
-    "rescript-rewind": "git+ssh://git@github.com/m0n01d/rewind.git#731e6c2fb902399aafef4ef6859d6eba35ff09c2",
     "idb-keyval": "^6.3.0",
     "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "rescript": "^12.3.0",
+    "rescript-rewind": "github:m0n01d/rewind#953fd177125182049e539f29a22066d0c6a4aab8",
     "vite": "^8.3.0"
   }
 }
