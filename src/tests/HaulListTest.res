@@ -1,5 +1,5 @@
 // HaulList.build and HaulList.fromStore, and the GET /api/hauls route
-// parse. Per docs/haul-map-build.md's design notes for step 3.
+// parse. Per docs/spec-haul-map.md's MVP step 3.
 
 let cwd = Node.Process.cwd()
 
@@ -49,17 +49,17 @@ let basePlace: Types.place = {
 let run = () => {
   TestKit.section("HaulList.build")
 
-  // -- order: build trusts the caller's order, it does no sorting of its own --
+  // -- order: build sorts newest-first itself, by startedAt DESC; the sort is stable --
   let haulNew = {...baseHaul, haulId: "haul-new", startedAt: "2026-09-25T00:00:00.000Z"}
   let haulOld = {...baseHaul, haulId: "haul-old", startedAt: "2026-09-24T00:00:00.000Z"}
   let orderedRows = HaulList.build(
-    ~hauls=[haulNew, haulOld],
+    ~hauls=[haulOld, haulNew],
     ~photoCounts=Dict.make(),
     ~finds=[],
     ~gemMinUsd=20.0,
   )
   TestKit.check(
-    "already-newest-first input keeps that order",
+    "oldest-first input still sorts to newest first",
     orderedRows->Array.map(r => r.Types.haulId) == ["haul-new", "haul-old"],
   )
 
@@ -145,6 +145,46 @@ let run = () => {
     (twoPaidRows->Array.getUnsafe(0)).paidUsd == 20.0,
   )
 
+  // -- own haul: a find goes only to the haul it names, not to every haul --
+  let haulA = {...baseHaul, haulId: "haul-a"}
+  let haulB = {...baseHaul, haulId: "haul-b"}
+  let gemA = {...baseFind, findId: "find-gem-a", name: "Gem A", estimateHighUsd: 20.0}
+  let paidA = {
+    ...baseFind,
+    findId: "find-paid-a",
+    name: "Paid A",
+    estimateHighUsd: 5.0,
+    paidUsd: Some(4.0),
+  }
+  let gemB = {...baseFind, findId: "find-gem-b", name: "Gem B", estimateHighUsd: 20.0}
+  let paidB = {
+    ...baseFind,
+    findId: "find-paid-b",
+    name: "Paid B",
+    estimateHighUsd: 5.0,
+    paidUsd: Some(9.0),
+  }
+  let ownHaulRows = HaulList.build(
+    ~hauls=[haulA, haulB],
+    ~photoCounts=Dict.make(),
+    ~finds=[("haul-a", gemA), ("haul-a", paidA), ("haul-b", gemB), ("haul-b", paidB)],
+    ~gemMinUsd=20.0,
+  )
+  let rowA = ownHaulRows->Array.getUnsafe(0)
+  let rowB = ownHaulRows->Array.getUnsafe(1)
+  TestKit.check("haul-a's gemCount counts only its own gem", rowA.gemCount == 1)
+  TestKit.check("haul-a's paidUsd sums only its own buy", rowA.paidUsd == 4.0)
+  TestKit.check(
+    "haul-a's buys name only its own paid find",
+    rowA.buys->Array.map(b => b.Types.name) == ["Paid A"],
+  )
+  TestKit.check("haul-b's gemCount counts only its own gem", rowB.gemCount == 1)
+  TestKit.check("haul-b's paidUsd sums only its own buy", rowB.paidUsd == 9.0)
+  TestKit.check(
+    "haul-b's buys name only its own paid find",
+    rowB.buys->Array.map(b => b.Types.name) == ["Paid B"],
+  )
+
   // -- encode: the row's and one buy's key sets, exactly --
   let encodedRow = Types.encodeHaulList([buyRow])
   switch JSON.Decode.array(encodedRow)->Option.flatMap(rows => rows[0]) {
@@ -203,6 +243,37 @@ let run = () => {
   switch Shared.decodeHaulList(Types.encodeHaulList([buyRow])) {
   | Ok([decoded]) => TestKit.check("decodeHaulList round-trips the row", decoded == buyRow)
   | _ => TestKit.check("decodeHaulList round-trips the row", false)
+  }
+
+  // -- round trip: a row with every optional field set also round-trips.
+  // buyOf always sets paidOn to None, so buyRow above never exercises the
+  // Some branch of decodeHaulBuy's paidOn field (Shared.res:335), or the
+  // Some branches of the row's name (Shared.res:363) and place
+  // (Shared.res:365) fields. This case builds a Types.haulListRow by hand
+  // so every optional field is Some. --
+  let fullRow: Types.haulListRow = {
+    haulId: "haul-full",
+    name: Some("A named haul"),
+    startedAt: "2026-09-25T12:00:00.000Z",
+    place: Some(basePlace),
+    photoCount: 2,
+    gemCount: 1,
+    paidUsd: 12.5,
+    buys: [
+      {
+        Types.name: "Full buy",
+        paidUsd: 12.5,
+        paidOn: Some("2026-09-25T12:05:00.000Z"),
+        soldUsd: Some(25.0),
+        soldOn: Some("2026-09-26T00:00:00.000Z"),
+      },
+    ],
+  }
+  switch Shared.decodeHaulList(Types.encodeHaulList([fullRow])) {
+  | Ok([decoded]) =>
+    TestKit.check("decodeHaulList round-trips a row with every optional field set", decoded == fullRow)
+  | _ =>
+    TestKit.check("decodeHaulList round-trips a row with every optional field set", false)
   }
 
   TestKit.section("HaulList.fromStore")
@@ -285,6 +356,18 @@ let run = () => {
   | {haulId: "haul-old", photoCount: 2, paidUsd: 3.0} =>
     TestKit.check("haul-old's photoCount and paidUsd come from the real store", true)
   | _ => TestKit.check("haul-old's photoCount and paidUsd come from the real store", false)
+  }
+  switch rows->Array.getUnsafe(0) {
+  | {haulId: "haul-tie-2", paidUsd: 0.0, buys: []} =>
+    TestKit.check("haul-tie-2 has no finds of its own, so paidUsd is 0 and buys is empty", true)
+  | _ =>
+    TestKit.check("haul-tie-2 has no finds of its own, so paidUsd is 0 and buys is empty", false)
+  }
+  switch rows->Array.getUnsafe(1) {
+  | {haulId: "haul-tie-1", paidUsd: 0.0, buys: []} =>
+    TestKit.check("haul-tie-1 has no finds of its own, so paidUsd is 0 and buys is empty", true)
+  | _ =>
+    TestKit.check("haul-tie-1 has no finds of its own, so paidUsd is 0 and buys is empty", false)
   }
   Store.close(db)
 
