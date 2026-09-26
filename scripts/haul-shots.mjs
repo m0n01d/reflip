@@ -96,6 +96,12 @@ const GEMS = [
 
 const round2 = (v) => Math.round(v * 100) / 100;
 
+// The mock GEMS array is in canvas number order. The real API
+// (src/HaulStatus.res) sorts gems by estimateLowUsd, high first. Sort a
+// copy of gemsIdx the same way (stable, so ties keep canvas order) before
+// building the JSON, so the app renders in the order the API would give.
+const sortedGemsIdx = (gemsIdx) => gemsIdx.slice().sort((a, b) => GEMS[b].lo - GEMS[a].lo);
+
 function gemJson(idx) {
   const g = GEMS[idx];
   const ebay = g.eb
@@ -141,7 +147,7 @@ function haulStatus({ haulId, valued, running, failed = 0, gemsIdx, cost, max = 
     stopReason,
     emailNote: null,
     counts: { queued: 0, running, valued, failed },
-    gems: gemsIdx.map(gemJson),
+    gems: sortedGemsIdx(gemsIdx).map(gemJson),
     otherCount: other,
     failed: failedList,
   };
@@ -355,7 +361,7 @@ function startProxy(publicPort, backendPort, photoBuf) {
 
     if (/^\/api\/hauls\/[^/]+\/done$/.test(url) && method === "POST") {
       await readBody(req);
-      doneCallTimestamps.push(Date.now());
+      doneCallTimestamps.push({ board: currentBoardName, t: Date.now() });
       const board = boardsByName.get(currentBoardName);
       const outcome = (board && board.clickDone && board.clickDone.outcome) || "hang";
       if (outcome === "success") {
@@ -587,7 +593,15 @@ async function checkSoldLink(page, label) {
 }
 
 async function shoot(page, name) {
+  // The dock and the finishing bar are position: fixed, so at the normal
+  // 390x844 viewport a full-page screenshot draws them pinned over the
+  // middle of the page instead of at its bottom. Grow the viewport to the
+  // page's own scroll height first (same width) so they land where they
+  // really sit, then put the viewport back for the next step.
+  const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  await page.setViewportSize({ width: 390, height: Math.max(844, Math.ceil(scrollHeight)) });
   const buf = await page.screenshot({ fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
   const path = await saveScreenshot(buf, CONFIG.shotPrefix + "-" + name + ".png");
   return path;
 }
@@ -831,8 +845,14 @@ async function main() {
   }
 
   const proof = inner ? inner.proof : {};
-  if (doneCallTimestamps.length >= 2) {
-    proof.doneAutoRetryMs = doneCallTimestamps[1] - doneCallTimestamps[0];
+  // Finishing's hung Done call and Done's own successful call both land
+  // before Failed's calls in run order, so the first two entries of the
+  // whole run are not a retry pair. Measure the gap between the Failed
+  // board's own first two POST /done calls only.
+  const failedDoneCalls = doneCallTimestamps.filter((d) => d.board === "Failed");
+  proof.doneCalls = failedDoneCalls;
+  if (failedDoneCalls.length >= 2) {
+    proof.doneAutoRetryMs = failedDoneCalls[1].t - failedDoneCalls[0].t;
   }
 
   return { ok: allFailures.length === 0, failures: allFailures, proof, shots };
@@ -949,7 +969,7 @@ function writeClickPath(proof) {
     ["The same gem closes", "Tapping an open row's own header closes it", proof.gemClose ? "ok — .haul-gem-detail count after close = " + proof.gemClose.detailCount + " (expected 0)" : "not recorded"],
     ["Sold link href (blocked)", "a.scan-ebay-sold-btn points at ebay.com; the tap is blocked network-side", proof.soldLink ? "ok — href=" + proof.soldLink.href + (proof.soldLinkPopupBlocked ? ", popup opened then blocked (chrome-error, per route.abort)" : "") : "FAILED — no proof recorded"],
     ["Done (Finishing)", "Tapping Done moves phase to Finishing; the dock bar replaces the controls", proof.doneTapped ? "ok — Finishing board (.haul-bar present)" : "FAILED — no proof recorded"],
-    ["Done auto-retry", "A failed Done retries once on its own after ~5 s (AppState.retryDelayMs(1))", proof.doneAutoRetryMs != null ? "ok — second POST /done arrived " + proof.doneAutoRetryMs + " ms after the first (Failed board)" : "not recorded — doneCalls=" + JSON.stringify(proof.doneCalls || [])],
+    ["Done auto-retry", "A failed Done retries once on its own after ~5 s (AppState.retryDelayMs(1))", proof.doneAutoRetryMs != null ? "ok — second POST /done arrived " + proof.doneAutoRetryMs + " ms after the first (Failed board)" : "FAILED — Failed board got " + ((proof.doneCalls || []).length) + " POST /done call(s), need 2 to measure a retry"],
     ["The receipt", "Once emailedAt is set, phase Finished shows the Haul Receipt section", proof.receiptShown ? "ok — Done board (section[aria-label='Haul receipt'])" : "FAILED — no proof recorded"],
     ["Start a new haul", "Tapping it on the receipt returns to the Ready screen (NoHaul)", proof.newHaul ? "ok — Done-after-new-haul shot (.haul-ready-start reappeared)" : "FAILED — no proof recorded"],
   ];

@@ -945,8 +945,8 @@ module HaulView = {
             <h1 className="haul-receipt-hero">
               {React.string(
                 gemCount > 0
-                  ? Int.toString(gemCount) ++ (gemCount == 1 ? " gem hauled" : " gems hauled")
-                  : "No gems this haul",
+                  ? Int.toString(gemCount) ++ (gemCount == 1 ? " gem" : " gems")
+                  : "No gems this time",
               )}
             </h1>
             <p className="haul-receipt-sub">
