@@ -1693,3 +1693,290 @@ body:has(.scan-shell) {
   color: var(--scan-muted-2);
   white-space: nowrap;
 }
+
+/* == Haul mode: walk ticket (stop banner, tally, legend, offline, budget,
+   quarter tip, failed photos, others line) — Main.dc.html L90-196, L300-302.
+   scan-shell, scan-card, scan-headline, scan-sub, scan-empty, scan-gems and
+   scan-section/scan-rows-card are reused verbatim (see HANDOFF-haul-ui.md);
+   these are the classes new to HaulView's restyled ticket. */
+
+.haul-stop-banner {
+  margin: -14px -16px 14px;
+  padding: 12px 16px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.haul-stop-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card);
+  transform: rotate(-8deg);
+}
+
+.haul-stop-title {
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.haul-stop-reason {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--scan-mode-track);
+}
+
+.haul-stop-note {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--scan-mode-track);
+}
+
+.haul-store-name {
+  min-width: 0;
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 750;
+  font-stretch: 85%;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haul-tally {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--scan-dash);
+}
+
+.haul-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.haul-tile {
+  position: relative;
+  box-sizing: border-box;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  border: 0 solid transparent;
+  background-color: transparent;
+}
+
+.haul-tile-valued {
+  background-color: var(--scan-ink);
+}
+
+.haul-tile-valuing {
+  border: 1px solid var(--scan-ink);
+  background-color: var(--scan-highlight);
+  background-image: linear-gradient(
+    45deg,
+    var(--scan-orange) 25%,
+    transparent 25%,
+    transparent 50%,
+    var(--scan-orange) 50%,
+    var(--scan-orange) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 6px 6px;
+}
+
+.haul-tile-phone {
+  border: 1px dashed var(--scan-ink);
+}
+
+.haul-tile-notvalued {
+  border: 1px solid var(--scan-ink);
+}
+
+.haul-tile-failed {
+  border: 1px solid var(--scan-ink);
+}
+
+.haul-tile-cross {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  color: var(--scan-ink);
+}
+
+.haul-legend {
+  margin-top: 8px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--scan-muted-2);
+}
+
+.haul-offline {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background-color: var(--scan-bg);
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.haul-offline-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  transform: rotate(-8deg);
+}
+
+.haul-offline-text {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.haul-budget-row {
+  margin-top: 14px;
+}
+
+.haul-budget-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-budget-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-budget-track {
+  position: relative;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.haul-budget-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .6s ease;
+}
+
+.haul-budget-notch {
+  position: absolute;
+  top: 0;
+  width: 1.5px;
+  height: 6px;
+  margin-left: -0.75px;
+  background-color: var(--scan-card);
+}
+
+.haul-tip {
+  margin: 14px 16px 0;
+  max-width: 310px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 7px 16px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 16px;
+  background-color: var(--scan-card);
+  color: var(--scan-muted-2);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.haul-failed {
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  background-color: var(--scan-card);
+}
+
+.haul-failed-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.haul-failed-icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 20px;
+  box-sizing: border-box;
+  border-radius: 3px;
+  border: 1.5px solid var(--scan-ink);
+  color: var(--scan-ink);
+}
+
+.haul-failed-icon svg {
+  position: absolute;
+  left: 0;
+  top: 3px;
+}
+
+.haul-failed-title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.haul-failed-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--scan-dash-2);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--scan-ink);
+  overflow-wrap: anywhere;
+}
+
+.haul-others {
+  margin: 14px 16px 0;
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--scan-muted);
+}
