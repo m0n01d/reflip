@@ -302,17 +302,17 @@ real "Place saved" line, or deny it to see "No place" — geolocation is not
 in fixture mode's scope, it talks to the real browser API and the real
 `/api/hauls/:id/place` route, which is already live per step 4 above).
 Screenshot both the granted and the denied paths before calling P5 done.
-- [ ] P3. Api.res: `postPlace(haulId, body)` → `Sent(Types.place)` on 200,
+- [x] P3 (commit 1362a73). Api.res: `postPlace(haulId, body)` → `Sent(Types.place)` on 200,
       `Rejected(status)` on 400/404, `NotSent(reason)` otherwise (bad
       status, network error, or a 200 whose place does not decode).
-- [ ] P4. App.res effects: `askPlace` (geolocation → dispatch → resolves
+- [x] P4 (commit 630a10c, with P5). App.res effects: `askPlace` (geolocation → dispatch → resolves
       `option<placeFix>`), `sendPlace` (outbox write → POST → dispatch);
       Start haul asks for the position in parallel with the haul start and
       pairs each ask with its own start (drops the fix if the start fails);
       Try again re-asks then sends against the current haul id from
       `rewind.live`; on load, after the haul restore, every `place|<id>`
       outbox entry is sent, dispatching only for the current haul.
-- [ ] P5. View: HaulView shows `placeLine`'s text near `haul-store-name`
+- [x] P5 (commit 630a10c). View: HaulView shows `placeLine`'s text near `haul-store-name`
       in the existing quiet meta style, with a small "Try again" text
       button when `tryAgain` is true. New CSS goes in `src/web/scan.css`.
 
@@ -322,3 +322,9 @@ each step once green, then tick it here with its SHA.
 ### Log
 
 (attempts and errors for the Page steps go here)
+
+## Checks in a browser
+
+- [ ] C1. `scripts/place-check.mjs` in dev-browser: saved, a late haul id, the outbox after a
+      reload, denied, failed then Try again. Screenshots in `docs/shots/haul-map/`.
+- [ ] C2. `node scripts/haul-smoke.mjs` passes.
