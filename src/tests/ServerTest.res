@@ -77,5 +77,92 @@ let run = async () => {
   let validModels = Json.arrayField(badJson, "validModels")->Option.getOr([])
   TestKit.check("400 reply lists 3 valid model ids", Array.length(validModels) == 3)
 
+  // -- Haul mode: POST /api/hauls/:id/place (docs/haul-map-build.md step 4) --
+  TestKit.section("Server: POST /api/hauls/:id/place")
+
+  let base = "http://127.0.0.1:" ++ Int.toString(port)
+
+  let (placeCreateStatus, placeCreateJson) = {
+    let resp = await Fetch.fetch(
+      base ++ "/api/hauls",
+      ~init={
+        Fetch.method: "POST",
+        headers: Dict.fromArray([("content-type", "application/json")]),
+        body: JSON.stringify(Json.obj([("name", Json.str("Place test"))])),
+      },
+    )
+    (Fetch.status(resp), await Fetch.json(resp))
+  }
+  TestKit.check("POST /api/hauls (for place tests) responds 201", placeCreateStatus == 201)
+  let placeHaulId = Json.stringField(placeCreateJson, "haulId")->Option.getOr("")
+  TestKit.check("place-test haul has a haulId", placeHaulId != "")
+
+  let postPlaceBody = async (haulId: string, body: string) => {
+    let resp = await Fetch.fetch(
+      base ++ "/api/hauls/" ++ haulId ++ "/place",
+      ~init={
+        Fetch.method: "POST",
+        headers: Dict.fromArray([("content-type", "application/json")]),
+        body,
+      },
+    )
+    (Fetch.status(resp), await Fetch.json(resp))
+  }
+
+  let gpsBody = JSON.stringify(
+    Json.obj([
+      ("lat", Json.num(47.6)),
+      ("lon", Json.num(-122.3)),
+      ("accuracyM", Json.num(12.0)),
+      ("source", Json.str("gps")),
+    ]),
+  )
+  let (gpsStatus, gpsJson) = await postPlaceBody(placeHaulId, gpsBody)
+  TestKit.check("valid gps place responds 200", gpsStatus == 200)
+  let gpsPlace = Json.field(gpsJson, "place")->Option.getOr(Json.obj([]))
+  TestKit.check("reply's place has source gps", Json.stringField(gpsPlace, "source") == Some("gps"))
+  TestKit.check("reply's haulId matches", Json.stringField(gpsJson, "haulId") == Some(placeHaulId))
+
+  let badLatBody = JSON.stringify(
+    Json.obj([
+      ("lat", Json.num(91.0)),
+      ("lon", Json.num(-122.3)),
+      ("accuracyM", Json.num(12.0)),
+      ("source", Json.str("gps")),
+    ]),
+  )
+  let (badLatStatus, _) = await postPlaceBody(placeHaulId, badLatBody)
+  TestKit.check("lat 91 responds 400", badLatStatus == 400)
+
+  let (badJsonStatus, _) = await postPlaceBody(placeHaulId, "not json")
+  TestKit.check("malformed JSON body responds 400", badJsonStatus == 400)
+
+  let (unknownStatus, _) = await postPlaceBody("no-such-haul", gpsBody)
+  TestKit.check("unknown haul id responds 404", unknownStatus == 404)
+
+  let pinBody = JSON.stringify(
+    Json.obj([("lat", Json.num(47.61)), ("lon", Json.num(-122.31)), ("source", Json.str("pin"))]),
+  )
+  let (pinStatus, pinJson) = await postPlaceBody(placeHaulId, pinBody)
+  TestKit.check("pin place responds 200", pinStatus == 200)
+  let pinPlace = Json.field(pinJson, "place")->Option.getOr(Json.obj([]))
+  TestKit.check("pin place source is pin", Json.stringField(pinPlace, "source") == Some("pin"))
+
+  let gpsAfterPinBody = JSON.stringify(
+    Json.obj([
+      ("lat", Json.num(47.62)),
+      ("lon", Json.num(-122.32)),
+      ("accuracyM", Json.num(9.0)),
+      ("source", Json.str("gps")),
+    ]),
+  )
+  let (gpsAfterPinStatus, gpsAfterPinJson) = await postPlaceBody(placeHaulId, gpsAfterPinBody)
+  TestKit.check("gps after pin still responds 200", gpsAfterPinStatus == 200)
+  let gpsAfterPinPlace = Json.field(gpsAfterPinJson, "place")->Option.getOr(Json.obj([]))
+  TestKit.check(
+    "gps after pin keeps the pin (source stays pin)",
+    Json.stringField(gpsAfterPinPlace, "source") == Some("pin"),
+  )
+
   Node.HttpServer.close(server, () => ())
 }
