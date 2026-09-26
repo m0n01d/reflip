@@ -1435,3 +1435,261 @@ body:has(.scan-shell) {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* == Haul mode: gem card (GemCard, HaulClock) — docs/design/haul-ui/Main.dc.html
+   L198-298, EbayBlock.dc.html. .scan-sheet-crop/-price/-conf and .scan-ebay*
+   are reused verbatim (see HANDOFF-haul-ui.md); only the row, thumb, sticker,
+   where-row, crop pins, clock and the 3-stat/range-bar eBay layout are new. */
+
+.haul-gem-item {
+  border-top: 1px dashed var(--scan-dash-2);
+}
+
+.haul-gem-item-first {
+  border-top: 0;
+}
+
+.haul-gem-row {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 0;
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-family: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.haul-gem-thumb-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.haul-gem-thumb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--scan-photo-bg);
+}
+
+.haul-gem-thumb-img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+
+.haul-gem-sticker {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 1px 3px rgba(27, 24, 19, .35);
+}
+
+.haul-gem-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.haul-gem-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.haul-gem-where {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haul-gem-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.haul-gem-price {
+  font-family: var(--scan-font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.haul-gem-conf {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.haul-gem-detail {
+  padding: 0 14px 16px;
+}
+
+.haul-gem-size {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--scan-muted);
+}
+
+.haul-gem-where-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--scan-muted-2);
+}
+
+.haul-crop-pin {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 26px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 3px 8px rgba(27, 24, 19, .45);
+}
+
+.haul-clock {
+  flex-shrink: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.haul-ebay-stats {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 84px;
+  gap: 8px;
+}
+
+.haul-ebay-stat-label {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-ebay-stat-value {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.haul-ebay-bar {
+  position: relative;
+  margin-top: 12px;
+  height: 66px;
+}
+
+.haul-ebay-bar-label {
+  position: absolute;
+  top: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.haul-ebay-bar-label-med {
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-ebay-bar-line {
+  position: absolute;
+  top: 25px;
+  height: 1.5px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-tick {
+  position: absolute;
+  top: 19px;
+  width: 1.5px;
+  height: 14px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-med-tick {
+  position: absolute;
+  top: 17px;
+  width: 3px;
+  height: 18px;
+  border-radius: 1px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-track-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--scan-mode-track);
+}
+
+.haul-ebay-bar-band {
+  position: absolute;
+  top: 40px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--scan-orange);
+}
+
+.haul-ebay-bar-band-text {
+  position: absolute;
+  top: 52px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted-2);
+  white-space: nowrap;
+}
