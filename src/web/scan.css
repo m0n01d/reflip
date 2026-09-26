@@ -1443,6 +1443,22 @@ body:has(.scan-shell) {
 
 .haul-gem-item {
   border-top: 1px dashed var(--scan-dash-2);
+  animation: haul-gem-land 1.2s ease-out;
+}
+
+@keyframes haul-gem-land {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+    background-color: var(--scan-highlight);
+  }
+  30% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    background-color: transparent;
+  }
 }
 
 .haul-gem-item-first {
@@ -1503,6 +1519,21 @@ body:has(.scan-shell) {
   line-height: 22px;
   text-align: center;
   box-shadow: 0 0 0 2px var(--scan-card), 0 1px 3px rgba(27, 24, 19, .35);
+  animation: haul-gem-sticker-pop .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes haul-gem-sticker-pop {
+  from {
+    transform: rotate(-8deg) scale(.5);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-8deg) scale(1.12);
+    opacity: 1;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+  }
 }
 
 .haul-gem-info {
@@ -1555,6 +1586,27 @@ body:has(.scan-shell) {
 
 .haul-gem-detail {
   padding: 0 14px 16px;
+  overflow: hidden;
+  animation: haul-gem-detail-open .25s ease-out;
+}
+
+/* A true grid-rows accordion needs the detail's children collapsed into one
+   wrapper row; this element renders several flat children (crop, price,
+   dots, where, eBay block), so max-height stands in for grid-template-rows
+   here. animation-fill-mode is the default (none), so once the .25s run
+   ends the element's max-height reverts to its un-animated value (unset),
+   and real content is never clipped. A second tap unmounts the node
+   outright (React), so only the open direction animates — there is no
+   unmount transition without JS. */
+@keyframes haul-gem-detail-open {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 600px;
+    opacity: 1;
+  }
 }
 
 .haul-gem-size {
@@ -1780,10 +1832,12 @@ body:has(.scan-shell) {
   border-radius: 2px;
   border: 0 solid transparent;
   background-color: transparent;
+  animation: haul-tile-drop .2s ease-out;
 }
 
 .haul-tile-valued {
   background-color: var(--scan-ink);
+  animation: haul-tile-pop .22s ease-out;
 }
 
 .haul-tile-valuing {
@@ -1800,6 +1854,36 @@ body:has(.scan-shell) {
     transparent
   );
   background-size: 6px 6px;
+  animation: haul-tile-hatch-drift 1s linear infinite;
+}
+
+@keyframes haul-tile-drop {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes haul-tile-hatch-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 6px 6px;
+  }
+}
+
+@keyframes haul-tile-pop {
+  from {
+    transform: scale(1.35);
+  }
+  to {
+    transform: scale(1);
+  }
 }
 
 .haul-tile-phone {
@@ -1990,6 +2074,18 @@ body:has(.scan-shell) {
   border-radius: 12px 12px 0 0;
   background-color: var(--scan-card);
   filter: drop-shadow(0 1px 0 rgba(27, 24, 19, .10)) drop-shadow(0 6px 12px rgba(27, 24, 19, .07));
+  animation: haul-receipt-print .4s ease-out;
+}
+
+@keyframes haul-receipt-print {
+  from {
+    transform: translateY(-18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .haul-receipt-label {
@@ -2055,6 +2151,18 @@ body:has(.scan-shell) {
   border: 2px solid var(--scan-ink);
   border-radius: 7px;
   color: var(--scan-ink);
+  animation: haul-stamp-land .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes haul-stamp-land {
+  from {
+    transform: scale(1.3);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .haul-stamp-inner {
@@ -2184,7 +2292,7 @@ body:has(.scan-shell) {
 }
 
 .haul-dock-snap:active {
-  transform: scale(.94);
+  transform: scale(.96);
 }
 
 .haul-dock-snap-ring {
@@ -2254,9 +2362,10 @@ body:has(.scan-shell) {
   animation: haul-bar-spin 1.6s linear infinite;
 }
 
-.haul-bar-fail .haul-bar-ring {
-  animation: none;
-}
+/* The ring keeps turning during a fail-bar retry too (docs/haul-ui.md
+   section 5, item 2: "the dashed ring turns while a photo is on the phone
+   or valuing, and during a failed Done retry"). It shares .haul-bar-ring's
+   animation unconditionally; only prefers-reduced-motion stops it. */
 
 .haul-bar-text {
   font-size: 16px;
@@ -2412,5 +2521,35 @@ body:has(.scan-shell) {
 
   .haul-dock-snap {
     transition: none;
+  }
+
+  .haul-tile,
+  .haul-tile-valued,
+  .haul-tile-valuing {
+    animation: none;
+  }
+
+  .haul-gem-detail {
+    animation: none;
+  }
+
+  .haul-gem-item {
+    animation: none;
+  }
+
+  .haul-gem-sticker {
+    animation: none;
+  }
+
+  .haul-budget-fill {
+    transition: none;
+  }
+
+  .haul-receipt {
+    animation: none;
+  }
+
+  .haul-stamp {
+    animation: none;
   }
 }
