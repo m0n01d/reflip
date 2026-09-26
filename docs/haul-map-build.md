@@ -17,7 +17,7 @@ Verification command: `npm test`
       replaces them (Shared.res's decode -> step 5 real decodePlace once
       Place.res exists; HaulStatus.res -> step 3 once Store.haul carries
       place). `npm test`: 929 ok, 0 not ok (unchanged from baseline).
-      Commit: 25334f1 (see `git log` for exact SHA if this drifts)
+      Commit: edd3e07
 - [ ] 2. src/Place.res: decodeInput, choose; src/tests/PlaceTest.res in AllTests.
       Design decided (see below) — NOT YET IMPLEMENTED.
 - [ ] 3. Store.res: hauls table place columns, migration, Store.haul.place, setPlace; StoreTest.
