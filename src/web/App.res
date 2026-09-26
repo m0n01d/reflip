@@ -1058,6 +1058,26 @@ let make = () => {
     None
   }, (rewind.live.queue, rewind.live.haul))
 
+  // -- Done retry (decision 10): a failed Done while Finishing tries again,
+  // backing off per retryDelayMs. Derived booleans (isFinishing/haulId), so
+  // this does not restart the countdown on every unrelated status poll.
+  // Reads rewind.live, never rewind.model.
+  let isFinishing = switch rewind.live.haul {
+  | Finishing(_) => true
+  | _ => false
+  }
+  let finishingHaulId =
+    AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
+  React.useEffect3(() => {
+    if isFinishing && rewind.live.doneAttempts > 0 && finishingHaulId != "" {
+      let delay = AppState.retryDelayMs(rewind.live.doneAttempts)
+      let id = WebApi.setTimeout(() => finishHaul(dispatch, finishingHaulId)->Promise.ignore, delay)
+      Some(() => WebApi.clearTimeout(id))
+    } else {
+      None
+    }
+  }, (isFinishing, rewind.live.doneAttempts, finishingHaulId))
+
   // -- poll the brain while the haul is open or not yet emailed -------------
   let pollHaulId = AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
   let pollActive = switch AppState.haulStatusOf(rewind.live.haul) {
