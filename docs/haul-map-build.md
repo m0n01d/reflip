@@ -323,9 +323,10 @@ each step once green, then tick it here with its SHA.
 
 ## Checks in a browser
 
-- [ ] C1. `scripts/place-check.mjs` in dev-browser: saved, a late haul id, the outbox after a
-      reload, denied, failed then Try again. Screenshots in `docs/shots/haul-map/`.
-- [ ] C2. `node scripts/haul-smoke.mjs` passes.
+- [x] C1. `scripts/place-check.mjs` in dev-browser: saved, a late haul id, the outbox after a
+      reload, denied, failed then Try again, and the outbox on a done haul. Screenshots in
+      `docs/shots/haul-map/`. Green at `2282342`.
+- [x] C2. `node scripts/haul-smoke.mjs` passes. Green at `2282342`.
 
 ### Log
 
@@ -399,6 +400,27 @@ repo CLAUDE.md, both still to do).
 Environment fix, 2026-09-26: this worktree had no `rescript-rewind` in `node_modules`, so Node
 found the main checkout's copy, and the bundle held two copies of React. `npm install` fixed it.
 After that, `node scripts/haul-smoke.mjs --skip-build` passed.
+
+Finished 2026-09-26, commit `2282342`. Added a sixth in-browser case, "outbox on a done haul":
+abort the place POST, start a haul, wait for "Place not sent yet", tap Done, wait for the done
+screen's email note (FIXTURES=1 always uses the outbox), remove the route, reload with no
+further tap, and check the place line reads "Place saved" and `GET /api/hauls/:id` shows the
+place. The reload restores the haul phase through `HaulStarted`, so the page shows the ordinary
+scan card (not the `.haul-receipt` stamp) once reloaded — the place line still renders there and
+updates correctly, so this is a naming nuance in the brief's "done screen" wording, not a script
+or app failure.
+
+`node scripts/place-check.mjs --skip-build --timeout 150`:
+
+```
+{"ok":true,"failures":[],"port":57821,"cases":{"saved":{"haulId":"59734b82-a908-4c08-8734-6d3623b14872","text":"Place saved · ±35 m · 0.0 s","place":{"lat":61.2181,"lon":-149.9003,"accuracyM":35,"source":"gps","at":"2026-09-26T16:31:18.793Z"},"outboxKeyLeft":false,"ok":true},"late":{"haulId":"311e4c78-1e63-444d-a161-13050fbfeb60","text":"Place saved · ±35 m · 0.0 s","ok":true},"outbox":{"haulId":"761b0425-c2c4-499e-b8ed-9c908cc72bf0","textBefore":"Place not sent yetTry again","outboxValue":"{\"lat\":61.2181,\"lon\":-149.9003,\"accuracyM\":35,\"source\":\"gps\"}","textAfter":"Place saved · ±35 m","placeAfter":{"lat":61.2181,"lon":-149.9003,"accuracyM":35,"source":"gps","at":"2026-09-26T16:31:21.614Z"},"outboxKeyLeftAfter":false,"ok":true},"denied":{"haulId":"4cbcfe9e-4b2c-486a-9396-448390899fcd","naturalDenialWorked":true,"text":"No place","usedOverride":false,"ok":true},"failed":{"haulId":"ad82d6df-32d7-4805-b93c-68a2fd78f3f1","textBefore":"No place yetTry again","textAfter":"Place saved · ±35 m · 0.0 s","ok":true},"outboxDone":{"haulId":"0b191277-86b8-4035-b30a-0be95895cc9e","textBefore":"Place not sent yetTry again","receiptText":"written to data/outbox/0b191277-86b8-4035-b30a-0be95895cc9e.eml because FIXTURES=1","textAfter":"Place saved · ±35 m","placeAfter":{"lat":61.2181,"lon":-149.9003,"accuracyM":35,"source":"gps","at":"2026-09-26T16:31:23.408Z"},"ok":true}},"privacy":{"lat":true,"lon":true},"ms":5534,"outDir":"/Users/dwight/code/reflip/.claude/worktrees/sharp-borg-0aed69/data/place-check/2026-09-26T16-31-17-962Z","serverLog":"/Users/dwight/code/reflip/.claude/worktrees/sharp-borg-0aed69/data/place-check/2026-09-26T16-31-17-962Z/server.log","shots":{"saved":"...","not-sent":"...","denied":"...","failed":"...","done-reload":"..."}}
+```
+
+`node scripts/haul-smoke.mjs --skip-build`:
+
+```
+{"ok":true,"failures":[],"n":5,"port":57999,"haulId":"aa9e7055-4798-46bb-8f63-bda2d557add4","counts":{"queued":0,"running":0,"valued":5,"failed":0},"emailNote":"written to data/outbox/aa9e7055-4798-46bb-8f63-bda2d557add4.eml because FIXTURES=1","gemCount":10,"cropsMissing":5,"cards":[{"index":0,"opened":true,"hasBox":true,"expectBox":true,"prevClosed":null,"closed":true},{"index":1,"opened":true,"hasBox":true,"expectBox":true,"prevClosed":true,"closed":true},{"index":2,"opened":true,"hasBox":true,"expectBox":true,"prevClosed":true,"closed":true},{"index":3,"opened":true,"hasBox":true,"expectBox":true,"prevClosed":true,"closed":true},{"index":4,"opened":true,"hasBox":true,"expectBox":true,"prevClosed":true,"closed":true},{"index":5,"opened":true,"hasBox":false,"expectBox":false,"prevClosed":true,"closed":true},{"index":6,"opened":true,"hasBox":false,"expectBox":false,"prevClosed":true,"closed":true},{"index":7,"opened":true,"hasBox":false,"expectBox":false,"prevClosed":true,"closed":true},{"index":8,"opened":true,"hasBox":false,"expectBox":false,"prevClosed":true,"closed":true},{"index":9,"opened":true,"hasBox":false,"expectBox":false,"prevClosed":true,"closed":true}],"soldLink":{"url":"https://www.ebay.com/sch/i.html?_nkw=vintage%20brass%20table%20lamp%20working&LH_Sold=1&LH_Complete=1","cardUnchanged":true},"idbDelete":"success","consoleErrors":[],"photoRoute":{"status":200,"contentType":"image/jpeg"},"ms":7299,"outDir":"/Users/dwight/code/reflip/.claude/worktrees/sharp-borg-0aed69/data/smoke/2026-09-26T16-32-01-735Z","shots":["...","...","...","..."]}
+```
 
 ## Review fixes
 
