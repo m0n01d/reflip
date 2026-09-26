@@ -21,9 +21,10 @@ Verification command: `npm test`
 - [x] 2. src/Place.res: decodeInput, choose; src/tests/PlaceTest.res in AllTests.
       Implemented per the design notes below, no deviations. `npm test`: 942
       ok, 0 not ok (929 baseline + 13 new). Commit: fdfb73e
-- [ ] 3. Store.res: hauls table place columns, migration, Store.haul.place, setPlace; StoreTest.
-      Must also replace HaulStatus.res's `place: None` placeholder with the
-      real `haul.place`.
+- [x] 3. Store.res: hauls table place columns, migration, Store.haul.place, setPlace; StoreTest.
+      Also replaced HaulStatus.res's `place: None` placeholder with the real
+      `haul.place`. No deviations from the design notes. `npm test`: 950 ok,
+      0 not ok (942 baseline + 8 new). Commit: 3bb2ada
 - [ ] 4. Server.res: POST /api/hauls/:id/place; ServerTest
 - [ ] 5. Haul status reply: Shared.decodeHaulStatus real decode (replace the
       `place: None` placeholder added in step 1) using a new `decodePlace`
