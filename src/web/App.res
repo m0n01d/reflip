@@ -1123,7 +1123,12 @@ module HaulView = {
               capture=#environment
               onChange={onTakePhoto}
             />
-            <span ariaHidden={true} className="haul-dock-snap-ring" />
+            <span
+              ariaHidden={true}
+              className={"haul-dock-snap-ring" ++ (
+                tally.onPhone + tally.valuing > 0 ? " haul-dock-snap-ring-busy" : ""
+              )}
+            />
             <span className="haul-dock-snap-inner">
               <svg
                 width="26"

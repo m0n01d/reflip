@@ -2305,6 +2305,17 @@ body:has(.scan-shell) {
   border: 2px dashed rgba(27, 24, 19, .5);
 }
 
+/* The ring turns while a photo is on the phone or valuing (docs/haul-ui.md motion 2). */
+.haul-dock-snap-ring-busy {
+  animation: haul-snap-ring-turn 6s linear infinite;
+}
+
+@keyframes haul-snap-ring-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .haul-dock-snap-inner {
   position: relative;
   display: flex;
@@ -2515,7 +2526,8 @@ body:has(.scan-shell) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .haul-bar-ring {
+  .haul-bar-ring,
+  .haul-dock-snap-ring-busy {
     animation: none;
   }
 
