@@ -115,8 +115,6 @@ let make = (
   ~model: ScanState.model,
   ~dispatch: ScanState.msg => unit,
   ~onNewPhoto: ReactEvent.Form.t => unit,
-  ~resizeMs: option<float>,
-  ~rttMs: option<float>,
 ) => {
   let (logOpen, setLogOpen) = React.useState(() => false)
   let (alsoOpen, setAlsoOpen) = React.useState(() => false)
@@ -429,9 +427,9 @@ let make = (
                   {[
                     Some(("Model", r.modelLabel)),
                     Some(("Photo", r.photoSize)),
-                    resizeMs->Option.map(ms => ("Resize", ScanState.mss(ms))),
+                    r.resizeMs->Option.map(v => ("Resize", v)),
                     Some(("Claude", r.claude)),
-                    rttMs->Option.map(ms => ("Round trip", ScanState.mss(ms))),
+                    r.rttMs->Option.map(v => ("Round trip", v)),
                     Some(("Tokens", r.tokens)),
                     Some(("Web searches", Int.toString(r.webSearches))),
                     Some(("Cost", r.cost)),

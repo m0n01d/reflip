@@ -522,4 +522,68 @@ let run = () => {
     TestKit.check("commaInt -40218 (one comma)", ScanState.commaInt(-40218) == "-40,218")
   }
   runCopyGaps()
+
+  // -- F2: resizeMs/rttMs on PhotoPicked and RttMeasured; isTerminalMsg;
+  // receipt's new resizeMs/rttMs fields ("N ms" vs m:ss) ------------------
+  // Nested for the same reason as runCopyGaps above: a new top-level fn
+  // always lands after `run` via resq set decl, which `run` could not call.
+  let runF2 = () => {
+    TestKit.section("ScanState: F2 resize and round-trip timings")
+
+    let picked = ScanState.update(
+      ScanState.initialModel,
+      PhotoPicked({model: Shared.Sonnet5, photoUrl: "blob:x", bytes: 100, resizeMs: 40.0}),
+    )
+    TestKit.check("PhotoPicked's resizeMs lands in the model", picked.resizeMs == Some(40.0))
+
+    let measured = ScanState.update(picked, RttMeasured(166000.0))
+    TestKit.check("RttMeasured sets model.rttMs", measured.rttMs == Some(166000.0))
+
+    TestKit.check(
+      "isTerminalMsg true for SendFailed",
+      ScanState.isTerminalMsg(SendFailed("x")) == true,
+    )
+    TestKit.check(
+      "isTerminalMsg true for GotEvent(Ok(End(...)))",
+      ScanState.isTerminalMsg(
+        GotEvent(Ok(ScanEvent.End({t: 0.0, status: ScanEvent.EndStatus.Done}))),
+      ) == true,
+    )
+    TestKit.check(
+      "isTerminalMsg false for a non-terminal msg (StopTapped)",
+      ScanState.isTerminalMsg(StopTapped) == false,
+    )
+
+    let doneInfo: ScanState.doneInfo = {
+      claudeMs: 1000.0,
+      inputTokens: 10,
+      outputTokens: 5,
+      webSearches: 0,
+      usd: 0.01,
+    }
+    let withTimings = {
+      ...ScanState.initialModel,
+      doneInfo: Some(doneInfo),
+      resizeMs: Some(40.0),
+      rttMs: Some(166000.0),
+    }
+    switch ScanState.receipt(withTimings) {
+    | None => TestKit.check("receipt is Some when doneInfo is Some", false)
+    | Some(r) =>
+      TestKit.check("receipt formats resizeMs as \"N ms\", not m:ss", r.resizeMs == Some("40 ms"))
+      TestKit.check(
+        "receipt formats rttMs as m:ss, matching the Claude row's format",
+        r.rttMs == Some("2:46"),
+      )
+    }
+
+    let withoutTimings = {...ScanState.initialModel, doneInfo: Some(doneInfo)}
+    switch ScanState.receipt(withoutTimings) {
+    | None => TestKit.check("receipt is Some when doneInfo is Some", false)
+    | Some(r) =>
+      TestKit.check("receipt.resizeMs is None when model.resizeMs is None", r.resizeMs == None)
+      TestKit.check("receipt.rttMs is None when model.rttMs is None", r.rttMs == None)
+    }
+  }
+  runF2()
 }

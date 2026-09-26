@@ -72,6 +72,14 @@ type model = {
   sceneReply: option<Types.sceneReply>,
   doneInfo: option<doneInfo>,
   endedAtMs: option<float>,
+  // Client-clock timings (F2/gap 6 rest): resizeMs from Resize.resizeToJpeg,
+  // set on PhotoPicked; rttMs is wall-clock ms from firing the scan request
+  // to the first terminal msg (RttMeasured, dispatched by App.res's
+  // runScanFlow -- see ScanState.isTerminalMsg). Both None until their one
+  // dispatch arrives; ScanState.receipt drops a row entirely when its
+  // value is still None rather than showing a placeholder.
+  resizeMs: option<float>,
+  rttMs: option<float>,
   errors: array<(float, string)>,
   stopRequested: bool, // StopTapped fired; waiting for the authoritative `end`
   reconnecting: bool,
@@ -95,6 +103,8 @@ let initialModel: model = {
   sceneReply: None,
   doneInfo: None,
   endedAtMs: None,
+  resizeMs: None,
+  rttMs: None,
   errors: [],
   stopRequested: false,
   reconnecting: false,
@@ -102,7 +112,7 @@ let initialModel: model = {
 }
 
 type msg =
-  | PhotoPicked({model: Shared.model, photoUrl: string, bytes: int})
+  | PhotoPicked({model: Shared.model, photoUrl: string, bytes: int, resizeMs: float})
   | GotEvent(result<ScanEvent.t, string>)
   | StopTapped
   | SheetOpened(int)
@@ -115,6 +125,10 @@ type msg =
   // to retry. Terminal, like an `Ended` from the server, but carries the
   // reason ScanApi could not hand it a real `ScanEvent.t` for.
   | SendFailed(string)
+  // Client-measured wall-clock ms from firing the scan request (App.res's
+  // runScanFlow) to the first terminal msg -- see ScanState.isTerminalMsg.
+  // Not part of the wire event contract; App.res dispatches this itself.
+  | RttMeasured(float)
 
 // -- The fold -----------------------------------------------------------
 
@@ -308,8 +322,15 @@ let foldEvent = (m: model, evt: ScanEvent.t): model => {
 
 let update = (m: model, msg: msg): model =>
   switch msg {
-  | PhotoPicked({model, photoUrl, bytes}) =>
-    {...initialModel, phase: Sending, selectedModel: model, photoUrl: Some(photoUrl), uploadBytes: bytes}
+  | PhotoPicked({model, photoUrl, bytes, resizeMs}) =>
+    {
+      ...initialModel,
+      phase: Sending,
+      selectedModel: model,
+      photoUrl: Some(photoUrl),
+      uploadBytes: bytes,
+      resizeMs: Some(resizeMs),
+    }
   | GotEvent(Ok(evt)) => foldEvent(m, evt)
   | GotEvent(Error(_)) => m // a line ScanEvent.decode could not read; ScanApi.localEventCount is the one counter now (bug D, 288738f review)
   | SendFailed(reason) =>
@@ -326,6 +347,7 @@ let update = (m: model, msg: msg): model =>
   | ConnectionLost => {...m, reconnecting: true}
   | Reconnected => {...m, reconnecting: false}
   | NewScan => initialModel
+  | RttMeasured(ms) => {...m, rttMs: Some(ms)}
   }
 
 // -- Pure derived functions for the view -------------------------------
@@ -617,9 +639,11 @@ let hasNoEbayData = (m: model): bool =>
   }
 
 // -- Run receipt ------------------------------------------------------------
-// Only what the wire contract actually carries: no resize or round-trip
-// time (docs/scan-ui.md's event table has no field for either — see this
-// track's report for why they are left out of a "plain working view").
+// resizeMs/rttMs (F2) are client-clock timings read straight from
+// ScanState.model, not from the wire contract -- docs/scan-ui.md's event
+// table still has no field for either. See msFmt below for why resizeMs
+// formats as "N ms" while rttMs uses mss (m:ss), matching the design's
+// Main.dc.html mock rows ("40 ms" / "2:46").
 // modelLabel uses the plain name (docs/design/scan-ui/Main.dc.html's
 // MODELS[].label), not Shared.modelLabel's Settings-radio copy, which adds
 // "(the default)" to Sonnet 5 — right for a Settings option, wrong for a
@@ -634,7 +658,9 @@ let shortModelLabel = (m: Shared.model): string =>
 type receipt = {
   modelLabel: string,
   photoSize: string,
+  resizeMs: option<string>,
   claude: string,
+  rttMs: option<string>,
   tokens: string,
   webSearches: int,
   cost: string,
@@ -642,17 +668,27 @@ type receipt = {
 
 let receipt = (m: model): option<receipt> =>
   m.doneInfo->Option.map(d => {
-    modelLabel: shortModelLabel(m.selectedModel),
-    photoSize: Int.toString(m.sentWidth) ++
-    " × " ++
-    Int.toString(m.sentHeight) ++
-    " · " ++
-    mb(m.uploadBytes) ++
-    " MB",
-    claude: mss(d.claudeMs),
-    tokens: commaInt(d.inputTokens) ++ " in · " ++ commaInt(d.outputTokens) ++ " out",
-    webSearches: d.webSearches,
-    cost: "$" ++ Float.toString(Math.round(d.usd *. 10000.0) /. 10000.0),
+    // Local helper, not top-level: this function is declared before the
+    // point where resq would append a new top-level fn, and ReScript
+    // has no forward reference across top-level lets in one file.
+    // Format is "N ms" per the design (Main.dc.html Resize row reads
+    // "40 ms"), not mss's m:ss. That mix-up was commit f7ed1db's bug.
+    let msFmt = (ms: float): string => Int.toString(Float.toInt(Math.round(ms))) ++ " ms"
+    {
+      modelLabel: shortModelLabel(m.selectedModel),
+      photoSize: Int.toString(m.sentWidth) ++
+      " × " ++
+      Int.toString(m.sentHeight) ++
+      " · " ++
+      mb(m.uploadBytes) ++
+      " MB",
+      resizeMs: m.resizeMs->Option.map(msFmt),
+      claude: mss(d.claudeMs),
+      rttMs: m.rttMs->Option.map(mss),
+      tokens: commaInt(d.inputTokens) ++ " in · " ++ commaInt(d.outputTokens) ++ " out",
+      webSearches: d.webSearches,
+      cost: "$" ++ Float.toString(Math.round(d.usd *. 10000.0) /. 10000.0),
+    }
   })
 
 // Settings sheet model order (docs/design/scan-ui/Main.dc.html MODELS):
@@ -662,3 +698,13 @@ let receipt = (m: model): option<receipt> =>
 // a model added to Shared later fails a test instead of silently
 // dropping out of Settings (R6).
 let settingsModelOrder: array<Shared.model> = [Shared.Sonnet5, Shared.Opus5_5, Shared.Haiku4_5]
+
+// True for exactly the two msg shapes update/foldEvent turn into `Ended`.
+// App.res wraps the dispatch it hands to ScanApi.run and watches for
+// either, to know when the round trip (F2) just finished.
+let isTerminalMsg = (msg: msg): bool =>
+  switch msg {
+  | GotEvent(Ok(ScanEvent.End(_))) => true
+  | SendFailed(_) => true
+  | _ => false
+  }

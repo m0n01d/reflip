@@ -68,15 +68,31 @@ let runScanFlow = async (
 ) =>
   switch await Resize.resizeToJpeg(file, longEdge) {
   | Error(msg) => dispatch(AppState.ResizeErr(msg))
-  | Ok((blob, _resizeMs)) =>
+  | Ok((blob, resizeMs)) =>
     let photoUrl = WebApi.createObjectURL(blob)
     setPhotoUrl(photoUrl)
     dispatch(
       AppState.Scan(
-        ScanState.PhotoPicked({model: scanModel, photoUrl, bytes: WebApi.blobSize(blob)}),
+        ScanState.PhotoPicked({
+          model: scanModel,
+          photoUrl,
+          bytes: WebApi.blobSize(blob),
+          resizeMs,
+        }),
       ),
     )
-    setHandle(ScanApi.run(~model=scanModel, ~blob, ~dispatch=msg => dispatch(AppState.Scan(msg))))
+    // Round trip (F2): wall-clock ms from firing this request to the
+    // first terminal msg, using WebApi.now(), the same clock
+    // ScanApi.res's heartbeat watchdog already uses. The stream has no
+    // single request/response the old flow's Api.postScene could time.
+    let sentAtMs = WebApi.now()
+    let timedDispatch = (msg: ScanState.msg) => {
+      dispatch(AppState.Scan(msg))
+      if ScanState.isTerminalMsg(msg) {
+        dispatch(AppState.Scan(ScanState.RttMeasured(WebApi.now() -. sentAtMs)))
+      }
+    }
+    setHandle(ScanApi.run(~model=scanModel, ~blob, ~dispatch=timedDispatch))
   }
 
 let statusText = (status: AppState.status): string =>
