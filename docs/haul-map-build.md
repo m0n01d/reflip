@@ -496,6 +496,13 @@ turn 60, right after S2's build check, before any S3 edit. A fresh agent
 did S3 through S6 next, with no failed attempts. `npm test` ends with
 "all tests passed", with 20 new checks in `HaulListTest.res`.
 
+A review found three tests that could not fail. Commit `e51e269` fixes
+them. Each fixed test fails when `HaulList.res` drops its sort or its
+haul filter. On `e51e269`, `npm test` passed 1042 checks.
+`scripts/haul-smoke.mjs` and `scripts/place-check.mjs` passed on the same
+source. A live call on a fixture brain gave `photoCount` 2 and `gemCount`
+4 for a haul with two photos. The server log had no coordinates.
+
 ### What S3-S6 built
 
 - `Store.listHauls` reads every haul. It sorts by `startedAt`, then by
@@ -530,4 +537,4 @@ MVP step 2, the phone test, waits for Dwight:
 5. Add the page to the Home Screen. Do step 4 again from the Home Screen icon.
 6. Write the results in `docs/spec-haul-map.md`, MVP step 2. If the results show a need, change the timeout (15 s now, in `App.askPlace`).
 
-Step 3 (`GET /api/hauls` and `HaulList.res`) can go on during the wait. Step 4, the Map view, waits for the results in the spec.
+Step 3 (`GET /api/hauls` and `HaulList.res`) is done on branch `claude/haul-map-list`, stacked on PR m0n01d/reflip#28. See "Step 3" above. Step 4, the Map view, waits for the results in the spec.
