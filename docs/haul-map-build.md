@@ -154,3 +154,45 @@ type at L122, parseHaulPath L124-163, route dispatch L594-690,
 handleAddScene (body-read + size-limit pattern to reuse) L289-348,
 maxPhotoBytes L214, handleMarkDone (a same-shape simple POST handler)
 L384-399, handleGetHaul L350-355. Step 4 is otherwise unstarted.
+
+## Page
+
+The brain half above is done. This section covers the phone page's half of
+the place slice: `POST /api/hauls/:id/place`, the haul status reply's
+`place` field, and `Shared.decodePlace` all already exist and are not
+touched here.
+
+- [ ] P1. WebApi.res: typed geolocation bindings — an abstract `geolocation`
+      type, `@val @scope("navigator") external geolocation:
+      Nullable.t<geolocation>`, a `@send` `getCurrentPosition` taking
+      (success, error, options), and records for the coords (latitude,
+      longitude, accuracy), the position (coords), the error (code) and the
+      options (enableHighAccuracy, timeout, maximumAge).
+- [ ] P2. AppState.res, pure, with AppStateTest cases: `placeFix`, a `place`
+      field on the model with states not asked / asking / sending(fix) /
+      not sent(fix) / saved(option<fix>) / denied / failed (constructor
+      names disjoint from every msg name); msgs asked (Try again),
+      fixed(fix), denied, unavailable, sent(Types.place), send failed,
+      rejected; StartHaul sets asking, NewHaul resets to not asked;
+      `placeKey`/`parsePlaceKey` (and confirm `parseQueueKey` still ignores
+      a place key); `encodePlaceBody`/`decodePlaceBody`; `placeLine`.
+- [ ] P3. Api.res: `postPlace(haulId, body)` → `Sent(Types.place)` on 200,
+      `Rejected(status)` on 400/404, `NotSent(reason)` otherwise (bad
+      status, network error, or a 200 whose place does not decode).
+- [ ] P4. App.res effects: `askPlace` (geolocation → dispatch → resolves
+      `option<placeFix>`), `sendPlace` (outbox write → POST → dispatch);
+      Start haul asks for the position in parallel with the haul start and
+      pairs each ask with its own start (drops the fix if the start fails);
+      Try again re-asks then sends against the current haul id from
+      `rewind.live`; on load, after the haul restore, every `place|<id>`
+      outbox entry is sent, dispatching only for the current haul.
+- [ ] P5. View: HaulView shows `placeLine`'s text near `haul-store-name`
+      in the existing quiet meta style, with a small "Try again" text
+      button when `tryAgain` is true. New CSS goes in `src/web/scan.css`.
+
+Verification for every step below: `npm test` (build + AllTests). Commit
+each step once green, then tick it here with its SHA.
+
+### Log
+
+(attempts and errors for the Page steps go here)
