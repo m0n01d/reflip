@@ -773,6 +773,34 @@ module HaulView = {
       ->Array.concat(repeat(tally.valuing, "valuing"))
       ->Array.concat(repeat(tally.notValued, "notvalued"))
       ->Array.concat(repeat(tally.onPhone, "phone"))
+    // The receipt's rows (decision 9), built functionally like `tiles` above:
+    // an empty array for a row that decision 9 says to leave out, concatenated
+    // in the canvas's own order.
+    let storeRow = storeName == "" ? [] : [("Store", storeName)]
+    let finishedRow = switch status.doneAt {
+    | Some(doneAt) => [("Finished", HaulLayout.timeOf(doneAt))]
+    | None => []
+    }
+    let failedRow = status.counts.failed > 0 ? [("Failed", Int.toString(status.counts.failed))] : []
+    let stoppedRow = switch status.stopReason {
+    | Some(reason) => [("Stopped", reason)]
+    | None => []
+    }
+    let digestRow = switch status.emailedAt {
+    | Some(emailedAt) => [("Digest", "sent · " ++ HaulLayout.timeOf(emailedAt))]
+    | None => []
+    }
+    let receiptRows: array<(string, string)> =
+      storeRow
+      ->Array.concat([("Started", HaulLayout.timeOf(status.startedAt))])
+      ->Array.concat(finishedRow)
+      ->Array.concat([("Photos", Int.toString(status.counts.valued + status.counts.failed))])
+      ->Array.concat(failedRow)
+      ->Array.concat([("Gems", Int.toString(gemCount))])
+      ->Array.concat([("Gems worth", gemCount > 0 ? ScanState.moneyRange(sumLo, sumHi) : "none")])
+      ->Array.concat([("Claude cost", fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd))])
+      ->Array.concat(stoppedRow)
+      ->Array.concat(digestRow)
     <div className="scan-shell">
       <div className="scan-card-shadow">
         <section ariaLabel="Haul status" className="scan-card">
@@ -903,16 +931,49 @@ module HaulView = {
         : React.null}
       {switch phase {
       | Finished(_) =>
-        <>
+        switch status.emailedAt {
+        | Some(emailedAt) =>
+          <section ariaLabel="Haul receipt" className="haul-receipt">
+            <div className="haul-receipt-label"> {React.string("HAUL RECEIPT")} </div>
+            <h1 className="haul-receipt-hero">
+              {React.string(
+                gemCount > 0
+                  ? Int.toString(gemCount) ++ (gemCount == 1 ? " gem hauled" : " gems hauled")
+                  : "No gems this haul",
+              )}
+            </h1>
+            <p className="haul-receipt-sub">
+              {React.string(status.emailNote->Option.getOr("The digest is in your inbox."))}
+            </p>
+            <div className="haul-receipt-rows">
+              {receiptRows
+              ->Array.mapWithIndex((row, i) => {
+                let (k, v) = row
+                <div key={Int.toString(i)} className="haul-receipt-row">
+                  <span className="haul-receipt-row-k"> {React.string(k)} </span>
+                  <span ariaHidden={true} className="haul-receipt-row-dots" />
+                  <span className="haul-receipt-row-v"> {React.string(v)} </span>
+                </div>
+              })
+              ->React.array}
+            </div>
+            <div
+              role="img"
+              ariaLabel={"Stamp: hauled, " ++ HaulLayout.stampDateOf(emailedAt)}
+              className="haul-stamp">
+              <div className="haul-stamp-inner">
+                <div className="haul-stamp-word"> {React.string("HAULED")} </div>
+                <div className="haul-stamp-date">
+                  {React.string(HaulLayout.stampDateOf(emailedAt))}
+                </div>
+              </div>
+            </div>
+          </section>
+        | None =>
           <div className="status">
             {React.string(status.emailNote->Option.getOr("done — waiting for the digest"))}
           </div>
-          {status.emailedAt->Option.isSome
-            ? <button className="take-photo" onClick={onNewHaul}>
-                {React.string("Start a new haul")}
-              </button>
-            : React.null}
-        </>
+        }
       | Finishing(_) => React.null
       | _ =>
         switch model.haulError {
@@ -989,6 +1050,26 @@ module HaulView = {
             )}
           </div>
         : React.null}
+      {switch phase {
+      | Finished(_) if status.emailedAt->Option.isSome =>
+        <button type_="button" className="haul-new-haul" onClick={onNewHaul}>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            ariaHidden={true}>
+            <path d="M5 9h14l-1.2 10.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z" />
+            <path d="M9 9V7a3 3 0 0 1 6 0v2" />
+          </svg>
+          <span> {React.string("Start a new haul")} </span>
+        </button>
+      | _ => React.null
+      }}
       {isWalk ? <div ariaHidden={true} className="haul-walk-spacer" /> : React.null}
       {switch phase {
       | Finished(_) => React.null

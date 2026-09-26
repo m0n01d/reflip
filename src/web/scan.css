@@ -1981,6 +1981,126 @@ body:has(.scan-shell) {
   color: var(--scan-muted);
 }
 
+/* -- Receipt, stamp, Start a new haul (step 5) --------------------------- */
+
+.haul-receipt {
+  position: relative;
+  margin: 14px 16px 0;
+  padding: 14px 16px 24px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-card);
+  filter: drop-shadow(0 1px 0 rgba(27, 24, 19, .10)) drop-shadow(0 6px 12px rgba(27, 24, 19, .07));
+}
+
+.haul-receipt-label {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.haul-receipt-hero {
+  margin: 8px 0 0;
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 750;
+  font-stretch: 82%;
+  letter-spacing: -0.01em;
+}
+
+.haul-receipt-sub {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--scan-muted-2);
+}
+
+.haul-receipt-rows {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--scan-dash);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.haul-receipt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.haul-receipt-row-k {
+  white-space: nowrap;
+  color: var(--scan-muted-2);
+}
+
+.haul-receipt-row-dots {
+  flex-grow: 1;
+  min-width: 12px;
+  border-bottom: 1.5px dotted var(--scan-dotted);
+}
+
+.haul-receipt-row-v {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.haul-stamp {
+  position: absolute;
+  right: 16px;
+  top: 22px;
+  padding: 3px;
+  border: 2px solid var(--scan-ink);
+  border-radius: 7px;
+  color: var(--scan-ink);
+}
+
+.haul-stamp-inner {
+  padding: 5px 12px 4px;
+  border: 1px solid var(--scan-ink);
+  border-radius: 4px;
+  text-align: center;
+  font-family: var(--scan-font-mono);
+}
+
+.haul-stamp-word {
+  margin-right: -0.18em;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: .18em;
+}
+
+.haul-stamp-date {
+  margin-right: -0.16em;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 13px;
+  letter-spacing: .16em;
+}
+
+.haul-new-haul {
+  margin: 22px 16px 32px;
+  width: calc(100% - 32px);
+  max-width: 358px;
+  height: 56px;
+  border: 0;
+  border-radius: 14px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18);
+}
+
 /* -- Dock, finishing bar, fail bar (step 4) ------------------------------ */
 
 /* The canvas draws these absolutely inside its own 390px phone frame. This
