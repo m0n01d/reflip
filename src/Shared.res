@@ -296,6 +296,10 @@ let decodeHaulStatus = (json: JSON.t): result<Types.haulStatus, string> =>
         gems,
         otherCount,
         failed,
+        // TODO(haul-map step 5): decode the real place from json's "place"
+        // field once Place.res exists. Hardcoded None keeps this compiling
+        // in the meantime (haul-map build, step 1).
+        place: None,
       })
     | (Error(e), _, _) | (_, Error(e), _) | (_, _, Error(e)) => Error(e)
     }

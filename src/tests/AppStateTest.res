@@ -38,6 +38,7 @@ let sampleHaulStatus: Types.haulStatus = {
   gems: [],
   otherCount: 5,
   failed: [],
+  place: None,
 }
 
 // A real Blob (Node's own global, not a cast) so queue items can hold one —

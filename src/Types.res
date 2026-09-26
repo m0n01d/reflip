@@ -31,6 +31,16 @@ type box = {
   y2: int,
 }
 
+type placeSource = Gps | Pin
+
+type place = {
+  lat: float,
+  lon: float,
+  accuracyM: option<float>,
+  source: placeSource,
+  at: string,
+}
+
 type ebayStats = {
   count: int,
   minUsd: float,
@@ -122,6 +132,7 @@ type haulStatus = {
   gems: array<haulGem>,
   otherCount: int,
   failed: array<failedPhoto>,
+  place: option<place>,
 }
 
 type sceneReply = {
@@ -161,6 +172,29 @@ let encodeBox = (b: box): JSON.t =>
     Json.num(Int.toFloat(b.y1)),
     Json.num(Int.toFloat(b.x2)),
     Json.num(Int.toFloat(b.y2)),
+  ])
+
+let encodePlace = (p: place): JSON.t =>
+  Json.obj([
+    ("lat", Json.num(p.lat)),
+    ("lon", Json.num(p.lon)),
+    (
+      "accuracyM",
+      switch p.accuracyM {
+      | Some(a) => Json.num(a)
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "source",
+      Json.str(
+        switch p.source {
+        | Gps => "gps"
+        | Pin => "pin"
+        },
+      ),
+    ),
+    ("at", Json.str(p.at)),
   ])
 
 let encodeReplyItem = (it: replyItem): JSON.t =>
@@ -304,4 +338,11 @@ let encodeHaulStatus = (s: haulStatus): JSON.t =>
     ("gems", Json.arr(Array.map(s.gems, encodeHaulGem))),
     ("otherCount", Json.num(Int.toFloat(s.otherCount))),
     ("failed", Json.arr(Array.map(s.failed, encodeFailedPhoto))),
+    (
+      "place",
+      switch s.place {
+      | Some(p) => encodePlace(p)
+      | None => JSON.Encode.null
+      },
+    ),
   ])
