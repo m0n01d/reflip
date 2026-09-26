@@ -581,7 +581,9 @@ module HaulView = {
 
 @react.component
 let make = () => {
-  let (model, dispatch) = React.useReducer(AppState.update, AppState.initialModel)
+  let rewind = Rewind.use(~name="reflip", ~enabled=DevFlag.viteDev, AppState.update, AppState.initialModel)
+  let model = rewind.model
+  let dispatch = rewind.dispatch
 
   // -- mount: restore a haul in progress from IndexedDB ---------------------
   React.useEffect0(() => {
@@ -591,12 +593,12 @@ let make = () => {
 
   // -- background queue pump: one upload in flight at a time ----------------
   React.useEffect2(() => {
-    switch model.haul {
+    switch rewind.live.haul {
     | Active(status) | Finishing(status) =>
       let sending =
-        Array.find(model.queue, item => item.status == AppState.SendingNow)->Option.isSome
+        Array.find(rewind.live.queue, item => item.status == AppState.SendingNow)->Option.isSome
       if !sending {
-        switch Array.find(model.queue, item => item.status == AppState.QueuedLocal) {
+        switch Array.find(rewind.live.queue, item => item.status == AppState.QueuedLocal) {
         | Some(item) => uploadOne(dispatch, status.haulId, item)->Promise.ignore
         | None => ()
         }
@@ -604,21 +606,21 @@ let make = () => {
     | _ => ()
     }
     None
-  }, (model.queue, model.haul))
+  }, (rewind.live.queue, rewind.live.haul))
 
   // -- Done: once the local queue is drained, tell the brain ----------------
   React.useEffect2(() => {
-    switch model.haul {
-    | Finishing(status) if Array.length(model.queue) == 0 =>
+    switch rewind.live.haul {
+    | Finishing(status) if Array.length(rewind.live.queue) == 0 =>
       finishHaul(dispatch, status.haulId)->Promise.ignore
     | _ => ()
     }
     None
-  }, (model.queue, model.haul))
+  }, (rewind.live.queue, rewind.live.haul))
 
   // -- poll the brain while the haul is open or not yet emailed -------------
-  let pollHaulId = AppState.haulStatusOf(model.haul)->Option.map(s => s.haulId)->Option.getOr("")
-  let pollActive = switch AppState.haulStatusOf(model.haul) {
+  let pollHaulId = AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
+  let pollActive = switch AppState.haulStatusOf(rewind.live.haul) {
   | Some(status) => status.doneAt == None || status.emailedAt == None
   | None => false
   }
@@ -640,23 +642,27 @@ let make = () => {
 
   // -- Stop: the view only dispatches StopTapped; this is the edge effect
   // that actually asks the brain to stop, once stopRequested flips true.
+  // It reads rewind.live, not model: while rewind is paused, model is a
+  // past state, and a past StopTapped must not stop the live scan.
   React.useEffect1(() => {
-    if model.scan.stopRequested {
+    if rewind.live.scan.stopRequested {
       switch scanHandleRef.current {
       | Some(handle) => handle.stop()->Promise.ignore
       | None => ()
       }
     }
     None
-  }, [model.scan.stopRequested])
+  }, [rewind.live.scan.stopRequested])
 
   // -- New scan: the view only dispatches NewScan, which resets model.scan
   // back to ScanState.initialModel (phase Ready). This is the edge effect
   // that tears down any live connection and revokes the finished photo's
   // object URL once that reset lands (a no-op on first mount — Ready is
   // also the very first phase, before any handle or photo URL exists).
+  // It reads rewind.live too: a jump to a past Ready entry must not abort
+  // the live scan.
   React.useEffect1(() => {
-    if model.scan.phase == ScanState.Ready {
+    if rewind.live.scan.phase == ScanState.Ready {
       switch scanHandleRef.current {
       | Some(handle) =>
         handle.abort()
@@ -671,7 +677,7 @@ let make = () => {
       }
     }
     None
-  }, [model.scan.phase])
+  }, [rewind.live.scan.phase])
 
   // A new photo for the scan flow: revoke the previous scan's object URL
   // and abort any live connection first (same guard runPhotoFlow's onChange

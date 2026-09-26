@@ -25,6 +25,7 @@
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "rescript": "^12.3.0",
+    "rescript-rewind": "github:m0n01d/rewind#953fd177125182049e539f29a22066d0c6a4aab8",
     "vite": "^8.3.0"
   }
 }
