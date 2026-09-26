@@ -40,8 +40,13 @@ Verification command: `npm test`
       `sourceFromString` is needed to go JSON -> Types.placeSource — but it
       stays used elsewhere, by Place.res and Store.res). `npm test`: 965 ok,
       0 not ok (962 baseline + 3 new). Commit: 50dd213
-- [ ] 6. HaulWorker.requestBodyFor pure extraction; runScene uses it, behavior unchanged
-- [ ] 7. GuardTest.res: place stays out of Claude request body and out of the haul digest
+- [x] 6. HaulWorker.requestBodyFor pure extraction; runScene uses it, behavior unchanged.
+      Commit d0d351c. `prepared(t, scene)` gives the model, the photo and the mode to both
+      `requestBodyFor` and `runScene`. `ClaudeClient.send` still builds the body inside, from
+      the same three values, so every store value reaches both through `prepared`.
+- [x] 7. GuardTest.res: place stays out of Claude request body and out of the haul digest.
+      Commit 4765ce7. Also d3d85a4: the place route caps its body at 4096 bytes (413 above).
+      `npm test`: 973 ok, 0 not ok.
 
 ## Design notes for the remaining steps (so a fresh agent can pick this up cold)
 
