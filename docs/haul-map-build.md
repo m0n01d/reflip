@@ -29,13 +29,17 @@ Verification command: `npm test`
       design notes below, no deviations (handleSetPlace's `config` param is
       unused in the body, so it is `_config` to keep the build warning-free).
       `npm test`: 962 ok, 0 not ok (950 baseline + 12 new). Commit: e2f6208
-- [ ] 5. Haul status reply: Shared.decodeHaulStatus real decode (replace the
+- [x] 5. Haul status reply: Shared.decodeHaulStatus real decode (replace the
       `place: None` placeholder added in step 1) using a new `decodePlace`
       helper in Shared.res (reuses `Place.sourceFromString`/`sourceToString`
       from step 2 — no cycle, Place.res only depends on Types.res).
       SharedDecodeTest round trip (with a place, without a place, and with
       the "place" key absent entirely -> None). Types.haulStatus/encodeHaulStatus
-      already done in step 1.
+      already done in step 1. Implemented per the design notes, no deviations
+      (`sourceToString` ended up unused by `decodePlace` itself — only
+      `sourceFromString` is needed to go JSON -> Types.placeSource — but it
+      stays used elsewhere, by Place.res and Store.res). `npm test`: 965 ok,
+      0 not ok (962 baseline + 3 new). Commit: 50dd213
 - [ ] 6. HaulWorker.requestBodyFor pure extraction; runScene uses it, behavior unchanged
 - [ ] 7. GuardTest.res: place stays out of Claude request body and out of the haul digest
 
