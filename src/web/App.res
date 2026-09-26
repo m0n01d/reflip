@@ -744,29 +744,163 @@ module HaulView = {
     ~onToggleGem: string => unit,
   ) => {
     let onPhone = Array.length(model.queue)
-    <div className="haul-view">
-      <h2> {React.string(status.name->Option.getOr("Haul"))} </h2>
-      <div className="counts">
-        <div className="count">
-          {React.string("on phone " ++ Int.toString(onPhone))}
-        </div>
-        <div className="count">
-          {React.string("uploaded " ++ Int.toString(AppState.uploadedShown(model, status.counts)))}
-        </div>
-        <div className="count">
-          {React.string("valued " ++ Int.toString(status.counts.valued))}
-        </div>
-        <div className="count">
-          {React.string("failed " ++ Int.toString(status.counts.failed))}
-        </div>
+    let stopped = status.stopReason->Option.isSome
+    let isWalk = switch phase {
+    | Active(_) => true
+    | _ => false
+    }
+    let tally = HaulLayout.tallyOf(status.counts, onPhone, stopped)
+    let legend = HaulLayout.legendOf(tally)
+    let gemCount = Array.length(status.gems)
+    let (sumLo, sumHi) = status.gems->Array.reduce((0.0, 0.0), ((lo, hi), g) => (
+      lo +. g.estimateLowUsd,
+      hi +. g.estimateHighUsd,
+    ))
+    let totalPhotos =
+      status.counts.queued + status.counts.running + status.counts.valued + status.counts.failed + onPhone
+    let storeName = status.name->Option.getOr("")->String.trim
+    let isOffline = model.queue->Array.some(item => item.status == AppState.WaitingRetry)
+    let gemsTitle = isWalk && !stopped ? "Gems so far" : "Gems"
+    // Tally tiles: build a run of one-tag-per-photo boxes without Belt.Array.make,
+    // matching the recursive style already used by HaulLayout.notchPositions.
+    let repeat = (n: int, tag: string): array<string> => {
+      let rec go = (k, acc) => k <= 0 ? acc : go(k - 1, Array.concat(acc, [tag]))
+      go(n, [])
+    }
+    let tiles =
+      repeat(tally.valued, "valued")
+      ->Array.concat(repeat(tally.failed, "failed"))
+      ->Array.concat(repeat(tally.valuing, "valuing"))
+      ->Array.concat(repeat(tally.notValued, "notvalued"))
+      ->Array.concat(repeat(tally.onPhone, "phone"))
+    <div className="scan-shell">
+      <div className="scan-card-shadow">
+        <section ariaLabel="Haul status" className="scan-card">
+          {switch status.stopReason {
+          | Some(reason) =>
+            <div role="alert" className="haul-stop-banner">
+              <span ariaHidden={true} className="haul-stop-badge"> {React.string("!")} </span>
+              <div>
+                <div className="haul-stop-title"> {React.string("Haul stopped")} </div>
+                <div className="haul-stop-reason"> {React.string(reason)} </div>
+                <div className="haul-stop-note">
+                  {React.string("Photos you add now are kept, but not valued.")}
+                </div>
+              </div>
+            </div>
+          | None => React.null
+          }}
+          <div className="scan-card-top-row">
+            <span className="haul-store-name">
+              {React.string(storeName == "" ? "Haul" : storeName)}
+            </span>
+            <HaulClock startedAt={status.startedAt} />
+          </div>
+          <h1 className="scan-headline">
+            {React.string(
+              gemCount > 0
+                ? Int.toString(gemCount) ++
+                  (gemCount == 1 ? " gem" : " gems") ++
+                  (stopped ? "" : " so far")
+                : "No gems yet",
+            )}
+          </h1>
+          <p className="scan-sub">
+            {React.string(
+              gemCount > 0
+                ? ScanState.plural(totalPhotos, "photo", "photos") ++
+                  " · gems worth " ++
+                  ScanState.moneyRange(sumLo, sumHi)
+                : "Gems show up here as each photo is valued.",
+            )}
+          </p>
+          <div className="haul-tally">
+            <div role="img" ariaLabel={legend} className="haul-tiles">
+              {tiles
+              ->Array.mapWithIndex((state, i) =>
+                <span key={Int.toString(i)} className={"haul-tile haul-tile-" ++ state}>
+                  {state == "failed"
+                    ? <svg
+                        width="8"
+                        height="8"
+                        viewBox="0 0 8 8"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        ariaHidden={true}
+                        className="haul-tile-cross">
+                        <path d="M2 2l4 4M6 2L2 6" />
+                      </svg>
+                    : React.null}
+                </span>
+              )
+              ->React.array}
+            </div>
+            <div className="haul-legend"> {React.string(legend)} </div>
+            {isOffline
+              ? <div role="status" className="haul-offline">
+                  <span ariaHidden={true} className="haul-offline-badge"> {React.string("!")} </span>
+                  <span className="haul-offline-text">
+                    {React.string(HaulLayout.offlineText(onPhone))}
+                  </span>
+                </div>
+              : React.null}
+            <div className="haul-budget-row">
+              <div className="haul-budget-top">
+                <span> {React.string("budget")} </span>
+                <span className="haul-budget-value">
+                  {React.string(fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd))}
+                </span>
+              </div>
+              <div
+                role="img"
+                ariaLabel={"Claude cost " ++
+                fmtUsd(status.costUsd) ++
+                " of the " ++
+                fmtUsd(status.maxUsd) ++
+                " budget"}
+                className="haul-budget-track">
+                <div
+                  className="haul-budget-fill"
+                  style={{
+                    JsxDOMStyle.width: fmtPct(HaulLayout.budgetFillPct(status.costUsd, status.maxUsd)),
+                  }}
+                />
+                {HaulLayout.notchPositions(
+                  ~costUsd=status.costUsd,
+                  ~maxUsd=status.maxUsd,
+                  ~valued=tally.valued,
+                )
+                ->Array.mapWithIndex((p, i) =>
+                  <span
+                    key={Int.toString(i)}
+                    className="haul-budget-notch"
+                    style={{JsxDOMStyle.left: fmtPct(p)}}
+                  />
+                )
+                ->React.array}
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-      <div className="cost-line">
-        {React.string(fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd) ++ " budget")}
-      </div>
-      {switch status.stopReason {
-      | Some(reason) => <div className="stop-reason"> {React.string(reason)} </div>
-      | None => React.null
-      }}
+      {isWalk
+        ? <div className="haul-tip">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              ariaHidden={true}>
+              <circle cx="12" cy="12" r="8.5" />
+              <circle cx="12" cy="12" r="5" />
+            </svg>
+            <span> {React.string("Put a quarter next to small items to show their size.")} </span>
+          </div>
+        : React.null}
       {switch model.haulError {
       | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
       | None => React.null
@@ -812,42 +946,74 @@ module HaulView = {
           </button>
         </div>
       }}
-      {switch phase {
-      | Finished(_) | Finishing(_) => React.null
-      | _ =>
-        <div className="hint">
-          {React.string("Put a quarter next to small items to show their size.")}
-        </div>
-      }}
-      {Array.length(status.gems) > 0
-        ? <ul className="items">
-            {status.gems
-            ->Array.mapWithIndex((gem, i) =>
-              <GemCard
-                key={gem.findId}
-                gem
-                rank={i + 1}
-                allGems=status.gems
-                isOpen={model.openGem == Some(gem.findId)}
-                onToggle=onToggleGem
-              />
-            )
+      {isWalk && Array.length(status.failed) > 0
+        ? <section ariaLabel="Failed photos" className="haul-failed">
+            <div className="haul-failed-head">
+              <span ariaHidden={true} className="haul-failed-icon">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 8 8"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  ariaHidden={true}>
+                  <path d="M2 2l4 4M6 2L2 6" />
+                </svg>
+              </span>
+              <h2 className="haul-failed-title">
+                {React.string(
+                  ScanState.plural(Array.length(status.failed), "photo", "photos") ++ " failed",
+                )}
+              </h2>
+            </div>
+            {status.failed
+            ->Array.map(f => <div key={f.sceneId} className="haul-failed-row"> {React.string(f.error)} </div>)
             ->React.array}
-          </ul>
+          </section>
         : React.null}
-      {status.otherCount > 0
-        ? <div className="status">
-            {React.string(Int.toString(status.otherCount) ++ " other items seen, not gems")}
+      {isWalk && gemCount == 0
+        ? <div className="scan-empty">
+            <div className="scan-empty-title"> {React.string("Gems land here")} </div>
+            <div className="scan-empty-sub">
+              {React.string("Anything with a high estimate of $20 or more.")}
+            </div>
           </div>
         : React.null}
-      {Array.length(status.failed) > 0
-        ? <ul className="items">
-            {status.failed
-            ->Array.map(f =>
-              <li className="item" key={f.sceneId}> {React.string(f.error)} </li>
-            )
-            ->React.array}
-          </ul>
+      {gemCount > 0
+        ? <section ariaLabel={gemsTitle} className="scan-gems">
+            <div className="scan-section-head">
+              <h2 className="scan-section-title"> {React.string(gemsTitle)} </h2>
+              <span className="scan-section-count">
+                {React.string(Int.toString(gemCount) ++ " · " ++ ScanState.moneyRange(sumLo, sumHi))}
+              </span>
+            </div>
+            <div className="scan-section-sub"> {React.string("high estimate $20 or more")} </div>
+            <div className="scan-rows-card">
+              {status.gems
+              ->Array.mapWithIndex((gem, i) =>
+                <GemCard
+                  key={gem.findId}
+                  gem
+                  rank={i + 1}
+                  allGems=status.gems
+                  isOpen={model.openGem == Some(gem.findId)}
+                  onToggle=onToggleGem
+                />
+              )
+              ->React.array}
+            </div>
+          </section>
+        : React.null}
+      {status.otherCount > 0
+        ? <div className="haul-others">
+            {React.string(
+              status.otherCount == 1
+                ? "1 other thing seen, not a gem"
+                : Int.toString(status.otherCount) ++ " other things seen, not gems",
+            )}
+          </div>
         : React.null}
     </div>
   }
