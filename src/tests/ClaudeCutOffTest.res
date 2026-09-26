@@ -129,4 +129,105 @@ let run = async () => {
     "the scene prompt caps the list at 30 items",
     String.includes(Json.stringField(body, "system")->Option.getOr(""), "List at most 30 items."),
   )
+
+  // R3 (haul map/place review): the worker now hands ClaudeClient a body it
+  // built itself (HaulWorker.requestFor / requestBodyFor), instead of
+  // (model, imageBase64, mode). withoutOutputConfig -- the piece that
+  // strips the retry key from that given body -- must remove exactly
+  // "output_config" and nothing else: the result stringifies the same as
+  // building the same request with structuredOutput=false from scratch.
+  let bodyWithStructuredOutput = ClaudeClient.buildRequestBody(
+    ~model=Shared.modelId(Shared.defaultModel),
+    ~imageBase64="img",
+    ~structuredOutput=true,
+    ~mode=ClaudeClient.Scene({width: 800, height: 600}),
+  )
+  let bodyWithoutStructuredOutput = ClaudeClient.buildRequestBody(
+    ~model=Shared.modelId(Shared.defaultModel),
+    ~imageBase64="img",
+    ~structuredOutput=false,
+    ~mode=ClaudeClient.Scene({width: 800, height: 600}),
+  )
+  TestKit.check(
+    "withoutOutputConfig strips exactly output_config",
+    JSON.stringify(ClaudeClient.withoutOutputConfig(bodyWithStructuredOutput)) ==
+      JSON.stringify(bodyWithoutStructuredOutput),
+  )
+
+  // R3: callBody (which HaulWorker.runScene now calls with a pre-built
+  // body) must still run the 400/output_config retry on that given body,
+  // the same as send/call does on the body it builds internally. A fresh
+  // stub, separate from the one above, counts requests: the first answers
+  // 400 naming output_config, the second (the retry) answers 200.
+  {
+    let requestCount = ref(0)
+    let retryStub = Node.HttpServer.createServer((_req, res) => {
+      requestCount := requestCount.contents + 1
+      if requestCount.contents == 1 {
+        Node.HttpServer.writeHead(res, 400, Dict.fromArray([("Content-Type", "text/plain")]))
+        Node.HttpServer.endWithBody(
+          res,
+          "invalid_request_error: output_config is not supported with server tools",
+        )
+      } else {
+        Node.HttpServer.writeHead(res, 200, Dict.fromArray([("Content-Type", "application/json")]))
+        Node.HttpServer.endWithBody(
+          res,
+          JSON.stringify(
+            Json.obj([
+              (
+                "content",
+                Json.arr([
+                  Json.obj([("type", Json.str("text")), ("text", Json.str("{\"items\": []}"))]),
+                ]),
+              ),
+              (
+                "usage",
+                Json.obj([
+                  ("input_tokens", Json.num(1.0)),
+                  ("output_tokens", Json.num(1.0)),
+                ]),
+              ),
+            ]),
+          ),
+        )
+      }
+    })
+    let retryStubPort = await Promise.make((resolve, _reject) =>
+      Node.HttpServer.listen(retryStub, 0, "127.0.0.1", () =>
+        resolve(Node.HttpServer.address(retryStub).port)
+      )
+    )
+    let retryConfig: Config.t = {
+      Config.port: 0,
+      fixtures: false,
+      dataDir: Node.Path.join([Node.Os.tmpdir(), "reflip-test-" ++ Node.Crypto.randomUUID()]),
+      fixturesDir: Node.Path.join([cwd, "tests/fixtures"]),
+      anthropicApiKey: Some("test-key-not-real"),
+      ebayClientId: None,
+      ebayClientSecret: None,
+      structuredOutput: true,
+      distIndexPath: Node.Path.join([cwd, "dist/index.html"]),
+      distDir: Node.Path.join([cwd, "dist"]),
+      haulConcurrency: 4,
+      haulMaxUsd: 10.0,
+      haulGemMinUsd: 20.0,
+      claudeUrl: "http://127.0.0.1:" ++ Int.toString(retryStubPort) ++ "/v1/messages",
+      claudeTimeoutMs: 5_000,
+    }
+    switch await ClaudeClient.callBody(
+      ~config=retryConfig,
+      ~mode=ClaudeClient.Scene({width: 800, height: 600}),
+      ~body=bodyWithStructuredOutput,
+    ) {
+    | Ok(decoded) =>
+      TestKit.check("callBody succeeds after the 400 retry", Array.length(decoded.items) == 0)
+    | Error(_) => TestKit.check("callBody should succeed after the 400 retry", false)
+    }
+    TestKit.check(
+      "the stub saw exactly 2 requests (original, then the retry)",
+      requestCount.contents == 2,
+    )
+    Node.HttpServer.close(retryStub, () => ())
+  }
 }
