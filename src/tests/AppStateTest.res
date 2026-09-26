@@ -211,6 +211,122 @@ let runHaul = () => {
   TestKit.check("ToggleGem on the open card's own id closes it", g3.openGem == None)
 }
 
+let runPlace = () => {
+  TestKit.section("AppState.update — place")
+
+  // -- the IndexedDB key layout --------------------------------------------
+  TestKit.check("placeKey builds place|<haulId>", AppState.placeKey("haul-1") == "place|haul-1")
+  TestKit.check(
+    "parsePlaceKey is placeKey's inverse",
+    AppState.parsePlaceKey("place|haul-1") == Some("haul-1"),
+  )
+  TestKit.check("parsePlaceKey rejects a queue key", AppState.parsePlaceKey("q|haul-1|client-a") == None)
+  TestKit.check("parseQueueKey rejects a place key", AppState.parseQueueKey("place|haul-1") == None)
+
+  // -- the outbox body: encode then decode round-trips (tookMs dropped) ---
+  let fix: AppState.placeFix = {lat: 47.6180431, lon: -122.3514229, accuracyM: 13.37, tookMs: Some(456.0)}
+  let body = AppState.encodePlaceBody(fix)
+  TestKit.check("encodePlaceBody sends source gps", body->String.includes("\"gps\""))
+  TestKit.check(
+    "decodePlaceBody round-trips lat/lon/accuracyM, with tookMs None",
+    AppState.decodePlaceBody(body) == Some({...fix, tookMs: None}),
+  )
+  TestKit.check("decodePlaceBody rejects bad JSON", AppState.decodePlaceBody("not json") == None)
+  TestKit.check(
+    "decodePlaceBody rejects a body missing accuracyM",
+    AppState.decodePlaceBody("{\"lat\":1.0,\"lon\":2.0}") == None,
+  )
+
+  // -- StartHaul / NewHaul reset the place state ---------------------------
+  let p0 = AppState.initialModel
+  TestKit.check("a fresh model has not asked for a place", p0.place == AppState.PlaceNotAsked)
+  let p1 = AppState.update(p0, AppState.StartHaul)
+  TestKit.check("StartHaul sets asking", p1.place == AppState.PlaceAsking)
+  let p1b = {...p1, place: AppState.PlaceSaved(Some(fix))}
+  let p1c = AppState.update(p1b, AppState.NewHaul)
+  TestKit.check("NewHaul resets the place back to not asked", p1c.place == AppState.PlaceNotAsked)
+
+  // -- the msg transitions --------------------------------------------------
+  let p2 = AppState.update(p1, AppState.PlaceFixed(fix))
+  TestKit.check("PlaceFixed moves asking to sending, with the fix", p2.place == AppState.PlaceSending(fix))
+  let p3 = AppState.update(p2, AppState.PlaceSent({
+    Types.lat: fix.lat,
+    lon: fix.lon,
+    accuracyM: Some(fix.accuracyM),
+    source: Gps,
+    at: "2026-09-26T00:00:00.000Z",
+  }))
+  TestKit.check(
+    "PlaceSent moves sending to saved, keeping the fix that was in flight",
+    p3.place == AppState.PlaceSaved(Some(fix)),
+  )
+  let p4 = AppState.update(p2, AppState.PlaceSendFailed)
+  TestKit.check("PlaceSendFailed moves sending to not sent, keeping the fix", p4.place == AppState.PlaceNotSent(fix))
+  let p5 = AppState.update(p2, AppState.PlaceRejected)
+  TestKit.check("PlaceRejected moves to failed (a resend cannot succeed)", p5.place == AppState.PlaceFailed)
+  let p6 = AppState.update(p1, AppState.PlaceGeoDenied)
+  TestKit.check("PlaceGeoDenied moves asking to denied", p6.place == AppState.PlaceDenied)
+  let p7 = AppState.update(p1, AppState.PlaceUnavailable)
+  TestKit.check("PlaceUnavailable moves asking to failed", p7.place == AppState.PlaceFailed)
+  let p8 = AppState.update(p1, AppState.PlaceAskAgain)
+  TestKit.check("PlaceAskAgain (Try again) moves back to asking", p8.place == AppState.PlaceAsking)
+
+  // -- placeLine: first match wins -----------------------------------------
+  let gpsBrain: Types.place = {
+    lat: fix.lat,
+    lon: fix.lon,
+    accuracyM: Some(13.0),
+    source: Gps,
+    at: "2026-09-26T00:00:00.000Z",
+  }
+  TestKit.check(
+    "brain has a gps place: saved text with rounded accuracy, no Try again",
+    AppState.placeLine(AppState.PlaceNotAsked, Some(gpsBrain)) ==
+      Some({AppState.text: "Place saved · ±13 m", tryAgain: false}),
+  )
+  TestKit.check(
+    "brain has a gps place and this page just saved it: the T s suffix shows",
+    AppState.placeLine(AppState.PlaceSaved(Some(fix)), Some(gpsBrain)) ==
+      Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
+  )
+  TestKit.check(
+    "brain has a pin place: set by hand, regardless of local state",
+    AppState.placeLine(AppState.PlaceAsking, Some({...gpsBrain, source: Pin})) ==
+      Some({AppState.text: "Place set by hand", tryAgain: false}),
+  )
+  TestKit.check(
+    "no brain place yet, saved locally: the same saved text",
+    AppState.placeLine(AppState.PlaceSaved(Some(fix)), None) ==
+      Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
+  )
+  TestKit.check(
+    "asking: Finding place",
+    AppState.placeLine(AppState.PlaceAsking, None) == Some({AppState.text: "Finding place…", tryAgain: false}),
+  )
+  TestKit.check(
+    "sending: Saving place",
+    AppState.placeLine(AppState.PlaceSending(fix), None) ==
+      Some({AppState.text: "Saving place…", tryAgain: false}),
+  )
+  TestKit.check(
+    "not sent: Try again shown",
+    AppState.placeLine(AppState.PlaceNotSent(fix), None) ==
+      Some({AppState.text: "Place not sent yet", tryAgain: true}),
+  )
+  TestKit.check(
+    "denied: No place, no Try again",
+    AppState.placeLine(AppState.PlaceDenied, None) == Some({AppState.text: "No place", tryAgain: false}),
+  )
+  TestKit.check(
+    "failed: No place yet, Try again shown",
+    AppState.placeLine(AppState.PlaceFailed, None) == Some({AppState.text: "No place yet", tryAgain: true}),
+  )
+  TestKit.check(
+    "not asked: same as failed",
+    AppState.placeLine(AppState.PlaceNotAsked, None) == Some({AppState.text: "No place yet", tryAgain: true}),
+  )
+}
+
 let run = () => {
   TestKit.section("AppState.update")
 
@@ -278,4 +394,5 @@ let run = () => {
   )
 
   runHaul()
+  runPlace()
 }
