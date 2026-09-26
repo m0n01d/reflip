@@ -749,6 +749,11 @@ module HaulView = {
     | Active(_) => true
     | _ => false
     }
+    let receiptShown = switch phase {
+    | Finished(_) => status.emailedAt->Option.isSome
+    | _ => false
+    }
+    let walkingOrFinishing = !receiptShown
     let tally = HaulLayout.tallyOf(status.counts, onPhone, stopped)
     let legend = HaulLayout.legendOf(tally)
     let gemCount = Array.length(status.gems)
@@ -794,7 +799,7 @@ module HaulView = {
       storeRow
       ->Array.concat([("Started", HaulLayout.timeOf(status.startedAt))])
       ->Array.concat(finishedRow)
-      ->Array.concat([("Photos", Int.toString(status.counts.valued + status.counts.failed))])
+      ->Array.concat([("Photos", Int.toString(status.counts.queued + status.counts.running + status.counts.valued + status.counts.failed))])
       ->Array.concat(failedRow)
       ->Array.concat([("Gems", Int.toString(gemCount))])
       ->Array.concat([("Gems worth", gemCount > 0 ? ScanState.moneyRange(sumLo, sumHi) : "none")])
@@ -802,7 +807,9 @@ module HaulView = {
       ->Array.concat(stoppedRow)
       ->Array.concat(digestRow)
     <div className="scan-shell">
-      <div className="scan-card-shadow">
+      {receiptShown
+        ? React.null
+        : <div className="scan-card-shadow">
         <section ariaLabel="Haul status" className="scan-card">
           {switch status.stopReason {
           | Some(reason) =>
@@ -912,7 +919,7 @@ module HaulView = {
             </div>
           </div>
         </section>
-      </div>
+      </div>}
       {isWalk
         ? <div className="haul-tip">
             <svg
@@ -969,10 +976,7 @@ module HaulView = {
               </div>
             </div>
           </section>
-        | None =>
-          <div className="status">
-            {React.string(status.emailNote->Option.getOr("done — waiting for the digest"))}
-          </div>
+        | None => React.null
         }
       | Finishing(_) => React.null
       | _ =>
@@ -981,7 +985,7 @@ module HaulView = {
         | None => React.null
         }
       }}
-      {isWalk && Array.length(status.failed) > 0
+      {walkingOrFinishing && Array.length(status.failed) > 0
         ? <section ariaLabel="Failed photos" className="haul-failed">
             <div className="haul-failed-head">
               <span ariaHidden={true} className="haul-failed-icon">
@@ -1008,7 +1012,7 @@ module HaulView = {
             ->React.array}
           </section>
         : React.null}
-      {isWalk && gemCount == 0
+      {walkingOrFinishing && gemCount == 0
         ? <div className="scan-empty">
             <div className="scan-empty-title"> {React.string("Gems land here")} </div>
             <div className="scan-empty-sub">
@@ -1070,10 +1074,10 @@ module HaulView = {
         </button>
       | _ => React.null
       }}
-      {isWalk ? <div ariaHidden={true} className="haul-walk-spacer" /> : React.null}
+      {walkingOrFinishing ? <div ariaHidden={true} className="haul-walk-spacer" /> : React.null}
       {switch phase {
-      | Finished(_) => React.null
-      | Finishing(_) =>
+      | Finished(_) if status.emailedAt->Option.isSome => React.null
+      | Finishing(_) | Finished(_) =>
         <div role="status" className={"haul-bar" ++ (model.doneAttempts > 0 ? " haul-bar-fail" : "")}>
           <span ariaHidden={true} className="haul-bar-badge">
             <span ariaHidden={true} className="haul-bar-ring" />
@@ -1184,25 +1188,27 @@ let make = () => {
   }, (rewind.live.queue, rewind.live.haul))
 
   // -- Done: once the local queue is drained, tell the brain ----------------
-  React.useEffect2(() => {
-    switch rewind.live.haul {
-    | Finishing(status) if Array.length(rewind.live.queue) == 0 =>
-      finishHaul(dispatch, status.haulId)->Promise.ignore
-    | _ => ()
-    }
-    None
-  }, (rewind.live.queue, rewind.live.haul))
-
-  // -- Done retry (decision 10): a failed Done while Finishing tries again,
-  // backing off per retryDelayMs. Derived booleans (isFinishing/haulId), so
-  // this does not restart the countdown on every unrelated status poll.
-  // Reads rewind.live, never rewind.model.
+  // Depends only on (readyToFinish, finishingHaulId), not on every queue/haul
+  // change, so a status poll during Finishing does not re-fire this and send
+  // POST done again. Reads rewind.live, never rewind.model.
   let isFinishing = switch rewind.live.haul {
   | Finishing(_) => true
   | _ => false
   }
   let finishingHaulId =
     AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
+  let readyToFinish = isFinishing && Array.length(rewind.live.queue) == 0
+  React.useEffect2(() => {
+    if readyToFinish {
+      finishHaul(dispatch, finishingHaulId)->Promise.ignore
+    }
+    None
+  }, (readyToFinish, finishingHaulId))
+
+  // -- Done retry (decision 10): a failed Done while Finishing tries again,
+  // backing off per retryDelayMs. Derived booleans (isFinishing/haulId), so
+  // this does not restart the countdown on every unrelated status poll.
+  // Reads rewind.live, never rewind.model.
   React.useEffect3(() => {
     if isFinishing && rewind.live.doneAttempts > 0 && finishingHaulId != "" {
       let delay = AppState.retryDelayMs(rewind.live.doneAttempts)
