@@ -18,8 +18,9 @@ Verification command: `npm test`
       Place.res exists; HaulStatus.res -> step 3 once Store.haul carries
       place). `npm test`: 929 ok, 0 not ok (unchanged from baseline).
       Commit: edd3e07
-- [ ] 2. src/Place.res: decodeInput, choose; src/tests/PlaceTest.res in AllTests.
-      Design decided (see below) — NOT YET IMPLEMENTED.
+- [x] 2. src/Place.res: decodeInput, choose; src/tests/PlaceTest.res in AllTests.
+      Implemented per the design notes below, no deviations. `npm test`: 942
+      ok, 0 not ok (929 baseline + 13 new). Commit: fdfb73e
 - [ ] 3. Store.res: hauls table place columns, migration, Store.haul.place, setPlace; StoreTest.
       Must also replace HaulStatus.res's `place: None` placeholder with the
       real `haul.place`.
