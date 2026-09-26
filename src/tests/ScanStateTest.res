@@ -586,4 +586,80 @@ let run = () => {
     }
   }
   runF2()
+
+  // -- ebayState: the item sheet's eBay panel state, decided once in
+  // ScanState instead of by ScanView's own two parallel switches over the
+  // same three inputs (see ScanState.res). Nested for the same reason as
+  // runCopyGaps/runF2 above.
+  let runEbayState = () => {
+    TestKit.section("ScanState.ebayState: item sheet eBay panel state")
+
+    let stats: Types.ebayStats = {
+      count: 3,
+      minUsd: 10.0,
+      p25Usd: 12.0,
+      medianUsd: 15.0,
+      p75Usd: 18.0,
+      maxUsd: 20.0,
+    }
+
+    let replyWithNote: Types.sceneReply = {
+      Types.sceneId: "ebay-state-scene",
+      model: "claude-sonnet-5",
+      fixture: true,
+      outputPath: "/tmp/reflip-test/ebay-state.json",
+      items: [testItem()],
+      imageWidth: 800,
+      imageHeight: 600,
+      timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
+      cost: {
+        Types.usd: 0.01,
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 0,
+      },
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+      quarterSeen: false,
+    }
+    let replyNoNote = {...replyWithNote, ebayNote: None}
+
+    TestKit.check(
+      "stats present -> Stats, regardless of sceneReply or ended",
+      ScanState.ebayState(~ebay=Some(stats), ~sceneReply=None, ~ended=false) ==
+        ScanState.Stats(stats) &&
+      ScanState.ebayState(~ebay=Some(stats), ~sceneReply=Some(replyWithNote), ~ended=true) ==
+        ScanState.Stats(stats),
+    )
+
+    TestKit.check(
+      "no stats, no scene reply, not ended -> Checking",
+      ScanState.ebayState(~ebay=None, ~sceneReply=None, ~ended=false) == ScanState.Checking,
+    )
+
+    TestKit.check(
+      "no stats, no scene reply, ended -> ScanEndedNoReply",
+      ScanState.ebayState(~ebay=None, ~sceneReply=None, ~ended=true) == ScanState.ScanEndedNoReply,
+    )
+
+    TestKit.check(
+      "no stats, scene reply with a note, not ended -> NoStats(that note)",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyWithNote), ~ended=false) ==
+        ScanState.NoStats(replyWithNote.ebayNote),
+    )
+
+    TestKit.check(
+      "no stats, scene reply with a note, ended -> NoStats(that note) still (a reply already arrived, so \"ended\" no longer matters)",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyWithNote), ~ended=true) ==
+        ScanState.NoStats(replyWithNote.ebayNote),
+    )
+
+    TestKit.check(
+      "no stats, scene reply with no note -> NoStats(None), no flag",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyNoNote), ~ended=false) ==
+        ScanState.NoStats(None),
+    )
+  }
+  runEbayState()
 }

@@ -638,6 +638,30 @@ let hasNoEbayData = (m: model): bool =>
   | Some(r) => Array.length(r.items) > 0 && Array.every(r.items, it => it.ebay->Option.isNone)
   }
 
+// One item's eBay panel state in the item sheet (Item and EbayBlock boards,
+// docs/design/scan-ui/Main.dc.html). Decided once, here, from the item's
+// own `ebay` field, `sceneReply` and whether the scan has ended — instead
+// of ScanView deciding the header flag and the body with two separate
+// switches over the same three inputs, which could each read them a
+// little differently with nothing to catch the drift. See
+// src/tests/ScanStateTest.res for every case.
+type ebayState =
+  | Stats(Types.ebayStats)
+  | Checking
+  | NoStats(option<string>) // a scene reply arrived; this is its ebayNote
+  | ScanEndedNoReply // the scan ended before any scene reply arrived
+
+let ebayState = (
+  ~ebay: option<Types.ebayStats>,
+  ~sceneReply: option<Types.sceneReply>,
+  ~ended: bool,
+): ebayState =>
+  switch (ebay, sceneReply) {
+  | (Some(stats), _) => Stats(stats)
+  | (None, None) => ended ? ScanEndedNoReply : Checking
+  | (None, Some(r)) => NoStats(r.ebayNote)
+  }
+
 // -- Run receipt ------------------------------------------------------------
 // resizeMs/rttMs (F2) are client-clock timings read straight from
 // ScanState.model, not from the wire contract -- docs/scan-ui.md's event

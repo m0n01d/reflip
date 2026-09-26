@@ -548,6 +548,11 @@ let make = (
               {switch sticker.item {
               | Some(item) =>
                 let filled = Float.toInt(Math.round(item.confidence *. 5.0))
+                let state = ScanState.ebayState(
+                  ~ebay=item.ebay,
+                  ~sceneReply=model.sceneReply,
+                  ~ended=ScanState.isEnded(model),
+                )
                 <>
                   <div className="scan-sheet-price-row">
                     <span className="scan-sheet-price">
@@ -578,21 +583,17 @@ let make = (
                     <div className="scan-ebay-top">
                       <span className="scan-ebay-label"> {React.string("eBay")} </span>
                       <span className="scan-ebay-flag">
-                        {switch (item.ebay, model.sceneReply) {
-                        | (Some(stats), _) =>
+                        {switch state {
+                        | ScanState.Stats(stats) =>
                           React.string(ScanState.plural(stats.count, "listing", "listings"))
-                        | (None, None) =>
-                          ScanState.isEnded(model) ? React.null : React.string("after Claude")
-                        | (None, Some(r)) =>
-                          switch r.ebayNote {
-                          | Some(_) => React.string("stats off")
-                          | None => React.null
-                          }
+                        | ScanState.Checking => React.string("after Claude")
+                        | ScanState.NoStats(Some(_)) => React.string("stats off")
+                        | ScanState.NoStats(None) | ScanState.ScanEndedNoReply => React.null
                         }}
                       </span>
                     </div>
-                    {switch item.ebay {
-                    | Some(stats) =>
+                    {switch state {
+                    | ScanState.Stats(stats) =>
                       <>
                         <div className="scan-ebay-sub"> {React.string("active asking prices, not sold")} </div>
                         <div className="scan-ebay-stats">
@@ -611,28 +612,28 @@ let make = (
                           </span>
                         </div>
                       </>
-                    | None =>
-                      switch (model.sceneReply, ScanState.isEnded(model)) {
-                      | (None, false) =>
-                        <>
-                          <div className="scan-ebay-title"> {React.string("Checking active listings")} </div>
-                          <div className="scan-ebay-hint">
-                            {React.string("Claude’s estimate shows first. eBay numbers are added after it.")}
-                          </div>
-                        </>
-                      | (reply, _) =>
-                        let note = switch reply {
-                        | Some(r) => r.ebayNote
-                        | None => Some("The scan ended before eBay stats arrived.")
-                        }
-                        <>
-                          <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
-                          {switch note {
-                          | Some(text) => <div className="scan-ebay-note"> {React.string(text)} </div>
-                          | None => React.null
-                          }}
-                        </>
-                      }
+                    | ScanState.Checking =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("Checking active listings")} </div>
+                        <div className="scan-ebay-hint">
+                          {React.string("Claude’s estimate shows first. eBay numbers are added after it.")}
+                        </div>
+                      </>
+                    | ScanState.NoStats(note) =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                        {switch note {
+                        | Some(text) => <div className="scan-ebay-note"> {React.string(text)} </div>
+                        | None => React.null
+                        }}
+                      </>
+                    | ScanState.ScanEndedNoReply =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                        <div className="scan-ebay-note">
+                          {React.string("The scan ended before eBay stats arrived.")}
+                        </div>
+                      </>
                     }}
                     <div className="scan-ebay-searched-row">
                       <span className="scan-ebay-searched-label"> {React.string("searched")} </span>
