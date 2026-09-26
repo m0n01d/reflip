@@ -1,10 +1,10 @@
 # reflip: profit estimate and profit readout
 
-Status: lite spec, written 2026-09-26. It builds on M1 lite (`docs/spec-lite-m1.md`, [PR #2](https://github.com/m0n01d/reflip/pull/2)) and the budget spec (`docs/spec-budget.md`, [PR #18](https://github.com/m0n01d/reflip/pull/18)). Neither is merged yet. A separate session owns the redesign of the haul view. That session sets the layout, and this spec gives it the numbers.
+Status: lite spec, written 2026-09-26. Dwight answered its open questions on the same day (see Decisions). It builds on M1 lite (`docs/spec-lite-m1.md`, [PR #2](https://github.com/m0n01d/reflip/pull/2)) and the budget spec (`docs/spec-budget.md`, [PR #18](https://github.com/m0n01d/reflip/pull/18)). Neither is merged yet. A separate session owns the redesign of the haul view. That session sets the layout, and this spec gives it the numbers.
 
 ## Problem
 
-reflip shows a resale range for each find. It does not show what Dwight keeps after the eBay fee and the postage. On a $25 item in a 3 lb box, he keeps about $9, before the price that he paid. If an item in the smallest shipping class cost nothing, it still must sell for about $9.50 to break even.
+reflip shows a resale range for each find. It does not show what Dwight keeps after the eBay fee and the postage. On a $25 item in a 3 lb box, Dwight keeps about $9, before the purchase price. If an item in the smallest shipping class cost nothing, it still must sell for about $9.50 to break even.
 
 When a find sells, nothing compares the result with the estimate. M1 lite compares the sold price with Claude's range. Nothing compares the profit, so an error in the postage or the fee stays hidden.
 
@@ -21,14 +21,14 @@ When a find sells, nothing compares the result with the estimate. M1 lite compar
 1. Scan. Claude gives each item a shipping class, next to its range. Code computes the net at the low end, the midpoint and the high end.
 2. Look. The item sheet and the gem card show "Net $5 to $14". After Dwight types a paid price, they also show the profit.
 3. Keep. The ledger row of each find stores the fee and the postage that code estimated at scan time. A later rate change does not change an old estimate.
-4. Sell. Dwight records the sale in the Sold sheet of the budget spec: the sold price, the buyer shipping, the fees and the postage.
+4. Sell. Dwight records the sale in the Sold sheet of the budget spec: the sold price, the buyer shipping, and one Fees value for the eBay fee plus the postage.
 5. Learn. The profit readout compares each eBay sale with its estimate. It shows how far off the estimates are, and whether the price or the costs caused the miss.
 
 All the math runs in code. Nothing new goes into a Claude request, except the `shipClass` field in the output schema.
 
 ## The math
 
-Code assumes free shipping. The buyer pays the price plus sales tax, and Dwight pays for the label. Code assumes a sales tax of 7.5% on each order.
+Dwight offers free shipping. The buyer pays the price plus sales tax. Dwight pays the eBay fee and the label. Code assumes a sales tax of 7.5% on each order.
 
 For a price `p` in Claude's range:
 
@@ -65,11 +65,11 @@ Claude picks one class for each item. It judges from the item and the box that t
 | `large` | 5 to 20 lb, or a box larger than a 12-inch cube | $16.76 | 10 lb | $20.10 |
 | `pickup` | Over 20 lb, or too big or fragile to ship | $0 | Local sale | $0.35 |
 
-The postage is the USPS Ground Advantage commercial price at zone 5, from Notice 123 of 2026-07-12. Zone 5 is a middle distance. Each postage is the price of a typical weight in its class, not the top weight. The break-even price is the lowest sale price that gives a net of $0.
+The postage is the USPS Ground Advantage commercial price at zone 5, from Notice 123 of 2026-07-12. Dwight ships from ZIP prefix 320, in north Florida. From there, zone 5 holds New York, Philadelphia, Washington, Chicago, Detroit, Dallas and Houston. Each postage is the price of a typical weight in its class, not the top weight. The break-even price is the lowest sale price that gives a net of $0.
 
 The 12-inch cube is one cubic foot. Above that size, USPS charges a parcel by its size or its weight, whichever is more.
 
-Distance changes the postage a lot. At zone 8, the first three classes cost $8.40, $15.75 and $25.34. At zone 1, they cost $6.93, $8.64 and $11.91.
+Distance changes the postage a lot. From prefix 320, Atlanta is zone 3, Boston is zone 6, Denver is zone 7, and the West Coast is zone 8. At zone 8, the first three classes cost $8.40, $15.75 and $25.34. At zone 1, they cost $6.93, $8.64 and $11.91.
 
 A `pickup` find has no postage. Code still subtracts the eBay fee, because the estimate assumes an eBay sale.
 
@@ -98,13 +98,14 @@ For each sale, code computes the values below. A positive miss means that Dwight
 
 ```
 estimated = midpoint − feeEst − postageEst − paid
-real      = sold + buyerShipping − fees − postage − paid
+real      = sold + buyerShipping − fees − paid
 miss      = real − estimated
 priceMiss = sold − midpoint
-costMiss  = (feeEst + postageEst) − (fees + postage − buyerShipping)
+costMiss  = (feeEst + postageEst) − (fees − buyerShipping)
+postage   = fees − Profit.fee(sold + buyerShipping)
 ```
 
-`priceMiss` plus `costMiss` equals `miss`. The readout shows four lines:
+`fees` is the one Fees value of the Sold sheet. `priceMiss` plus `costMiss` equals `miss`. The last line gives the real postage of a sale (see The budget spec stays as it is). The readout shows four lines:
 
 1. The count of sales.
 2. The estimated profit and the real profit, summed over the sales, and the difference. For example: "Estimated $212, made $180, $32 under."
@@ -113,11 +114,13 @@ costMiss  = (feeEst + postageEst) − (fees + postage − buyerShipping)
 
 Dwight uses line 4 to set the postage of each class. If a class has fewer than 5 sales, line 4 shows only its count.
 
-## Changes to the budget spec
+If a sale outside the `pickup` class has a real postage under $1, its Fees value has no label cost in it. Lines 2 to 4 leave that sale out, and line 1 shows its count.
 
-The Sold sheet of the budget spec has one Fees field, for the eBay fee plus the postage. The readout needs the two apart, to tell a postage miss from a fee miss. This spec splits the field into Fees and Postage. The profit of the budget spec stays the same, because it subtracts both.
+## The budget spec stays as it is
 
-The Sold sheet fills in the eBay fee from the sold price and the buyer shipping, with no tax. It uses `Profit.res` for that fee instead, with the 7.5% tax. Both specs then use one fee formula.
+The Sold sheet of the budget spec keeps one Fees field, for the eBay fee plus the postage. Dwight chose that on 2026-09-26. The readout does not need a second field. The eBay fee follows a fixed formula, so code computes it from the sold price with `Profit.res`. The rest of the Fees value is the postage.
+
+For each eBay sale, type the Fees value from the eBay order. If Dwight keeps the fee that the sheet fills in, the Fees value has no postage in it. The real postage of that sale is then near $0, so the readout leaves the sale out.
 
 ## MVP
 
@@ -142,8 +145,7 @@ Only real sales can test the readout from end to end, because fixture finds neve
 
 - Category fee rates, after M1 lite adds its `category` field. The rates are in Facts and sources.
 - Class postage from Dwight's own labels: after 5 sales in a class, use the median real postage.
-- Buyer-paid shipping, as a choice next to free shipping.
-- Exact postage by ZIP code from the USPS Domestic Prices 3.0 API. M1 lite lists it in Later too.
+- Exact postage by ZIP code from the USPS Domestic Prices 3.0 API, with the origin ZIP from the environment. M1 lite lists it in Later too.
 - The walk-away price of M1 lite: the net minus a minimum profit. `Profit.res` gives it with one more subtraction.
 - The cost of boxes and mailers, and a promoted listing fee.
 
@@ -161,24 +163,36 @@ Only real sales can test the readout from end to end, because fixture finds neve
 | 10 lb | $11.91 | $16.76 | $25.34 |
 | 20 lb | $16.46 | $24.93 | $40.39 |
 
+- USPS zone chart for origin prefix 320, effective 2026-09-01, read from `postcalc.usps.com` on 2026-09-26. These are the zones of the largest metro areas:
+
+| Zone | Metro areas, with ZIP prefix |
+|---|---|
+| 3 | Atlanta (303) |
+| 4 | Miami (331) |
+| 5 | New York (100), Philadelphia (191), Washington (200), Chicago (606), Detroit (482), Dallas (752), Houston (770) |
+| 6 | Boston (021), Minneapolis (554) |
+| 7 | Denver (802), Phoenix (850) |
+| 8 | Los Angeles (900), San Francisco (941), Seattle (981) |
+
 - Not confirmed: the price of an eBay label. eBay's [Seller Center page](https://www.ebay.com/sellercenter/shipping/choosing-a-carrier-and-service/usps-and-ebay-labels) shows a calculator and no price table (read 2026-09-26). eBay Community posts say that eBay label prices for Ground Advantage changed on 2026-07-25 and on 2026-08-08. They also say that eBay keeps four weight tiers under 1 lb, but Notice 123 has one price for all of them. So a `small` label from eBay can cost less than $7.69. Before step 1, read one real eBay label price for each class.
 - Sales tax: the [Tax Foundation](https://taxfoundation.org/data/all/state/2026-sales-tax-rates-midyear/) gives 7.53% for 2026. It is the average of state and local rates, weighted by population. This figure came from a search summary on 2026-09-25, not from the page. Code rounds it to 7.5%.
 
 ## Risks
 
-- Free shipping is an assumption. If Dwight charges buyers for shipping, the cost miss shows it as a positive number near the buyer shipping.
-- Zone 5 is a guess. Dwight's ZIP code decides the real mix of zones.
+- Zone 5 is the middle of the zones from prefix 320, not the real mix of buyers. Line 4 of the readout shows the real postage for each class.
 - Claude can pick the wrong class. A light item in a large box costs more than its weight suggests.
-- The real tax rate changes with the address of the buyer.
+- The real tax rate changes with the address of the buyer. On a $25 sale, that moves the real postage by up to $0.26.
 - A few sales tell little. M1 lite gives the numbers: at 20 sales, the interval of its hit rate is still wide.
 - Rates change. USPS prices changed on 2026-07-12, and eBay label prices changed twice after that. `Profit.res` keeps the date of its sources.
 - The readout skips sales on Marketplace or for cash, because the estimate assumes an eBay sale.
 
-## Open questions
+## Decisions
 
-1. What ZIP code does Dwight ship from? The answer sets the zone of the default postage.
-2. Does Dwight offer free shipping, or do buyers pay for it?
-3. Can the budget spec split its Fees field into Fees and Postage, and fill the fee from `Profit.res`?
+Dwight answered the open questions of this spec on 2026-09-26:
+
+1. Ship-from ZIP prefix: 320. Zone 5 stays the default.
+2. Shipping: free. Dwight pays for each label.
+3. Fees field: one field, with no split. The seller pays the eBay fee.
 
 ## Non-goals
 
