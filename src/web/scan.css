@@ -799,12 +799,14 @@ body:has(.scan-shell) {
 }
 
 .scan-noebay-title {
+  display: block;
   font-size: 14px;
   font-weight: 650;
   line-height: 20px;
 }
 
 .scan-noebay-note {
+  display: block;
   margin-top: 2px;
   font-family: var(--scan-font-mono);
   font-size: 11px;
