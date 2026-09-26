@@ -128,11 +128,6 @@ let pinHalfSizes = (centers: array<(float, float)>): array<option<float>> => {
   })
 }
 
-// Self-contained on purpose, same reasoning as ScanView.res's own binding
-// of the same JS method: this module has no DOM import, so it should not
-// gain one just to format a percent string.
-@send external toFixed: (float, int) => string = "toFixed"
-
 // The CSS size for one pin button's width or height. `half` is this
 // pin's half-size in photo px from `pinHalfSizes` (`None` for a lone
 // pin); `totalPx` is the photo's own full width or height in photo px
@@ -155,5 +150,5 @@ let pinSizeCss = (half: option<float>, totalPx: float): string =>
   | None => "44px"
   | Some(h) =>
     let pct = totalPx > 0.0 ? h *. 2.0 /. totalPx *. 100.0 : 0.0
-    "max(8px, min(44px, " ++ toFixed(pct, 2) ++ "%))"
+    "max(8px, min(44px, " ++ Float.toFixed(pct, ~digits=2) ++ "%))"
   }

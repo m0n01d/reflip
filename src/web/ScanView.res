@@ -14,8 +14,6 @@
 // helpers): App imports ScanShell, which imports this module, so importing
 // back from App.res would be a circular dependency.
 
-@send external toFixed: (float, int) => string = "toFixed"
-
 // The design's fixed reference points (docs/scan-ui.md): a run stops at
 // 3:00, and 0:47 is the median photo on 10 real scenes (reflip's own
 // CLAUDE.md). Both are constants, not derived from any one run.
@@ -26,7 +24,7 @@ let clampPct = (n: float): float => Math.max(0.0, Math.min(n, 100.0))
 // A position along the track, or a pin's position on the photo: always a
 // percentage of some known total, clamped and formatted once.
 let pctOf = (part: float, total: float): string =>
-  total <= 0.0 ? "0%" : toFixed(clampPct(part /. total *. 100.0), 2) ++ "%"
+  total <= 0.0 ? "0%" : Float.toFixed(clampPct(part /. total *. 100.0), ~digits=2) ++ "%"
 
 let boxCenterPct = (box: Types.box, sentWidth: int, sentHeight: int): (string, string) => (
   pctOf(Int.toFloat(box.x1 + box.x2) /. 2.0, Int.toFloat(sentWidth)),
@@ -93,7 +91,7 @@ let cropOf = (box: Types.box, ~sentWidth: int, ~sentHeight: int): cropGeometry =
   }
 }
 
-let px = (n: float): string => toFixed(n, 1) ++ "px"
+let px = (n: float): string => Float.toFixed(n, ~digits=1) ++ "px"
 
 let chevron = (~className: string) =>
   <svg
@@ -575,7 +573,7 @@ let make = (
                       {React.string(ScanState.confidenceWord(item.confidence))}
                     </span>
                     <span className="scan-sheet-conf-num">
-                      {React.string(toFixed(item.confidence, 2))}
+                      {React.string(Float.toFixed(item.confidence, ~digits=2))}
                     </span>
                   </div>
                   <p className="scan-sheet-basis"> {React.string(item.basis)} </p>

@@ -7,12 +7,10 @@
 // BoxLayout.res holds the pure crop and hit-test math this file turns into
 // styles and taps.
 
-@send external toFixed: (float, int) => string = "toFixed"
-
-let fmtUsd = (n: float): string => "$" ++ toFixed(n, 2)
-let fmtUsd4 = (n: float): string => "$" ++ toFixed(n, 4)
-let fmtPct = (n: float): string => toFixed(n *. 100.0, 0) ++ "%"
-let fmtMs = (n: float): string => toFixed(n, 0) ++ " ms"
+let fmtUsd = (n: float): string => "$" ++ Float.toFixed(n, ~digits=2)
+let fmtUsd4 = (n: float): string => "$" ++ Float.toFixed(n, ~digits=4)
+let fmtPct = (n: float): string => Float.toFixed(n *. 100.0, ~digits=0) ++ "%"
+let fmtMs = (n: float): string => Float.toFixed(n, ~digits=0) ++ " ms"
 let fmtOptMs = (n: option<float>): string =>
   switch n {
   | Some(ms) => fmtMs(ms)
@@ -22,7 +20,8 @@ let fmtOptMs = (n: option<float>): string =>
 // left/top/width/height of a box as CSS percent, against the photo's own
 // pixel size — the box overlay on the photo and the crop math both start
 // from the same imageWidth/imageHeight the reply carries.
-let pct = (n: int, total: int): string => toFixed(Int.toFloat(n) /. Int.toFloat(total) *. 100.0, 2) ++ "%"
+let pct = (n: int, total: int): string =>
+  Float.toFixed(Int.toFloat(n) /. Int.toFloat(total) *. 100.0, ~digits=2) ++ "%"
 
 // The side-effect edge: called from the file input's onChange, never from
 // update/view. Dispatches a msg after each step so `update` stays pure.
@@ -191,14 +190,16 @@ module CropView = {
       <div
         className="item-crop"
         style={{
-          JsxDOMStyle.width: toFixed(crop.divWidth, 1) ++ "px",
-          height: toFixed(crop.divHeight, 1) ++ "px",
+          JsxDOMStyle.width: Float.toFixed(crop.divWidth, ~digits=1) ++ "px",
+          height: Float.toFixed(crop.divHeight, ~digits=1) ++ "px",
           backgroundImage: "url(" ++ photoUrl ++ ")",
-          backgroundSize: toFixed(crop.bgWidth, 1) ++ "px " ++ toFixed(crop.bgHeight, 1) ++ "px",
+          backgroundSize: Float.toFixed(crop.bgWidth, ~digits=1) ++
+          "px " ++
+          Float.toFixed(crop.bgHeight, ~digits=1) ++ "px",
           backgroundPosition: "-" ++
-          toFixed(crop.bgX, 1) ++
+          Float.toFixed(crop.bgX, ~digits=1) ++
           "px -" ++
-          toFixed(crop.bgY, 1) ++ "px",
+          Float.toFixed(crop.bgY, ~digits=1) ++ "px",
         }}
       />
     | _ => <div className="item-crop item-crop-missing"> {React.string("no box")} </div>
@@ -269,7 +270,7 @@ module Footer = {
         {React.string(
           "upload: " ++
           switch model.uploadBytes {
-          | Some(b) => toFixed(Int.toFloat(b) /. 1024.0, 1) ++ " KB"
+          | Some(b) => Float.toFixed(Int.toFloat(b) /. 1024.0, ~digits=1) ++ " KB"
           | None => "—"
           },
         )}
