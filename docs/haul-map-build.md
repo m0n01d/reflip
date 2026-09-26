@@ -328,3 +328,98 @@ each step once green, then tick it here with its SHA.
 - [ ] C1. `scripts/place-check.mjs` in dev-browser: saved, a late haul id, the outbox after a
       reload, denied, failed then Try again. Screenshots in `docs/shots/haul-map/`.
 - [ ] C2. `node scripts/haul-smoke.mjs` passes.
+
+### Log
+
+Wrote `scripts/place-check.mjs` (Node wrapper, copies `haul-smoke.mjs`'s
+structure: build step, free port, throwaway `DATA_DIR`, `FIXTURES=1`, own
+dev-browser instance `reflip-place`, one `PLACE_CHECK_RESULT` JSON line,
+screenshots copied out of the dev-browser jail) and
+`scripts/place-check.browser.js` (the five in-browser cases: saved, late
+haul id, outbox-then-reload, denied, failed-then-Try-again). The sixth
+case, privacy, lives in the `.mjs` wrapper itself, since it needs to read
+the brain's own server-log file, which the dev-browser sandbox cannot
+reach.
+
+Neither file is committed yet — see "blocked" below, this is not a green
+step.
+
+**Gotcha found and worked around**: this dev-browser build's
+`page.addInitScript` crashes the whole script with `QuickJS function
+"__transport_receive" failed: expected object, got undefined`, reproduced
+with a bare `page.addInitScript(() => {})` and no other calls (probed
+2026-09-26). The brief's C1 spec calls for `addInitScript` in cases 4 and
+5. Worked around by installing the `navigator.geolocation.getCurrentPosition`
+override with a plain `page.evaluate` right after the page has loaded but
+before the click that triggers the only `getCurrentPosition` call on that
+load — `askPlace` only reads `navigator.geolocation` at click time, so the
+ordering the brief needed from `addInitScript` (in place before the first
+call) still holds. Worth folding into the CLAUDE.md dev-browser gotchas
+once this lands.
+
+**Blocked**: after that fix, every case still fails — the app never
+renders past a blank `<div id="root">`. The browser's `pageerror` is
+`TypeError: Cannot read properties of null (reading 'useState')`, the
+classic "no live React dispatcher" symptom (invalid hook call / two React
+copies). Root-caused by hand:
+
+- `npm test` passes clean in this worktree (it does not touch the Vite
+  bundle's runtime).
+- `npm run build` (both `rescript build` and `vite build`) also succeeds
+  with no errors and produces `dist/assets/index-*.js`.
+- But `npm ls rescript-rewind` in this worktree prints `(empty)` —
+  `rescript-rewind` (the `App.res` "Time-travel debugger (rewind)" section
+  of this file, `Rewind.use` in `App.make`) is in `package.json` and
+  `package-lock.json` but **is not actually present in `node_modules`**.
+  `node_modules`'s own mtime (2026-09-25) predates whatever added that
+  dependency to the lockfile, i.e. this worktree's `node_modules` is stale
+  — exactly the gotcha this repo's own memory note already names
+  (`~/.claude/projects/.../reflip-smoke-gotchas.md`: "A new worktree can
+  hold an old `node_modules` from main... Run `npm install` after a
+  checkout"), just for a different missing package than the one that note
+  was written about (`idb-keyval` then, `rescript-rewind` now).
+- **This is not new**: `node scripts/haul-smoke.mjs --skip-build --timeout 90`
+  (C2's own verification command, pre-existing and unrelated to this
+  session's edits) fails with the exact same `pageerror` and the exact
+  same `getByRole('button', { name: 'Haul', exact: true })` timeout. So
+  both C1 and C2 are blocked by the same pre-existing environment gap, not
+  by anything wrong in `place-check.mjs`/`place-check.browser.js` or in
+  the P1–P5 app code.
+
+Per the brief ("If it is in the app, report it and do not fix the app")
+and the turn-counter note that arrived while root-causing this, I stopped
+here rather than running `npm install` myself. **Next step for whoever
+picks this up**: run `npm install` in this worktree, confirm `npm ls
+rescript-rewind` shows the package, then re-run both
+`node scripts/place-check.mjs --skip-build --timeout 150` and
+`node scripts/haul-smoke.mjs --skip-build` and tick C1/C2 once both are
+green (commit `scripts/place-check.mjs` and `scripts/place-check.browser.js`
+together with that, plus the four screenshots into
+`docs/shots/haul-map/` and the three-sentence Testing-section note in the
+repo CLAUDE.md, both still to do).
+
+Environment fix, 2026-09-26: this worktree had no `rescript-rewind` in `node_modules`, so Node
+found the main checkout's copy, and the bundle held two copies of React. `npm install` fixed it.
+After that, `node scripts/haul-smoke.mjs --skip-build` passed.
+
+## Review fixes
+
+A reviewer read the diff to `7d47a4d`. The brain half is sound. Do these, then run C1 and C2.
+
+- [ ] R1. App.res mount effect: `restoreHaul` returns the restored haul id (`option<string>`),
+      and `restorePlaces` gets that id. `rewind.live` in that closure is the first render's
+      value, so today the current haul id is always None there.
+- [ ] R2. `PlaceSaved` keeps the brain's reply: `PlaceSaved(option<Types.place>, option<float>)`,
+      with the second value the tookMs. `placeLine` shows "Place saved", with " · ±N m" and
+      " · T s" when known, for every saved state. It never shows "No place yet" for a saved state.
+- [ ] R3. The worker sends the body from `requestBodyFor`. ClaudeClient gets a send that takes a
+      body. Its 400 retry removes the "output_config" key from that same body. The old
+      `send`/`call` go through it, so the scan route is unchanged. HaulWorker gets
+      `requestFor(t, scene)`, which gives the model, the mode and the body. `requestBodyFor` maps it
+      to the body, and runScene sends that body. Test: the body with structuredOutput true,
+      minus "output_config", equals the body with structuredOutput false.
+- [ ] R4. The send-result msgs (sent, send failed, rejected) carry the haul id. `update` ignores
+      a msg whose haul id is not the current haul's.
+- [ ] R5. `Place.decodeInput` rejects a lat, lon or accuracyM that is not finite (`1e999`).
+      `Api.postPlace`: a 200 whose place does not decode deletes the key and counts as saved.
+
