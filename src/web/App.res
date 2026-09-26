@@ -722,6 +722,18 @@ module GemCard = {
                   rel="noreferrer"
                   onClick={ReactEvent.Mouse.stopPropagation}>
                   {React.string("Check sold prices on eBay")}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
                 </a>
               </div>
             </div>
@@ -1359,7 +1371,14 @@ let make = () => {
   }
 
   <div className="page">
-    {isScanMode ? React.null : <h1> {React.string("reflip")} </h1>}
+    {isScanMode
+      ? React.null
+      : <header className="scan-header">
+          <div className="scan-header-logo">
+            <span ariaHidden={true} className="scan-header-dot" />
+            <span className="scan-header-word"> {React.string("reflip")} </span>
+          </div>
+        </header>}
     {switch model.haul {
     | NoHaul =>
       <ScanShell model dispatch onScanFileChange onStoreNameChange onStartHaul />

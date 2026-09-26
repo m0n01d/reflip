@@ -15,6 +15,6 @@ See scripts/haul-shots.mjs.
 | The same gem closes | Tapping an open row's own header closes it | ok — .haul-gem-detail count after close = 0 (expected 0) |
 | Sold link href (blocked) | a.scan-ebay-sold-btn points at ebay.com; the tap is blocked network-side | ok — href=https://www.ebay.com/sch/i.html?_nkw=vintage%20blue%20white%20transferware%20scalloped%20bowl%20plates&LH_Sold=1&LH_Complete=1, popup opened then blocked (chrome-error, per route.abort) |
 | Done (Finishing) | Tapping Done moves phase to Finishing; the dock bar replaces the controls | ok — Finishing board (.haul-bar present) |
-| Done auto-retry | A failed Done retries once on its own after ~5 s (AppState.retryDelayMs(1)) | ok — second POST /done arrived 5017 ms after the first (Failed board) |
+| Done auto-retry | A failed Done retries once on its own after ~5 s (AppState.retryDelayMs(1)) | ok — second POST /done arrived 5016 ms after the first (Failed board) |
 | The receipt | Once emailedAt is set, phase Finished shows the Haul Receipt section | ok — Done board (section[aria-label='Haul receipt']) |
 | Start a new haul | Tapping it on the receipt returns to the Ready screen (NoHaul) | ok — Done-after-new-haul shot (.haul-ready-start reappeared) |
