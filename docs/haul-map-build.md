@@ -25,7 +25,10 @@ Verification command: `npm test`
       Also replaced HaulStatus.res's `place: None` placeholder with the real
       `haul.place`. No deviations from the design notes. `npm test`: 950 ok,
       0 not ok (942 baseline + 8 new). Commit: 3bb2ada
-- [ ] 4. Server.res: POST /api/hauls/:id/place; ServerTest
+- [x] 4. Server.res: POST /api/hauls/:id/place; ServerTest. Implemented per the
+      design notes below, no deviations (handleSetPlace's `config` param is
+      unused in the body, so it is `_config` to keep the build warning-free).
+      `npm test`: 962 ok, 0 not ok (950 baseline + 12 new). Commit: e2f6208
 - [ ] 5. Haul status reply: Shared.decodeHaulStatus real decode (replace the
       `place: None` placeholder added in step 1) using a new `decodePlace`
       helper in Shared.res (reuses `Place.sourceFromString`/`sourceToString`
