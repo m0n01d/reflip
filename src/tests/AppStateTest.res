@@ -178,10 +178,22 @@ let runHaul = () => {
     "DoneTapped moves Active to Finishing",
     h12.haul == AppState.Finishing(sampleHaulStatus),
   )
+  TestKit.check("DoneTapped resets doneAttempts", h12.doneAttempts == 0)
+
+  // -- Done auto-retry (decision 10): DoneFailed counts attempts, a later
+  // DoneSent or NewHaul clears them again ----------------------------------
+  let h12f = AppState.update(h12, AppState.DoneFailed("network error"))
+  TestKit.check("DoneFailed counts the first failed attempt", h12f.doneAttempts == 1)
+  let h12f2 = AppState.update(h12f, AppState.DoneFailed("network error"))
+  TestKit.check("a second DoneFailed counts to 2", h12f2.doneAttempts == 2)
 
   let doneStatus = {...sampleHaulStatus, doneAt: Some("2026-09-24T01:00:00.000Z")}
-  let h13 = AppState.update(h12, AppState.DoneSent(doneStatus))
+  let h13 = AppState.update(h12f2, AppState.DoneSent(doneStatus))
   TestKit.check("DoneSent moves Finishing to Finished", h13.haul == AppState.Finished(doneStatus))
+  TestKit.check("DoneSent resets doneAttempts", h13.doneAttempts == 0)
+
+  let h13f = AppState.update(h12f, AppState.NewHaul)
+  TestKit.check("NewHaul resets doneAttempts too", h13f.doneAttempts == 0)
 
   let h14 = AppState.update(h13, AppState.NewHaul)
   TestKit.check("NewHaul resets back to NoHaul", h14.haul == AppState.NoHaul)

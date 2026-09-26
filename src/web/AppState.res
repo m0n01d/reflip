@@ -53,6 +53,10 @@ type model = {
   uploadedCount: int,
   pollCount: int,
   haulError: option<string>,
+  // How many Done attempts have failed since the last DoneTapped, DoneSent
+  // or NewHaul (decision 10). App.res's retry effect reads this to back
+  // off per retryDelayMs; DoneFailed increments it.
+  doneAttempts: int,
   // The resized photo (the blob the page sends), as an object URL — set
   // once the resize finishes, cleared by a new photo. App.res revokes the
   // old URL as a side effect when it replaces this.
@@ -124,6 +128,7 @@ let initialModel: model = {
   uploadedCount: 0,
   pollCount: 0,
   haulError: None,
+  doneAttempts: 0,
   photoUrl: None,
   selected: None,
   scan: ScanState.initialModel,
@@ -265,9 +270,10 @@ let update = (model: model, msg: msg): model =>
       | other => other
       },
       haulError: None,
+      doneAttempts: 0,
     }
-  | DoneSent(status) => {...model, haul: Finished(status), haulError: None}
-  | DoneFailed(msg) => {...model, haulError: Some(msg)}
+  | DoneSent(status) => {...model, haul: Finished(status), haulError: None, doneAttempts: 0}
+  | DoneFailed(msg) => {...model, haulError: Some(msg), doneAttempts: model.doneAttempts + 1}
   | NewHaul => {
       ...model,
       haul: NoHaul,
@@ -276,6 +282,7 @@ let update = (model: model, msg: msg): model =>
       uploadedCount: 0,
       pollCount: 0,
       haulError: None,
+      doneAttempts: 0,
     }
   | SelectItem(i) => {...model, selected: Some(i)}
   | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
