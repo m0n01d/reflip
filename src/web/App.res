@@ -426,7 +426,7 @@ let sendPlace = async (dispatch: AppState.msg => unit, haulId: string, fix: AppS
   switch await Api.postPlace(haulId, body) {
   | Sent(place) =>
     await WebApi.idbDel(AppState.placeKey(haulId))
-    dispatch(AppState.PlaceSent(place))
+    dispatch(AppState.PlaceSent(Some(place)))
   | Rejected(_) =>
     await WebApi.idbDel(AppState.placeKey(haulId))
     dispatch(AppState.PlaceRejected)

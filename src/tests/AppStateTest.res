@@ -242,23 +242,39 @@ let runPlace = () => {
   TestKit.check("a fresh model has not asked for a place", p0.place == AppState.PlaceNotAsked)
   let p1 = AppState.update(p0, AppState.StartHaul)
   TestKit.check("StartHaul sets asking", p1.place == AppState.PlaceAsking)
-  let p1b = {...p1, place: AppState.PlaceSaved(Some(fix))}
+  let p1b = {...p1, place: AppState.PlaceSaved(None, None)}
   let p1c = AppState.update(p1b, AppState.NewHaul)
   TestKit.check("NewHaul resets the place back to not asked", p1c.place == AppState.PlaceNotAsked)
 
   // -- the msg transitions --------------------------------------------------
   let p2 = AppState.update(p1, AppState.PlaceFixed(fix))
   TestKit.check("PlaceFixed moves asking to sending, with the fix", p2.place == AppState.PlaceSending(fix))
-  let p3 = AppState.update(p2, AppState.PlaceSent({
-    Types.lat: fix.lat,
+  let sentPlace: Types.place = {
+    lat: fix.lat,
     lon: fix.lon,
-    accuracyM: Some(fix.accuracyM),
+    accuracyM: Some(13.0),
     source: Gps,
     at: "2026-09-26T00:00:00.000Z",
-  }))
+  }
+  let p3 = AppState.update(p2, AppState.PlaceSent(Some(sentPlace)))
   TestKit.check(
-    "PlaceSent moves sending to saved, keeping the fix that was in flight",
-    p3.place == AppState.PlaceSaved(Some(fix)),
+    "PlaceSent moves sending to saved, keeping the fix's tookMs that was in flight",
+    p3.place == AppState.PlaceSaved(Some(sentPlace), Some(456.0)),
+  )
+  TestKit.check(
+    "PlaceSent from sending: placeLine adds the took suffix",
+    AppState.placeLine(p3.place, None) ==
+      Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
+  )
+  let p3b = AppState.update(p1, AppState.PlaceSent(Some(sentPlace)))
+  TestKit.check(
+    "PlaceSent from asking (no fix in flight) saves with no tookMs",
+    p3b.place == AppState.PlaceSaved(Some(sentPlace), None),
+  )
+  TestKit.check(
+    "PlaceSent from asking: placeLine has no took suffix",
+    AppState.placeLine(p3b.place, None) ==
+      Some({AppState.text: "Place saved · ±13 m", tryAgain: false}),
   )
   let p4 = AppState.update(p2, AppState.PlaceSendFailed)
   TestKit.check("PlaceSendFailed moves sending to not sent, keeping the fix", p4.place == AppState.PlaceNotSent(fix))
@@ -286,7 +302,7 @@ let runPlace = () => {
   )
   TestKit.check(
     "brain has a gps place and this page just saved it: the T s suffix shows",
-    AppState.placeLine(AppState.PlaceSaved(Some(fix)), Some(gpsBrain)) ==
+    AppState.placeLine(AppState.PlaceSaved(Some(gpsBrain), Some(456.0)), Some(gpsBrain)) ==
       Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
   )
   TestKit.check(
@@ -296,7 +312,7 @@ let runPlace = () => {
   )
   TestKit.check(
     "no brain place yet, saved locally: the same saved text",
-    AppState.placeLine(AppState.PlaceSaved(Some(fix)), None) ==
+    AppState.placeLine(AppState.PlaceSaved(Some(gpsBrain), Some(456.0)), None) ==
       Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
   )
   TestKit.check(

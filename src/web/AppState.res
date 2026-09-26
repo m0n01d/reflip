@@ -35,7 +35,7 @@ type placeState =
   | PlaceAsking
   | PlaceSending(placeFix)
   | PlaceNotSent(placeFix)
-  | PlaceSaved(option<placeFix>)
+  | PlaceSaved(option<Types.place>, option<float>)
   | PlaceDenied
   | PlaceFailed
 
@@ -137,7 +137,7 @@ type msg =
   | PlaceFixed(placeFix)
   | PlaceGeoDenied
   | PlaceUnavailable
-  | PlaceSent(Types.place)
+  | PlaceSent(option<Types.place>)
   | PlaceSendFailed
   | PlaceRejected
 
@@ -227,8 +227,7 @@ let decodePlaceBody = (body: string): option<placeFix> =>
 let fixOfPlaceState = (state: placeState): option<placeFix> =>
   switch state {
   | PlaceSending(fix) | PlaceNotSent(fix) => Some(fix)
-  | PlaceSaved(fix) => fix
-  | PlaceNotAsked | PlaceAsking | PlaceDenied | PlaceFailed => None
+  | PlaceSaved(_, _) | PlaceNotAsked | PlaceAsking | PlaceDenied | PlaceFailed => None
   }
 
 // "±N m", N the accuracy rounded to the nearest metre.
@@ -251,25 +250,29 @@ let placeTookText = (tookMs: float): string =>
 // show a Try again control next to it.
 type placeLineText = {text: string, tryAgain: bool}
 
+// The saved-place text for a brain place, shared by both the "brain has it"
+// branch and the "saved locally" PlaceSaved(Some(p), _) branch below.
+let placeSavedText = (p: Types.place, tookMs: option<float>): string => {
+  let took = tookMs->Option.mapOr("", placeTookText)
+  switch p.source {
+  | Pin => "Place set by hand"
+  | Gps => "Place saved · " ++ p.accuracyM->Option.mapOr("", placeAccuracyText) ++ took
+  }
+}
+
 let placeLine = (place: placeState, brain: option<Types.place>): option<placeLineText> =>
   switch brain {
   | Some(p) =>
-    switch p.source {
-    | Pin => Some({text: "Place set by hand", tryAgain: false})
-    | Gps =>
-      let acc = p.accuracyM->Option.mapOr("", placeAccuracyText)
-      let took = switch place {
-      | PlaceSaved(Some({tookMs: Some(t)})) => placeTookText(t)
-      | _ => ""
-      }
-      Some({text: "Place saved · " ++ acc ++ took, tryAgain: false})
+    let took = switch place {
+    | PlaceSaved(_, tookMs) => tookMs
+    | _ => None
     }
+    Some({text: placeSavedText(p, took), tryAgain: false})
   | None =>
     switch place {
-    | PlaceSaved(Some(fix)) =>
-      let took = fix.tookMs->Option.mapOr("", placeTookText)
-      Some({text: "Place saved · " ++ placeAccuracyText(fix.accuracyM) ++ took, tryAgain: false})
-    | PlaceSaved(None) => Some({text: "No place yet", tryAgain: true})
+    | PlaceSaved(Some(p), tookMs) => Some({text: placeSavedText(p, tookMs), tryAgain: false})
+    | PlaceSaved(None, tookMs) =>
+      Some({text: "Place saved" ++ tookMs->Option.mapOr("", placeTookText), tryAgain: false})
     | PlaceAsking => Some({text: "Finding place…", tryAgain: false})
     | PlaceSending(_) => Some({text: "Saving place…", tryAgain: false})
     | PlaceNotSent(_) => Some({text: "Place not sent yet", tryAgain: true})
@@ -427,7 +430,10 @@ let update = (model: model, msg: msg): model =>
   | PlaceFixed(fix) => {...model, place: PlaceSending(fix)}
   | PlaceGeoDenied => {...model, place: PlaceDenied}
   | PlaceUnavailable => {...model, place: PlaceFailed}
-  | PlaceSent(_place) => {...model, place: PlaceSaved(fixOfPlaceState(model.place))}
+  | PlaceSent(place) => {
+      ...model,
+      place: PlaceSaved(place, fixOfPlaceState(model.place)->Option.flatMap(fix => fix.tookMs)),
+    }
   | PlaceSendFailed => {
       ...model,
       place: switch model.place {
