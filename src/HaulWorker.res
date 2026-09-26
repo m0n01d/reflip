@@ -221,6 +221,19 @@ let rec kick = (t: t): unit =>
     }
   }
 
+and kickAfterPause = (t: t): unit => {
+  let waitMs = t.pausedUntil -. Date.now()
+  if waitMs > 0.0 {
+    // A Node timer runs on the loop's cached clock, so it can fire a
+    // millisecond before Date.now() reaches pausedUntil. kick would then do
+    // nothing, and with no timer armed the queue would stall until the next
+    // POST. So re-check the clock on each firing.
+    Node.Timer.setTimeout(() => kickAfterPause(t), Float.toInt(Math.ceil(waitMs)))
+  } else {
+    kick(t)
+  }
+}
+
 and process = async (t: t, scene: Store.scene): unit => {
   let outcome = try {
     await runScene(t, scene)
@@ -243,7 +256,7 @@ and process = async (t: t, scene: Store.scene): unit => {
           ~reason="stopped after 3 Claude failures in a row: " ++ msg,
         )
       } else {
-        Node.Timer.setTimeout(() => kick(t), retryMsFor(t.config))
+        kickAfterPause(t)
       }
     }
   | Failed(msg, costUsd, claudeMs) => {
