@@ -68,12 +68,13 @@ let hitTest = (boxes: array<option<Types.box>>, px: float, py: float): option<in
   ->Option.map(((i, _)) => i)
 
 // Non-overlapping half-sizes for the photo pins (this track's report): the
-// <button class="scan-pin"> hit-boxes are all a fixed 44x44 today, so two
-// pins closer than 44px apart overlap — paint order is DOM order (item
-// number order, since siblings are z-index:auto), so the top one always
-// wins, and a real click at a covered pin's center can open a NEIGHBOR's
-// sheet instead. A z-index change cannot fix an overlapping hit-box, only
-// a smaller one can.
+// <button class="scan-pin"> hit-box is sized by pinSizeCss below, not a
+// fixed 44x44, so two pins can still land closer than their combined
+// half-sizes and overlap — the most-recently-landed one then wins
+// (.scan-pin-latest, scan.css, z-index 6, above the rest's plain DOM/paint
+// order), and a real click at a covered pin's center can open a
+// NEIGHBOR's sheet instead. A z-index change cannot fix an overlapping
+// hit-box, only a smaller one can.
 //
 // `centers` are photo-pixel box centers (the same space ScanView's own
 // boxCenterPct takes as input) — Chebyshev distance there is

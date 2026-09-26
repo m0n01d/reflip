@@ -76,8 +76,9 @@ type model = {
   // set on PhotoPicked; rttMs is wall-clock ms from firing the scan request
   // to the first terminal msg (RttMeasured, dispatched by App.res's
   // runScanFlow -- see ScanState.isTerminalMsg). Both None until their one
-  // dispatch arrives; ScanState.receipt drops a row entirely when its
-  // value is still None rather than showing a placeholder.
+  // dispatch arrives; ScanState.receipt keeps each one None rather than a
+  // placeholder, and it's ScanView's own receipt-row list (its
+  // Array.filterMap) that drops the row entirely when it is.
   resizeMs: option<float>,
   rttMs: option<float>,
   errors: array<(float, string)>,
