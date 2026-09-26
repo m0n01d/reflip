@@ -194,3 +194,21 @@ type windowLike
 external removeDocumentListener: (document, string, unit => unit) => unit = "removeEventListener"
 
 @send external removeWindowListener: (windowLike, string, unit => unit) => unit = "removeEventListener"
+
+// -- Geolocation (docs/spec-haul-map.md "The position") --------------------
+// navigator.geolocation is undefined outside a secure context and on some
+// older browsers, so it is read as nullable rather than assumed present.
+
+type geolocationCoords = {latitude: float, longitude: float, accuracy: float}
+type geolocationPosition = {coords: geolocationCoords}
+type geolocationPositionError = {code: int}
+type geolocationOptions = {enableHighAccuracy: bool, timeout: int, maximumAge: int}
+type geolocation
+@val @scope("navigator") external geolocation: Nullable.t<geolocation> = "geolocation"
+@send
+external getCurrentPosition: (
+  geolocation,
+  geolocationPosition => unit,
+  geolocationPositionError => unit,
+  geolocationOptions,
+) => unit = "getCurrentPosition"
