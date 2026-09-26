@@ -14,8 +14,6 @@
 // helpers): App imports ScanShell, which imports this module, so importing
 // back from App.res would be a circular dependency.
 
-@send external toFixed: (float, int) => string = "toFixed"
-
 // The design's fixed reference points (docs/scan-ui.md): a run stops at
 // 3:00, and 0:47 is the median photo on 10 real scenes (reflip's own
 // CLAUDE.md). Both are constants, not derived from any one run.
@@ -26,7 +24,7 @@ let clampPct = (n: float): float => Math.max(0.0, Math.min(n, 100.0))
 // A position along the track, or a pin's position on the photo: always a
 // percentage of some known total, clamped and formatted once.
 let pctOf = (part: float, total: float): string =>
-  total <= 0.0 ? "0%" : toFixed(clampPct(part /. total *. 100.0), 2) ++ "%"
+  total <= 0.0 ? "0%" : Float.toFixed(clampPct(part /. total *. 100.0), ~digits=2) ++ "%"
 
 let boxCenterPct = (box: Types.box, sentWidth: int, sentHeight: int): (string, string) => (
   pctOf(Int.toFloat(box.x1 + box.x2) /. 2.0, Int.toFloat(sentWidth)),
@@ -93,7 +91,7 @@ let cropOf = (box: Types.box, ~sentWidth: int, ~sentHeight: int): cropGeometry =
   }
 }
 
-let px = (n: float): string => toFixed(n, 1) ++ "px"
+let px = (n: float): string => Float.toFixed(n, ~digits=1) ++ "px"
 
 let chevron = (~className: string) =>
   <svg
@@ -111,7 +109,11 @@ let chevron = (~className: string) =>
   </svg>
 
 @react.component
-let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPhoto: ReactEvent.Form.t => unit) => {
+let make = (
+  ~model: ScanState.model,
+  ~dispatch: ScanState.msg => unit,
+  ~onNewPhoto: ReactEvent.Form.t => unit,
+) => {
   let (logOpen, setLogOpen) = React.useState(() => false)
   let (alsoOpen, setAlsoOpen) = React.useState(() => false)
   let onSheetClose = (_: ReactEvent.Mouse.t) => dispatch(ScanState.SheetClosed)
@@ -142,48 +144,71 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
         | Some(url) =>
           <div className="scan-photo-frame">
             <img className="scan-photo-img" src={url} />
-            {visible
-            ->Array.filterMap(s =>
-              switch s.box {
-              | None => None
-              | Some(box) =>
+            {
+              let pinned =
+                visible->Array.filterMap(s =>
+                  switch s.box {
+                  | None => None
+                  | Some(box) => Some((s, box))
+                  }
+                )
+              let centerPx = (box: Types.box): (float, float) => (
+                Int.toFloat(box.x1 + box.x2) /. 2.0,
+                Int.toFloat(box.y1 + box.y2) /. 2.0,
+              )
+              let halfSizes = BoxLayout.pinHalfSizes(
+                pinned->Array.map(pair => {
+                  let (_, box) = pair
+                  centerPx(box)
+                }),
+              )
+              pinned
+              ->Array.mapWithIndex((pair, i) => {
+                let (s, box) = pair
                 let (left, top) = boxCenterPct(box, model.sentWidth, model.sentHeight)
+                // halfSizes is array<option<float>> (None = a lone pin, no
+                // neighbor to size against) — Array.get adds its own option
+                // layer, so flatten before handing it to pinSizeCss.
+                let half = switch Array.get(halfSizes, i) {
+                | Some(h) => h
+                | None => None
+                }
+                let hw = BoxLayout.pinSizeCss(half, Int.toFloat(model.sentWidth))
+                let hh = BoxLayout.pinSizeCss(half, Int.toFloat(model.sentHeight))
                 let latest = isLatest(s.number)
                 let gem = s.item->Option.mapOr(false, isGem)
-                Some(
-                  <button
-                    type_="button"
-                    key={Int.toString(s.number)}
-                    ariaLabel={"Item " ++ Int.toString(s.number)}
-                    onClick={_ => dispatch(ScanState.SheetOpened(s.number))}
-                    className={"scan-pin" ++ (latest ? " scan-pin-latest" : "")}
-                    style={{JsxDOMStyle.left: left, top}}>
-                    {gem
-                      ? <span
-                          className={"scan-pin-badge-gem" ++
-                          (latest ? " scan-pin-badge-gem-top scan-pin-badge-latest" : "")}>
-                          {React.string(Int.toString(s.number))}
+                <button
+                  type_="button"
+                  key={Int.toString(s.number)}
+                  ariaLabel={"Item " ++ Int.toString(s.number)}
+                  onClick={_ => dispatch(ScanState.SheetOpened(s.number))}
+                  className={"scan-pin" ++ (latest ? " scan-pin-latest" : "")}
+                  style={{JsxDOMStyle.left: left, top, width: hw, height: hh}}>
+                  {gem
+                    ? <span
+                        className={"scan-pin-badge-gem" ++
+                        (latest ? " scan-pin-badge-gem-top scan-pin-badge-latest" : "")}>
+                        {React.string(Int.toString(s.number))}
+                      </span>
+                    : <span
+                        className={"scan-pin-badge-plain" ++
+                        (latest ? " scan-pin-badge-latest" : "")}
+                      />}
+                  {latest
+                    ? switch s.item {
+                      | Some(item) =>
+                        <span className="scan-pin-callout">
+                          {React.string(
+                            ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd),
+                          )}
                         </span>
-                      : <span
-                          className={"scan-pin-badge-plain" ++
-                          (latest ? " scan-pin-badge-latest" : "")}
-                        />}
-                    {latest
-                      ? switch s.item {
-                        | Some(item) =>
-                          <span className="scan-pin-callout">
-                            {React.string(
-                              ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd),
-                            )}
-                          </span>
-                        | None => React.null
-                        }
-                      : React.null}
-                  </button>,
-                )
-              }
-            )
-            ->React.array}
+                      | None => React.null
+                      }
+                    : React.null}
+                </button>
+              })
+              ->React.array
+            }
           </div>
         }}
         <div className="scan-card-shadow">
@@ -226,8 +251,12 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
               </div>
             }}
             {Array.length(lines) > 1
-              ? <button type_="button" onClick={toggleLog} className="scan-log-toggle">
-                  <span> {React.string(logOpen ? "Hide the log" : "Show the full log")} </span>
+              ? <button
+                  type_="button"
+                  onClick={toggleLog}
+                  ariaExpanded={logOpen}
+                  className="scan-log-toggle">
+                  <span> {React.string(ScanState.logToggleText(Array.length(lines)))} </span>
                   {chevron(
                     ~className="scan-log-toggle-chevron" ++
                     (logOpen ? " scan-log-toggle-chevron-open" : ""),
@@ -261,17 +290,33 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                   </div>
                 </div>
               : React.null}
-            {switch model.sceneReply {
-            | Some({ebayNote: Some(note)}) =>
-              <div className="scan-noebay">
-                <span className="scan-noebay-icon" ariaHidden={true}> {React.string("⚠")} </span>
-                <span>
-                  <span className="scan-noebay-title"> {React.string("No eBay stats")} </span>
-                  <span className="scan-noebay-note"> {React.string(note)} </span>
-                </span>
-              </div>
-            | _ => React.null
-            }}
+            {ScanState.hasNoEbayData(model)
+              ? <div className="scan-noebay">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    ariaHidden={true}
+                    className="scan-noebay-icon">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 11v5M12 7.5v.01" />
+                  </svg>
+                  <span>
+                    <span className="scan-noebay-title"> {React.string("No eBay stats")} </span>
+                    <span className="scan-noebay-note">
+                      {React.string(
+                        model.sceneReply
+                        ->Option.flatMap(r => r.ebayNote)
+                        ->Option.getOr("No item had eBay stats."),
+                      )}
+                    </span>
+                  </span>
+                </div>
+              : React.null}
             {switch model.phase {
             | ScanState.Ended(ScanEvent.EndStatus.Failed) =>
               <button type_="button" onClick={onRetry} className="scan-retry-btn">
@@ -293,10 +338,16 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
           ? <div className="scan-gems">
               <div className="scan-section-head">
                 <h3 className="scan-section-title"> {React.string("Worth a look")} </h3>
-                <span className="scan-section-count"> {React.string(Int.toString(summary.count))} </span>
+                <span className="scan-section-count">
+                  {React.string(
+                    Int.toString(summary.count) ++
+                    " · " ++
+                    ScanState.moneyRange(summary.sumLowUsd, summary.sumHighUsd),
+                  )}
+                </span>
               </div>
               <div className="scan-section-sub">
-                {React.string(ScanState.moneyRange(summary.sumLowUsd, summary.sumHighUsd))}
+                {React.string("high estimate $20 or more")}
               </div>
               <div className="scan-rows-card">
                 {summary.items
@@ -330,7 +381,11 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
           : React.null}
         {ScanState.isEnded(model) && Array.length(alsoItems) > 0
           ? <div className="scan-also">
-              <button type_="button" onClick={toggleAlso} className="scan-also-toggle">
+              <button
+                type_="button"
+                onClick={toggleAlso}
+                ariaExpanded={alsoOpen}
+                className="scan-also-toggle">
                 <span className="scan-also-title-col">
                   <span className="scan-also-title">
                     {React.string("Also seen · " ++ Int.toString(Array.length(alsoItems)))}
@@ -378,13 +433,16 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                 <div className="scan-receipt-label"> {React.string("RUN RECEIPT")} </div>
                 <div className="scan-receipt-rows">
                   {[
-                    ("model", r.modelLabel),
-                    ("photo", r.photoSize),
-                    ("claude", r.claude),
-                    ("tokens", r.tokens),
-                    ("web searches", Int.toString(r.webSearches)),
-                    ("cost", r.cost),
+                    Some(("Model", r.modelLabel)),
+                    Some(("Photo", r.photoSize)),
+                    r.resizeMs->Option.map(v => ("Resize", v)),
+                    Some(("Claude", r.claude)),
+                    r.rttMs->Option.map(v => ("Round trip", v)),
+                    Some(("Tokens", r.tokens)),
+                    Some(("Web searches", Int.toString(r.webSearches))),
+                    Some(("Cost", r.cost)),
                   ]
+                  ->Array.filterMap(x => x)
                   ->Array.map(((key, value)) =>
                     <div key={key} className="scan-receipt-row">
                       <span className="scan-receipt-key"> {React.string(key)} </span>
@@ -402,6 +460,18 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                     onChange={onNewPhoto}
                     className="scan-file-input"
                   />
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+                    <circle cx="12" cy="13" r="3.6" />
+                  </svg>
                   {React.string("Snap another")}
                 </label>
               </div>
@@ -476,12 +546,17 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
               {switch sticker.item {
               | Some(item) =>
                 let filled = Float.toInt(Math.round(item.confidence *. 5.0))
+                let state = ScanState.ebayState(
+                  ~ebay=item.ebay,
+                  ~sceneReply=model.sceneReply,
+                  ~ended=ScanState.isEnded(model),
+                )
                 <>
                   <div className="scan-sheet-price-row">
                     <span className="scan-sheet-price">
                       {React.string(ScanState.moneyRange(item.estimateLowUsd, item.estimateHighUsd))}
                     </span>
-                    <span className="scan-sheet-price-label"> {React.string("estimate")} </span>
+                    <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
                   </div>
                   <div className="scan-sheet-conf-row">
                     <span className="scan-sheet-dots">
@@ -498,18 +573,27 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                       {React.string(ScanState.confidenceWord(item.confidence))}
                     </span>
                     <span className="scan-sheet-conf-num">
-                      {React.string(Int.toString(Float.toInt(Math.round(item.confidence *. 100.0))) ++ "%")}
+                      {React.string(Float.toFixed(item.confidence, ~digits=2))}
                     </span>
                   </div>
                   <p className="scan-sheet-basis"> {React.string(item.basis)} </p>
                   <div className="scan-ebay">
                     <div className="scan-ebay-top">
-                      <span className="scan-ebay-label"> {React.string("EBAY")} </span>
+                      <span className="scan-ebay-label"> {React.string("eBay")} </span>
+                      <span className="scan-ebay-flag">
+                        {switch state {
+                        | ScanState.Stats(stats) =>
+                          React.string(ScanState.plural(stats.count, "listing", "listings"))
+                        | ScanState.Checking => React.string("after Claude")
+                        | ScanState.NoStats(Some(_)) => React.string("stats off")
+                        | ScanState.NoStats(None) | ScanState.ScanEndedNoReply => React.null
+                        }}
+                      </span>
                     </div>
-                    {switch item.ebay {
-                    | Some(stats) =>
+                    {switch state {
+                    | ScanState.Stats(stats) =>
                       <>
-                        <div className="scan-ebay-title"> {React.string("Sold, last 90 days")} </div>
+                        <div className="scan-ebay-sub"> {React.string("active asking prices, not sold")} </div>
                         <div className="scan-ebay-stats">
                           <span>
                             {React.string(
@@ -526,14 +610,28 @@ let make = (~model: ScanState.model, ~dispatch: ScanState.msg => unit, ~onNewPho
                           </span>
                         </div>
                       </>
-                    | None =>
-                      <div className="scan-ebay-note">
-                        {React.string(
-                          model.sceneReply
-                          ->Option.flatMap(r => r.ebayNote)
-                          ->Option.getOr("No eBay stats for this item."),
-                        )}
-                      </div>
+                    | ScanState.Checking =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("Checking active listings")} </div>
+                        <div className="scan-ebay-hint">
+                          {React.string("Claude’s estimate shows first. eBay numbers are added after it.")}
+                        </div>
+                      </>
+                    | ScanState.NoStats(note) =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                        {switch note {
+                        | Some(text) => <div className="scan-ebay-note"> {React.string(text)} </div>
+                        | None => React.null
+                        }}
+                      </>
+                    | ScanState.ScanEndedNoReply =>
+                      <>
+                        <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                        <div className="scan-ebay-note">
+                          {React.string("The scan ended before eBay stats arrived.")}
+                        </div>
+                      </>
                     }}
                     <div className="scan-ebay-searched-row">
                       <span className="scan-ebay-searched-label"> {React.string("searched")} </span>

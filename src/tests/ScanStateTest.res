@@ -376,4 +376,290 @@ let run = () => {
   runSendFailed()
   runConnectionState()
   runSubReconnecting()
+
+  // -- Copy gaps 2/3/6's new pure helpers ------------------------------------
+  // Nested here (not a sibling top-level fn) so it still runs from this one
+  // AllTests.res call, same one-run()-per-module shape as every other
+  // *Test.res file — resq v1 has no move/insert-before-declaration command,
+  // and a new top-level fn always lands at file end, after `run`, which
+  // `run` could not then call (ReScript has no forward reference across
+  // top-level lets). Nesting it here keeps the call inside `run()` as
+  // asked, with no ordering problem.
+  let runCopyGaps = () => {
+    TestKit.section("ScanState copy helpers: logToggleText, commaInt, hasNoEbayData")
+
+    TestKit.check("logToggleText singular", ScanState.logToggleText(1) == "Run log · 1 line")
+    TestKit.check("logToggleText plural", ScanState.logToggleText(5) == "Run log · 5 lines")
+
+    TestKit.check("commaInt 0", ScanState.commaInt(0) == "0")
+    TestKit.check("commaInt 218 (3 digits, no comma)", ScanState.commaInt(218) == "218")
+    TestKit.check("commaInt 40218 (one comma)", ScanState.commaInt(40218) == "40,218")
+    TestKit.check("commaInt 1000000 (two commas)", ScanState.commaInt(1000000) == "1,000,000")
+
+    let baseReply: Types.sceneReply = {
+      Types.sceneId: "copy-gap-scene",
+      model: "claude-sonnet-5",
+      fixture: true,
+      outputPath: "/tmp/reflip-test/copy-gap.json",
+      items: [testItem()],
+      imageWidth: 800,
+      imageHeight: 600,
+      timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
+      cost: {
+        Types.usd: 0.01,
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 0,
+      },
+      ebayNote: None,
+      quarterSeen: false,
+    }
+
+    TestKit.check(
+      "no sceneReply at all -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: None}) == false,
+    )
+
+    let withNote = {
+      ...baseReply,
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+    }
+    TestKit.check(
+      "ebayNote present (keys off) -> true",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(withNote)}) == true,
+    )
+
+    let everyItemNoEbay = {
+      ...baseReply,
+      ebayNote: None,
+      items: [testItem(), testItem(~name="Second", ())],
+    }
+    TestKit.check(
+      "ebayNote absent, every item's ebay=None (items non-empty) -> true",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(everyItemNoEbay)}) ==
+        true,
+    )
+
+    let oneItemHasEbay = {
+      ...baseReply,
+      ebayNote: None,
+      items: [
+        testItem(),
+        {
+          ...testItem(~name="Second", ()),
+          ebay: Some({
+            Types.count: 3,
+            minUsd: 5.0,
+            p25Usd: 6.0,
+            medianUsd: 7.0,
+            p75Usd: 8.0,
+            maxUsd: 9.0,
+          }),
+        },
+      ],
+    }
+    TestKit.check(
+      "ebayNote absent, one item has ebay=Some -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(oneItemHasEbay)}) ==
+        false,
+    )
+
+    let emptyItems = {...baseReply, ebayNote: None, items: []}
+    TestKit.check(
+      "ebayNote absent, items=[] -> false",
+      ScanState.hasNoEbayData({...ScanState.initialModel, sceneReply: Some(emptyItems)}) == false,
+    )
+
+    // -- R3: a scene-wide ebayNote no longer forces true when an item
+    // actually has stats (EbayClient.res/Server.res set that note on one
+    // failed search even when other items succeeded) ---------------------
+    let noteButOneItemHasEbay = {
+      ...baseReply,
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+      items: [
+        {
+          ...testItem(),
+          ebay: Some({
+            Types.count: 2,
+            minUsd: 10.0,
+            p25Usd: 11.0,
+            medianUsd: 12.0,
+            p75Usd: 13.0,
+            maxUsd: 14.0,
+          }),
+        },
+      ],
+    }
+    TestKit.check(
+      "ebayNote present, one item has eBay data -> false (R3)",
+      ScanState.hasNoEbayData({
+        ...ScanState.initialModel,
+        sceneReply: Some(noteButOneItemHasEbay),
+      }) == false,
+    )
+
+    // -- R6: the Settings sheet's own model order must stay exactly
+    // Shared.allModels, each once, so a model added to Shared later
+    // fails this test instead of silently dropping out of Settings ------
+    TestKit.section("ScanState.settingsModelOrder")
+    let orderIds = ScanState.settingsModelOrder->Array.map(Shared.modelId)
+    let allIds = Shared.allModels->Array.map(Shared.modelId)
+    TestKit.check(
+      "settingsModelOrder is the same length as Shared.allModels",
+      Array.length(orderIds) == Array.length(allIds),
+    )
+    TestKit.check(
+      "settingsModelOrder contains every Shared.allModels id exactly once",
+      allIds->Array.every(id => orderIds->Array.filter(x => x == id)->Array.length == 1),
+    )
+
+    // -- R7: commaInt on a negative number must not comma-group the "-"
+    // sign as if it were a digit -----------------------------------------
+    TestKit.section("ScanState.commaInt negatives")
+    TestKit.check("commaInt -100 (3 digits, no comma)", ScanState.commaInt(-100) == "-100")
+    TestKit.check("commaInt -40218 (one comma)", ScanState.commaInt(-40218) == "-40,218")
+  }
+  runCopyGaps()
+
+  // -- F2: resizeMs/rttMs on PhotoPicked and RttMeasured; isTerminalMsg;
+  // receipt's new resizeMs/rttMs fields ("N ms" vs m:ss) ------------------
+  // Nested for the same reason as runCopyGaps above: a new top-level fn
+  // always lands after `run` via resq set decl, which `run` could not call.
+  let runF2 = () => {
+    TestKit.section("ScanState: F2 resize and round-trip timings")
+
+    let picked = ScanState.update(
+      ScanState.initialModel,
+      PhotoPicked({model: Shared.Sonnet5, photoUrl: "blob:x", bytes: 100, resizeMs: 40.0}),
+    )
+    TestKit.check("PhotoPicked's resizeMs lands in the model", picked.resizeMs == Some(40.0))
+
+    let measured = ScanState.update(picked, RttMeasured(166000.0))
+    TestKit.check("RttMeasured sets model.rttMs", measured.rttMs == Some(166000.0))
+
+    TestKit.check(
+      "isTerminalMsg true for SendFailed",
+      ScanState.isTerminalMsg(SendFailed("x")) == true,
+    )
+    TestKit.check(
+      "isTerminalMsg true for GotEvent(Ok(End(...)))",
+      ScanState.isTerminalMsg(
+        GotEvent(Ok(ScanEvent.End({t: 0.0, status: ScanEvent.EndStatus.Done}))),
+      ) == true,
+    )
+    TestKit.check(
+      "isTerminalMsg false for a non-terminal msg (StopTapped)",
+      ScanState.isTerminalMsg(StopTapped) == false,
+    )
+
+    let doneInfo: ScanState.doneInfo = {
+      claudeMs: 1000.0,
+      inputTokens: 10,
+      outputTokens: 5,
+      webSearches: 0,
+      usd: 0.01,
+    }
+    let withTimings = {
+      ...ScanState.initialModel,
+      doneInfo: Some(doneInfo),
+      resizeMs: Some(40.0),
+      rttMs: Some(166000.0),
+    }
+    switch ScanState.receipt(withTimings) {
+    | None => TestKit.check("receipt is Some when doneInfo is Some", false)
+    | Some(r) =>
+      TestKit.check("receipt formats resizeMs as \"N ms\", not m:ss", r.resizeMs == Some("40 ms"))
+      TestKit.check(
+        "receipt formats rttMs as m:ss, matching the Claude row's format",
+        r.rttMs == Some("2:46"),
+      )
+    }
+
+    let withoutTimings = {...ScanState.initialModel, doneInfo: Some(doneInfo)}
+    switch ScanState.receipt(withoutTimings) {
+    | None => TestKit.check("receipt is Some when doneInfo is Some", false)
+    | Some(r) =>
+      TestKit.check("receipt.resizeMs is None when model.resizeMs is None", r.resizeMs == None)
+      TestKit.check("receipt.rttMs is None when model.rttMs is None", r.rttMs == None)
+    }
+  }
+  runF2()
+
+  // -- ebayState: the item sheet's eBay panel state, decided once in
+  // ScanState instead of by ScanView's own two parallel switches over the
+  // same three inputs (see ScanState.res). Nested for the same reason as
+  // runCopyGaps/runF2 above.
+  let runEbayState = () => {
+    TestKit.section("ScanState.ebayState: item sheet eBay panel state")
+
+    let stats: Types.ebayStats = {
+      count: 3,
+      minUsd: 10.0,
+      p25Usd: 12.0,
+      medianUsd: 15.0,
+      p75Usd: 18.0,
+      maxUsd: 20.0,
+    }
+
+    let replyWithNote: Types.sceneReply = {
+      Types.sceneId: "ebay-state-scene",
+      model: "claude-sonnet-5",
+      fixture: true,
+      outputPath: "/tmp/reflip-test/ebay-state.json",
+      items: [testItem()],
+      imageWidth: 800,
+      imageHeight: 600,
+      timing: {Types.serverMs: 1.0, claudeMs: 2.0, ebayMs: 3.0},
+      cost: {
+        Types.usd: 0.01,
+        inputTokens: 10,
+        outputTokens: 5,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+        webSearches: 0,
+      },
+      ebayNote: Some("eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"),
+      quarterSeen: false,
+    }
+    let replyNoNote = {...replyWithNote, ebayNote: None}
+
+    TestKit.check(
+      "stats present -> Stats, regardless of sceneReply or ended",
+      ScanState.ebayState(~ebay=Some(stats), ~sceneReply=None, ~ended=false) ==
+        ScanState.Stats(stats) &&
+      ScanState.ebayState(~ebay=Some(stats), ~sceneReply=Some(replyWithNote), ~ended=true) ==
+        ScanState.Stats(stats),
+    )
+
+    TestKit.check(
+      "no stats, no scene reply, not ended -> Checking",
+      ScanState.ebayState(~ebay=None, ~sceneReply=None, ~ended=false) == ScanState.Checking,
+    )
+
+    TestKit.check(
+      "no stats, no scene reply, ended -> ScanEndedNoReply",
+      ScanState.ebayState(~ebay=None, ~sceneReply=None, ~ended=true) == ScanState.ScanEndedNoReply,
+    )
+
+    TestKit.check(
+      "no stats, scene reply with a note, not ended -> NoStats(that note)",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyWithNote), ~ended=false) ==
+        ScanState.NoStats(replyWithNote.ebayNote),
+    )
+
+    TestKit.check(
+      "no stats, scene reply with a note, ended -> NoStats(that note) still (a reply already arrived, so \"ended\" no longer matters)",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyWithNote), ~ended=true) ==
+        ScanState.NoStats(replyWithNote.ebayNote),
+    )
+
+    TestKit.check(
+      "no stats, scene reply with no note -> NoStats(None), no flag",
+      ScanState.ebayState(~ebay=None, ~sceneReply=Some(replyNoNote), ~ended=false) ==
+        ScanState.NoStats(None),
+    )
+  }
+  runEbayState()
 }

@@ -151,5 +151,7 @@ both, but wave 2 owns their edits.
 - Status on 2026-09-25 at 20:45 UTC: `claude/scan-ui` holds waves 1 to 3, the spot pass, the brain and view fixes, main at `ddb30f5`, the Snap another fix (`c665f34`) and every smoke run. 787 checks pass on `44e3ec1`.
 - PR: [m0n01d/reflip#19](https://github.com/m0n01d/reflip/pull/19), merged to main on 2026-09-25 with a merge commit. The images in its body point at `5d10c76`.
 - Evidence is in `docs/shots/scan-ui/`. `sim-smoke.md` is Safari on the iPhone 16e, and it has the live run. `edge-smoke.md` has the Chromium edge cases. `taps-smoke.md` is the Chromium tap audit.
-- Next step: two follow-up chips. "Close the scan UI design copy gaps" owns the view files. "Harden the scan stream route follow-ups" owns the brain files.
-- Follow-ups are in the PR body.
+- Follow-ups are in the PR body. Two follow-up chips ran. PR [m0n01d/reflip#21](https://github.com/m0n01d/reflip/pull/21) merged the brain follow-ups.
+- Status of the design gap pass on 2026-09-26 at 01:50 UTC: `claude/scan-ui-copy` closes the seven gaps from the board "Main". It also has the fixes from two reviews. 825 checks pass on `efb18b9`.
+- PR: [m0n01d/reflip#23](https://github.com/m0n01d/reflip/pull/23), open. The images in its body point at `9187a92`. Its evidence is `gaps-smoke.md` and the `gaps-*` shots in `docs/shots/scan-ui/`.
+- Next step: the chip "Close the remaining scan UI design differences". The PR 23 body lists the differences that remain.

@@ -28,15 +28,10 @@ let make = (
   let onNewScan = (_: ReactEvent.Mouse.t) => scanDispatch(ScanState.NewScan)
 
   // Shared.modelLabel spells out "Sonnet 5 (the default)" for the settings
-  // API; the design's chip wants the short form (Ready.png), so this stays
-  // local rather than widening Shared's own label.
-  let shortModelLabel = (m: Shared.model): string =>
-    switch m {
-    | Shared.Sonnet5 => "Sonnet 5"
-    | Shared.Opus5_5 => "Opus 5.5"
-    | Shared.Haiku4_5 => "Haiku 4.5"
-    }
-  let modelChipLabel = shortModelLabel(model.selectedModel)
+  // API; the design's chip wants the short form (Ready.png). ScanState
+  // already has this exact switch (the run receipt's Model row uses it),
+  // so reuse it here instead of keeping a second copy in sync (R8).
+  let modelChipLabel = ScanState.shortModelLabel(model.selectedModel)
 
   <div className="scan-shell">
     <header className="scan-header">
@@ -228,7 +223,7 @@ let make = (
             </div>
             <fieldset className="scan-fieldset">
               <legend className="scan-legend"> {React.string("MODEL")} </legend>
-              {Shared.allModels
+              {ScanState.settingsModelOrder
               ->Array.map(m => {
                 let (label, desc) = switch m {
                 | Shared.Sonnet5 => (
