@@ -430,6 +430,50 @@ let run = async () => {
   Node.HttpServer.close(stubOnce429, () => ())
   Store.close(store3b)
 
+  // -- 3c. A timer firing early re-arms instead of stalling the queue ---------
+  TestKit.section("Haul: a timer that fires before the pause ends still resumes the queue")
+
+  let dataDir3c = tmpDataDir()
+  let config3c = baseConfig(~dataDir=dataDir3c, ~fixtures=false)
+  let store3c = Store.openAt(":memory:")
+  let worker3c = HaulWorker.make(~config=config3c, ~store=store3c, ~onDrained=_haulId => {
+    Promise.resolve()
+  })
+  Store.createHaul(
+    store3c,
+    ~haulId="haul-timer",
+    ~name=None,
+    ~now="2026-09-24T00:00:00.000Z",
+  )->ignore
+  // The photo does not need to exist: once kick eventually picks the scene
+  // up, runScene.readPhotoBuffer fails closed to Failed(...) rather than
+  // throwing, so a fake path cannot flip the scene back to queued.
+  Store.addScene(
+    store3c,
+    ~haulId="haul-timer",
+    ~clientId="client-timer",
+    ~sceneId="scene-timer",
+    ~photoPath="/nonexistent/photo.jpg",
+    ~now="2026-09-24T00:00:01.000Z",
+    ~imageWidth=None,
+    ~imageHeight=None,
+  )->ignore
+
+  worker3c.pausedUntil = Date.now() +. 50.0
+  HaulWorker.kickAfterPause(worker3c)
+  TestKit.check(
+    "the scene is still queued right after kickAfterPause",
+    Store.nextQueued(store3c)->Option.isSome,
+  )
+
+  // Wait for the worker to finish the scene too, so Store.close cannot race it.
+  let resumed3c = await pollUntil(~timeoutMs=2000, async () =>
+    Store.nextQueued(store3c)->Option.isNone && worker3c.running == 0
+  )
+  TestKit.check("a timer that fires early still resumes the queue once the pause ends", resumed3c)
+
+  Store.close(store3c)
+
   // -- 4. Any other error, 3 times ---------------------------------------------
   TestKit.section("Haul: a 500 x3 fails the scenes and stops the haul")
 
