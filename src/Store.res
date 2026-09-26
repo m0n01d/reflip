@@ -654,3 +654,43 @@ let findsOf = (db: t, haulId: string): array<find> => {
   )
   Sqlite.all(stmt, [Sqlite.Text(haulId)])->Array.filterMap(decodeFind)
 }
+
+// All hauls, newest first. rowid is SQLite's implicit column, so no
+// explicit rowid select is needed to order by it.
+let listHauls = (db: t): array<haul> => {
+  let stmt = Sqlite.prepare(db, `SELECT * FROM hauls ORDER BY startedAt DESC, rowid DESC`)
+  Sqlite.all(stmt, [])->Array.filterMap(decodeHaul)
+}
+
+// Scene count per haul, every status. A haul with zero scenes is simply
+// absent from the dict -- callers read it with Option.getOr(0).
+let photoCountsOf = (db: t): Dict.t<int> => {
+  let stmt = Sqlite.prepare(db, `SELECT haulId, COUNT(*) AS n FROM scenes GROUP BY haulId`)
+  let counts = Dict.make()
+  Sqlite.all(stmt, [])->Array.forEach(row =>
+    switch (Json.stringField(row, "haulId"), Json.intField(row, "n")) {
+    | (Some(haulId), Some(n)) => Dict.set(counts, haulId, n)
+    | _ => ()
+    }
+  )
+  counts
+}
+
+// Every find across every haul, paired with its haulId (finds has no
+// haulId column of its own -- only scenes does). Oldest first, so a
+// haul's buys come out oldest first too (HaulList.build just filters,
+// it never re-sorts).
+let findsAll = (db: t): array<(string, find)> => {
+  let stmt = Sqlite.prepare(
+    db,
+    `SELECT finds.*, scenes.haulId AS haulId FROM finds
+     JOIN scenes ON scenes.sceneId = finds.sceneId
+     ORDER BY finds.createdAt ASC, finds.rowid ASC`,
+  )
+  Sqlite.all(stmt, [])->Array.filterMap(row =>
+    switch (Json.stringField(row, "haulId"), decodeFind(row)) {
+    | (Some(haulId), Some(find)) => Some((haulId, find))
+    | _ => None
+    }
+  )
+}
