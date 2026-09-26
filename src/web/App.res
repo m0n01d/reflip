@@ -363,18 +363,20 @@ let restoreQueueFor = async (dispatch: AppState.msg => unit, haulId: string) => 
 
 // On load: is there a haul in progress? IndexedDB survives a reload, so a
 // haul the page never got to close keeps its queue.
-let restoreHaul = async (dispatch: AppState.msg => unit) =>
+let restoreHaul = async (dispatch: AppState.msg => unit): option<string> =>
   switch (await WebApi.idbGetUnknown(AppState.currentHaulKey))->Nullable.toOption {
-  | None => ()
+  | None => None
   | Some(v) =>
     let haulId = await WebApi.unknownToText(v)
     switch await Api.getHaulStatus(haulId) {
     | Ok(status) =>
       dispatch(AppState.HaulStarted(status))
       await restoreQueueFor(dispatch, haulId)
+      Some(haulId)
     | Error(msg) =>
       await WebApi.idbDel(AppState.currentHaulKey)
       dispatch(AppState.HaulStartFailed(msg))
+      None
     }
   }
 
@@ -1275,12 +1277,13 @@ let make = () => {
   let dispatch = rewind.dispatch
 
   // -- mount: restore a haul in progress from IndexedDB, then send any
-  // place outbox entries left from a previous session. rewind.live is read
-  // after restoreHaul resolves, so the just-restored haul id is current.
+  // place outbox entries left from a previous session. restoreHaul returns
+  // the restored haul id directly — rewind.live in this closure is fixed to
+  // the first render's value (React.useEffect0 only ever runs this closure
+  // once), so it would never reflect the HaulStarted dispatched above.
   React.useEffect0(() => {
     (async () => {
-      await restoreHaul(dispatch)
-      let currentHaulId = AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)
+      let currentHaulId = await restoreHaul(dispatch)
       await restorePlaces(dispatch, currentHaulId)
     })()->Promise.ignore
     None
