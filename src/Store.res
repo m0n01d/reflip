@@ -15,6 +15,7 @@ type haul = {
   costUsd: float,
   stopReason: option<string>,
   emailNote: option<string>,
+  place: option<Types.place>,
 }
 
 type sceneStatus = Queued | Running | Done | Failed
@@ -113,6 +114,28 @@ let boolFromIntField = (json: JSON.t, key: string): option<bool> =>
 
 // -- Row decoders -------------------------------------------------------------
 
+// A hauls row has its place flattened into lat/lon/placeAccuracyM/
+// placeSource/placeAt columns (Types.place has no row of its own). All four
+// of lat, lon, placeSource and placeAt must be present and placeSource must
+// parse, or there is no place yet.
+let decodePlace = (json: JSON.t): option<Types.place> =>
+  switch (
+    Json.floatField(json, "lat"),
+    Json.floatField(json, "lon"),
+    Json.stringField(json, "placeSource"),
+    Json.stringField(json, "placeAt"),
+  ) {
+  | (Some(lat), Some(lon), Some(sourceStr), Some(at)) =>
+    Place.sourceFromString(sourceStr)->Option.map(source => {
+      Types.lat,
+      lon,
+      accuracyM: Json.floatField(json, "placeAccuracyM"),
+      source,
+      at,
+    })
+  | _ => None
+  }
+
 let decodeHaul = (json: JSON.t): option<haul> =>
   switch (Json.stringField(json, "haulId"), Json.stringField(json, "startedAt"), Json.floatField(json, "costUsd")) {
   | (Some(haulId), Some(startedAt), Some(costUsd)) =>
@@ -125,6 +148,7 @@ let decodeHaul = (json: JSON.t): option<haul> =>
       costUsd,
       stopReason: Json.stringField(json, "stopReason"),
       emailNote: Json.stringField(json, "emailNote"),
+      place: decodePlace(json),
     })
   | _ => None
   }
@@ -235,7 +259,12 @@ let openAt = (path: string): t => {
       emailedAt TEXT,
       costUsd REAL NOT NULL DEFAULT 0,
       stopReason TEXT,
-      emailNote TEXT
+      emailNote TEXT,
+      lat REAL,
+      lon REAL,
+      placeAccuracyM REAL,
+      placeSource TEXT,
+      placeAt TEXT
     )`,
   )
 
@@ -329,6 +358,30 @@ let openAt = (path: string): t => {
     Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageHeight INTEGER`)
   }
 
+  // A DB from before the haul map place slice (docs/spec-haul-map.md,
+  // 2026-09-26) has a `hauls` table with no place columns. Same PRAGMA
+  // table_info check as the finds and scenes migrations above.
+  let haulsCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(hauls)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasHaulsCol = (name: string): bool => Array.some(haulsCols, c => c == name)
+  if !hasHaulsCol("lat") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN lat REAL`)
+  }
+  if !hasHaulsCol("lon") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN lon REAL`)
+  }
+  if !hasHaulsCol("placeAccuracyM") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeAccuracyM REAL`)
+  }
+  if !hasHaulsCol("placeSource") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeSource TEXT`)
+  }
+  if !hasHaulsCol("placeAt") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeAt TEXT`)
+  }
+
   db
 }
 
@@ -356,6 +409,7 @@ let createHaul = (db: t, ~haulId: string, ~name: option<string>, ~now: string): 
     costUsd: 0.0,
     stopReason: None,
     emailNote: None,
+    place: None,
   }
 }
 
@@ -387,6 +441,31 @@ let markEmailed = (db: t, ~haulId: string, ~now: string, ~note: option<string>):
   let stmt = Sqlite.prepare(db, "UPDATE hauls SET emailedAt = ?, emailNote = ? WHERE haulId = ?")
   Sqlite.run(stmt, [Sqlite.Text(now), optText(note), Sqlite.Text(haulId)])->ignore
 }
+
+// A gps fix never overwrites a pin the person dropped by hand (Place.choose).
+// None if haulId names no haul.
+let setPlace = (db: t, ~haulId: string, ~place: Types.place): option<Types.place> =>
+  switch getHaul(db, haulId) {
+  | None => None
+  | Some(haul) =>
+    let chosen = Place.choose(~stored=haul.place, ~incoming=place)
+    let stmt = Sqlite.prepare(
+      db,
+      "UPDATE hauls SET lat = ?, lon = ?, placeAccuracyM = ?, placeSource = ?, placeAt = ? WHERE haulId = ?",
+    )
+    Sqlite.run(
+      stmt,
+      [
+        Sqlite.Num(chosen.lat),
+        Sqlite.Num(chosen.lon),
+        optNum(chosen.accuracyM),
+        Sqlite.Text(Place.sourceToString(chosen.source)),
+        Sqlite.Text(chosen.at),
+        Sqlite.Text(haulId),
+      ],
+    )->ignore
+    Some(chosen)
+  }
 
 // -- Scenes ---------------------------------------------------------------------
 
