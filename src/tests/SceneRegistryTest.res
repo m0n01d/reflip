@@ -139,6 +139,11 @@ let sceneIdOf = (events: array<Sse.event>): string =>
 
 let kindsOf = (events: array<Sse.event>): array<string> => Array.map(events, e => e.event)
 
+// Bounds a hang; it is not a speed budget. The paced sections (testAttachMidRun,
+// testDropSwitch) take about 13s idle and longer under load. A 20s guard fired
+// under load on 2026-09-25.
+let guardMs = 60_000
+
 let postScene = (port: int, photo: Node.Buffer.t): promise<Fetch.response> =>
   Fetch.fetchBuffer(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene/stream",
@@ -146,7 +151,7 @@ let postScene = (port: int, photo: Node.Buffer.t): promise<Fetch.response> =>
       Fetch.method: "POST",
       headers: Dict.fromArray([("content-type", "image/jpeg")]),
       body: photo,
-      signal: Fetch.AbortSignal.timeout(20_000),
+      signal: Fetch.AbortSignal.timeout(guardMs),
     },
   )
 
@@ -172,14 +177,14 @@ let getEvents = (port: int, sceneId: string, ~from: option<int>): promise<Fetch.
   }
   Fetch.fetch(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene/" ++ sceneId ++ "/events" ++ query,
-    ~init={Fetch.method: "GET", signal: Fetch.AbortSignal.timeout(20_000)},
+    ~init={Fetch.method: "GET", signal: Fetch.AbortSignal.timeout(guardMs)},
   )
 }
 
 let postStop = (port: int, sceneId: string): promise<Fetch.response> =>
   Fetch.fetch(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene/" ++ sceneId ++ "/stop",
-    ~init={Fetch.method: "POST", signal: Fetch.AbortSignal.timeout(20_000)},
+    ~init={Fetch.method: "POST", signal: Fetch.AbortSignal.timeout(guardMs)},
   )
 
 // Replay from 0 (default) and from n both match what the original POST
@@ -334,7 +339,7 @@ let testDropSwitch = async (port: int, photo: Node.Buffer.t) => {
 let getEventsRaw = (port: int, sceneId: string, ~from: string): promise<Fetch.response> =>
   Fetch.fetch(
     "http://127.0.0.1:" ++ Int.toString(port) ++ "/api/scene/" ++ sceneId ++ "/events?from=" ++ from,
-    ~init={Fetch.method: "GET", signal: Fetch.AbortSignal.timeout(20_000)},
+    ~init={Fetch.method: "GET", signal: Fetch.AbortSignal.timeout(guardMs)},
   )
 
 // GET .../events?from=<n>: a negative or non-integer `from` is a 400 JSON
