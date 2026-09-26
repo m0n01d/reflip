@@ -117,7 +117,10 @@ let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
   | JsExn(_) => Error("could not reach the server")
   }
 
-type placeResult = Sent(Types.place) | Rejected(int) | NotSent(string)
+// A 200 whose "place" key doesn't decode still counts as sent — the outbox
+// entry is done either way, per R5. Sent(None) tells the caller there's no
+// fresh place to show, not that the send failed.
+type placeResult = Sent(option<Types.place>) | Rejected(int) | NotSent(string)
 
 let postPlace = async (haulId: string, body: string): placeResult =>
   try {
@@ -131,10 +134,7 @@ let postPlace = async (haulId: string, body: string): placeResult =>
     )
     if WebApi.responseOk(resp) {
       let json = await WebApi.responseJson(resp)
-      switch Json.field(json, "place")->Option.flatMap(Shared.decodePlace) {
-      | Some(p) => Sent(p)
-      | None => NotSent("could not read the reply: missing place")
-      }
+      Sent(Json.field(json, "place")->Option.flatMap(Shared.decodePlace))
     } else {
       let status = WebApi.responseStatus(resp)
       if status == 400 || status == 404 {

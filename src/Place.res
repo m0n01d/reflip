@@ -36,12 +36,15 @@ let decodeInput = (json: JSON.t): result<input, string> =>
     switch sourceFromString(sourceStr) {
     | None => Error("source must be \"gps\" or \"pin\"")
     | Some(source) =>
-      if lat < -90.0 || lat > 90.0 {
+      if !Float.isFinite(lat) || !Float.isFinite(lon) {
+        Error("lat and lon must be finite numbers")
+      } else if lat < -90.0 || lat > 90.0 {
         Error("lat must be between -90 and 90")
       } else if lon < -180.0 || lon > 180.0 {
         Error("lon must be between -180 and 180")
       } else {
         switch Json.floatField(json, "accuracyM") {
+        | Some(a) if !Float.isFinite(a) => Error("accuracyM must be a finite number")
         | Some(a) if a < 0.0 => Error("accuracyM must be 0 or more")
         | Some(a) => Ok({lat, lon, accuracyM: Some(a), source})
         | None =>

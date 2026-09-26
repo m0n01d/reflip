@@ -98,6 +98,41 @@ let run = () => {
   )
 
   TestKit.check(
+    "lat=1e999 (not finite) is an error",
+    switch Place.decodeInput(
+      Json.obj([("lat", Json.num(1e999)), ("lon", Json.num(0.0)), ("source", Json.str("pin"))]),
+    ) {
+    | Error(_) => true
+    | Ok(_) => false
+    },
+  )
+
+  TestKit.check(
+    "lon=1e999 (not finite) is an error",
+    switch Place.decodeInput(
+      Json.obj([("lat", Json.num(0.0)), ("lon", Json.num(1e999)), ("source", Json.str("pin"))]),
+    ) {
+    | Error(_) => true
+    | Ok(_) => false
+    },
+  )
+
+  TestKit.check(
+    "accuracyM=1e999 (not finite) is an error",
+    switch Place.decodeInput(
+      Json.obj([
+        ("lat", Json.num(47.0)),
+        ("lon", Json.num(-122.0)),
+        ("source", Json.str("gps")),
+        ("accuracyM", Json.num(1e999)),
+      ]),
+    ) {
+    | Error(_) => true
+    | Ok(_) => false
+    },
+  )
+
+  TestKit.check(
     "lat as a JSON string is an error",
     switch Place.decodeInput(
       Json.obj([("lat", Json.str("47.0")), ("lon", Json.num(-122.0)), ("source", Json.str("gps"))]),
