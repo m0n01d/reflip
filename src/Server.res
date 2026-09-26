@@ -215,6 +215,8 @@ let handleCreateHaul = async (
 
 let maxPhotoBytes = 15 * 1024 * 1024
 
+let maxPlaceBytes = 4096
+
 // Shared by handleScene (/api/scene) and StreamRoute.handle
 // (/api/scene/stream): runs the eBay merge and the box decode, in that
 // order after Claude — CLAUDE.md hard rule 1, eBay numbers never reach the
@@ -408,8 +410,8 @@ let handleSetPlace = async (
   res: Node.HttpServer.response,
 ): unit => {
   let body = await Node.HttpServer.readBody(req)
-  if Node.Buffer.length(body) > maxPhotoBytes {
-    errorJson(res, 413, "body over 15 MB")
+  if Node.Buffer.length(body) > maxPlaceBytes {
+    errorJson(res, 413, "body over 4096 bytes")
   } else {
     let text = Node.Buffer.toStringWithEncoding(body, "utf8")
     switch JSON.parseOrThrow(text) {

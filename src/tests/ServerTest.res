@@ -164,5 +164,14 @@ let run = async () => {
     Json.stringField(gpsAfterPinPlace, "source") == Some("pin"),
   )
 
+  // The place body is capped at 4096 bytes, not the 15 MB photo cap -- same
+  // 413 status the scene route gives an oversized photo.
+  let oversizedPlaceBody = String.repeat("a", 5000)
+  let (oversizedPlaceStatus, _) = await postPlaceBody(placeHaulId, oversizedPlaceBody)
+  TestKit.check(
+    "a 5000-byte place body responds 413, same as an oversized photo",
+    oversizedPlaceStatus == 413,
+  )
+
   Node.HttpServer.close(server, () => ())
 }
