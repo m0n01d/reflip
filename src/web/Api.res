@@ -117,6 +117,36 @@ let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
   | JsExn(_) => Error("could not reach the server")
   }
 
+// A 200 whose "place" key doesn't decode still counts as sent — the outbox
+// entry is done either way, per R5. Sent(None) tells the caller there's no
+// fresh place to show, not that the send failed.
+type placeResult = Sent(option<Types.place>) | Rejected(int) | NotSent(string)
+
+let postPlace = async (haulId: string, body: string): placeResult =>
+  try {
+    let resp = await WebApi.fetchString(
+      "/api/hauls/" ++ haulId ++ "/place",
+      {
+        WebApi.method: "POST",
+        headers: Dict.fromArray([("Content-Type", "application/json")]),
+        body,
+      },
+    )
+    if WebApi.responseOk(resp) {
+      let json = await WebApi.responseJson(resp)
+      Sent(Json.field(json, "place")->Option.flatMap(Shared.decodePlace))
+    } else {
+      let status = WebApi.responseStatus(resp)
+      if status == 400 || status == 404 {
+        Rejected(status)
+      } else {
+        NotSent(await readErrorReason(resp))
+      }
+    }
+  } catch {
+  | JsExn(_) => NotSent("could not reach the server")
+  }
+
 // Posts one queued photo. The brain answers 202 with {"sceneId", ...} and,
 // for a client id it has already seen, "duplicate": true — a retried
 // upload then costs nothing.

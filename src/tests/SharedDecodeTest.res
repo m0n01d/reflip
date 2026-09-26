@@ -113,5 +113,75 @@ let run = async () => {
     )
   }
 
+  TestKit.section("Shared.decodeHaulStatus: place")
+
+  let baseHaulStatusFields = (): array<(string, JSON.t)> => [
+    ("haulId", Json.str("haul-1")),
+    ("startedAt", Json.str("2026-09-26T00:00:00.000Z")),
+    ("costUsd", Json.num(0.0)),
+    ("maxUsd", Json.num(10.0)),
+    ("gemMinUsd", Json.num(20.0)),
+    (
+      "counts",
+      Json.obj([
+        ("queued", Json.num(0.0)),
+        ("running", Json.num(0.0)),
+        ("valued", Json.num(0.0)),
+        ("failed", Json.num(0.0)),
+      ]),
+    ),
+    ("gems", Json.arr([])),
+    ("otherCount", Json.num(0.0)),
+    ("failed", Json.arr([])),
+  ]
+
+  let withPlaceJson = Json.obj(
+    Array.concat(
+      baseHaulStatusFields(),
+      [
+        (
+          "place",
+          Json.obj([
+            ("lat", Json.num(47.6)),
+            ("lon", Json.num(-122.3)),
+            ("accuracyM", Json.num(12.0)),
+            ("source", Json.str("gps")),
+            ("at", Json.str("2026-09-26T00:00:01.000Z")),
+          ]),
+        ),
+      ],
+    ),
+  )
+  switch Shared.decodeHaulStatus(withPlaceJson) {
+  | Error(msg) => TestKit.check("a haul status with a place decodes (" ++ msg ++ ")", false)
+  | Ok(status) =>
+    TestKit.check(
+      "decoded status's place round-trips lat/lon/accuracyM/source/at",
+      status.place ==
+        Some({
+          Types.lat: 47.6,
+          lon: -122.3,
+          accuracyM: Some(12.0),
+          source: Gps,
+          at: "2026-09-26T00:00:01.000Z",
+        }),
+    )
+  }
+
+  let withNullPlaceJson = Json.obj(
+    Array.concat(baseHaulStatusFields(), [("place", JSON.Encode.null)]),
+  )
+  switch Shared.decodeHaulStatus(withNullPlaceJson) {
+  | Error(msg) => TestKit.check("a haul status with place: null decodes (" ++ msg ++ ")", false)
+  | Ok(status) => TestKit.check("place: null decodes to None", status.place == None)
+  }
+
+  let noPlaceKeyJson = Json.obj(baseHaulStatusFields())
+  switch Shared.decodeHaulStatus(noPlaceKeyJson) {
+  | Error(msg) =>
+    TestKit.check("a haul status missing the place key decodes (" ++ msg ++ ")", false)
+  | Ok(status) => TestKit.check("a missing place key decodes to None", status.place == None)
+  }
+
   Node.HttpServer.close(server, () => ())
 }

@@ -285,11 +285,23 @@ let postToClaude = async (~config: Config.t, apiKey: string, bodyJson: JSON.t) =
 // Otherwise: no ANTHROPIC_API_KEY -> NoApiKey (the server turns this into a
 // 503). On a 400 naming output_config, retry once without it, per CLAUDE.md
 // rule: "nobody confirmed output_config works together with web search."
-let send = async (
+// The 400 retry needs the same body minus "output_config". JSON.t's Object
+// case already carries a typed dict<JSON.t>, so a copy-and-delete removes
+// the key with no Obj.magic and no raw JS.
+let withoutOutputConfig = (body: JSON.t): JSON.t =>
+  switch body {
+  | JSON.Object(fields) => {
+      let copy = Dict.copy(fields)
+      copy->Dict.delete("output_config")
+      JSON.Object(copy)
+    }
+  | other => other
+  }
+
+let sendBody = async (
   ~config: Config.t,
-  ~model: string,
-  ~imageBase64: string,
   ~mode: mode,
+  ~body: JSON.t,
 ): result<decoded, callError> =>
   if config.fixtures {
     let fixtureFile = switch mode {
@@ -306,22 +318,14 @@ let send = async (
           "claude: requesting (structured output=" ++
           (config.structuredOutput ? "on" : "off") ++ ")",
         )
-        let resp = await postToClaude(
-          ~config,
-          apiKey,
-          buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput, ~mode),
-        )
+        let resp = await postToClaude(~config, apiKey, body)
         if Fetch.ok(resp) {
           parseClaudeJson(await Fetch.json(resp))
         } else if Fetch.status(resp) == 400 && config.structuredOutput {
           let errText = await Fetch.text(resp)
           if String.includes(errText, "output_config") {
             Console.log("claude: retrying without output_config after 400")
-            let resp2 = await postToClaude(
-              ~config,
-              apiKey,
-              buildRequestBody(~model, ~imageBase64, ~structuredOutput=false, ~mode),
-            )
+            let resp2 = await postToClaude(~config, apiKey, withoutOutputConfig(body))
             if Fetch.ok(resp2) {
               parseClaudeJson(await Fetch.json(resp2))
             } else {
@@ -337,15 +341,37 @@ let send = async (
     }
   }
 
+let send = async (
+  ~config: Config.t,
+  ~model: string,
+  ~imageBase64: string,
+  ~mode: mode,
+): result<decoded, callError> =>
+  await sendBody(
+    ~config,
+    ~mode,
+    ~body=buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput, ~mode),
+  )
+
 // A scene that runs past the timeout makes fetch reject with a DOMException
 // named TimeoutError. Return Timeout(ms) for it, so that the scene route
 // answers 504 with a JSON error and not the generic 500.
-let call = async (~config: Config.t, ~model: string, ~imageBase64: string, ~mode: mode): result<
+let callBody = async (~config: Config.t, ~mode: mode, ~body: JSON.t): result<
   decoded,
   callError,
 > =>
   try {
-    await send(~config, ~model, ~imageBase64, ~mode)
+    await sendBody(~config, ~mode, ~body)
   } catch {
   | JsExn(e) if JsExn.name(e) == Some("TimeoutError") => Error(Timeout(timeoutFor(config)))
   }
+
+let call = async (~config: Config.t, ~model: string, ~imageBase64: string, ~mode: mode): result<
+  decoded,
+  callError,
+> =>
+  await callBody(
+    ~config,
+    ~mode,
+    ~body=buildRequestBody(~model, ~imageBase64, ~structuredOutput=config.structuredOutput, ~mode),
+  )

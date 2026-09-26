@@ -25,6 +25,20 @@ type queueItem = {
   attempts: int,
 }
 
+type placeFix = {lat: float, lon: float, accuracyM: float, tookMs: option<float>}
+
+// The seven states from docs/spec-haul-map.md "The position". Every
+// constructor is prefixed `Place` so none collides with a msg name below —
+// AppState.update switches on both types together.
+type placeState =
+  | PlaceNotAsked
+  | PlaceAsking
+  | PlaceSending(placeFix)
+  | PlaceNotSent(placeFix)
+  | PlaceSaved(option<Types.place>, option<float>)
+  | PlaceDenied
+  | PlaceFailed
+
 type haulPhase =
   | NoHaul
   | Starting
@@ -74,6 +88,9 @@ type model = {
   // The findId of the open gem card in haul mode, or None if every card is
   // closed. At most one card is open at a time (AppState.update, ToggleGem).
   openGem: option<string>,
+  // The device position for this haul (docs/spec-haul-map.md "The
+  // position"). See placeState above for the seven states.
+  place: placeState,
 }
 
 type msg =
@@ -113,6 +130,16 @@ type msg =
   | SetActiveTab(tab)
   | SetSettingsOpen(bool)
   | ToggleGem(string) // a tap on a gem card's findId — same id closes, another switches, None opens
+  // The position (docs/spec-haul-map.md "The position"). PlaceAskAgain is
+  // the Try again tap; StartHaul itself sets PlaceAsking directly, with no
+  // msg of its own.
+  | PlaceAskAgain
+  | PlaceFixed(placeFix)
+  | PlaceGeoDenied
+  | PlaceUnavailable
+  | PlaceSent(string, option<Types.place>)
+  | PlaceSendFailed(string)
+  | PlaceRejected(string)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -135,6 +162,7 @@ let initialModel: model = {
   activeTab: ScanTab,
   settingsOpen: false,
   openGem: None,
+  place: PlaceNotAsked,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -151,6 +179,108 @@ let parseQueueKey = (key: string): option<(string, string)> =>
   | _ => None
   }
 
+let placeKey = (haulId: string): string => "place|" ++ haulId
+
+// Distinct from queueKey's 3-part "q|<haulId>|<clientId>" shape, so a
+// place key never matches parseQueueKey and vice versa (AppStateTest checks
+// this both ways).
+let parsePlaceKey = (key: string): option<string> =>
+  switch String.split(key, "|") {
+  | [prefix, haulId] if prefix == "place" => Some(haulId)
+  | _ => None
+  }
+
+// The exact POST body for /api/hauls/:id/place — always source "gps", the
+// only source the page itself ever produces (a "pin" place is set some
+// other way, out of scope for this spike). This same string is the value
+// written to the place|<haulId> outbox entry.
+let encodePlaceBody = (fix: placeFix): string =>
+  JSON.stringify(
+    Json.obj([
+      ("lat", Json.num(fix.lat)),
+      ("lon", Json.num(fix.lon)),
+      ("accuracyM", Json.num(fix.accuracyM)),
+      ("source", Json.str("gps")),
+    ]),
+  )
+
+// The inverse read, for the outbox: tookMs is never stored (it is only
+// ever known at the moment the fix was measured), so a decoded body always
+// gives None there. Bad JSON, or a body missing lat/lon/accuracyM, is None.
+let decodePlaceBody = (body: string): option<placeFix> =>
+  switch JSON.parseOrThrow(body) {
+  | json =>
+    switch (
+      Json.floatField(json, "lat"),
+      Json.floatField(json, "lon"),
+      Json.floatField(json, "accuracyM"),
+    ) {
+    | (Some(lat), Some(lon), Some(accuracyM)) => Some({lat, lon, accuracyM, tookMs: None})
+    | _ => None
+    }
+  | exception JsExn(_) => None
+  }
+
+// The fix carried by a placeState, when it has one — used by placeLine (the
+// "saved locally" case) and by update (PlaceSent carries the fix already in
+// flight forward into PlaceSaved).
+let fixOfPlaceState = (state: placeState): option<placeFix> =>
+  switch state {
+  | PlaceSending(fix) | PlaceNotSent(fix) => Some(fix)
+  | PlaceSaved(_, _) | PlaceNotAsked | PlaceAsking | PlaceDenied | PlaceFailed => None
+  }
+
+// "±N m", N the accuracy rounded to the nearest metre.
+let placeAccuracyText = (accuracyM: float): string =>
+  "±" ++ Int.toString(Float.toInt(Math.round(accuracyM))) ++ " m"
+
+// " · T s", T the elapsed time in seconds to one decimal place.
+let placeTookText = (tookMs: float): string =>
+  " · " ++ Float.toFixed(tookMs /. 1000.0, ~digits=1) ++ " s"
+
+// The haul view's one-line place status, and whether to show a "Try
+// again" control next to it. First match wins, per
+// docs/spec-haul-map.md "The position":
+// 1. the brain already has a place -> "Place saved" (or, for a pin,
+//    "Place set by hand"), with a " · T s" suffix when this page is the
+//    one that just saved it (PlaceSaved with a tookMs).
+// 2. no brain place yet, but this page saved one locally -> the same text.
+// 3..7: asking / sending / not sent / denied / failed-or-not-asked.
+// placeLine's result: the haul view's one-line status text, and whether to
+// show a Try again control next to it.
+type placeLineText = {text: string, tryAgain: bool}
+
+// The saved-place text for a brain place, shared by both the "brain has it"
+// branch and the "saved locally" PlaceSaved(Some(p), _) branch below.
+let placeSavedText = (p: Types.place, tookMs: option<float>): string => {
+  let took = tookMs->Option.mapOr("", placeTookText)
+  switch p.source {
+  | Pin => "Place set by hand"
+  | Gps => "Place saved · " ++ p.accuracyM->Option.mapOr("", placeAccuracyText) ++ took
+  }
+}
+
+let placeLine = (place: placeState, brain: option<Types.place>): option<placeLineText> =>
+  switch brain {
+  | Some(p) =>
+    let took = switch place {
+    | PlaceSaved(_, tookMs) => tookMs
+    | _ => None
+    }
+    Some({text: placeSavedText(p, took), tryAgain: false})
+  | None =>
+    switch place {
+    | PlaceSaved(Some(p), tookMs) => Some({text: placeSavedText(p, tookMs), tryAgain: false})
+    | PlaceSaved(None, tookMs) =>
+      Some({text: "Place saved" ++ tookMs->Option.mapOr("", placeTookText), tryAgain: false})
+    | PlaceAsking => Some({text: "Finding place…", tryAgain: false})
+    | PlaceSending(_) => Some({text: "Saving place…", tryAgain: false})
+    | PlaceNotSent(_) => Some({text: "Place not sent yet", tryAgain: true})
+    | PlaceDenied => Some({text: "No place", tryAgain: false})
+    | PlaceFailed | PlaceNotAsked => Some({text: "No place yet", tryAgain: true})
+    }
+  }
+
 // The haul payload, regardless of which phase is holding it — lets the
 // poller and the view read "the current status" without a phase match.
 let haulStatusOf = (phase: haulPhase): option<Types.haulStatus> =>
@@ -158,6 +288,13 @@ let haulStatusOf = (phase: haulPhase): option<Types.haulStatus> =>
   | NoHaul | Starting => None
   | Active(status) | Finishing(status) | Finished(status) => Some(status)
   }
+
+// R4: a send-result msg (PlaceSent/PlaceSendFailed/PlaceRejected) names the
+// haul it was sent for. This is false once the user has moved on to a
+// different haul (or none), so update ignores the msg instead of
+// clobbering the new haul's place state with a stale result.
+let isCurrentHaul = (model: model, haulId: string): bool =>
+  haulStatusOf(model.haul)->Option.mapOr(false, status => status.haulId == haulId)
 
 // 5 s, 15 s, then 60 s forever. A photo is never dropped, so there is no
 // final give-up tier.
@@ -218,7 +355,7 @@ let update = (model: model, msg: msg): model =>
   | RttErr(errMsg) => {...model, status: ErrorStatus(errMsg)}
 
   | SetStoreName(name) => {...model, storeName: name}
-  | StartHaul => {...model, haul: Starting, haulError: None}
+  | StartHaul => {...model, haul: Starting, haulError: None, place: PlaceAsking}
   | HaulStarted(status) => {...model, haul: Active(status), haulError: None}
   | HaulStartFailed(msg) => {...model, haul: NoHaul, haulError: Some(msg)}
   | PhotosPicked(_) => model
@@ -283,6 +420,7 @@ let update = (model: model, msg: msg): model =>
       pollCount: 0,
       haulError: None,
       doneAttempts: 0,
+      place: PlaceNotAsked,
     }
   | SelectItem(i) => {...model, selected: Some(i)}
   | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
@@ -295,4 +433,26 @@ let update = (model: model, msg: msg): model =>
       | _ => Some(findId)
       },
     }
+  | PlaceAskAgain => {...model, place: PlaceAsking}
+  | PlaceFixed(fix) => {...model, place: PlaceSending(fix)}
+  | PlaceGeoDenied => {...model, place: PlaceDenied}
+  | PlaceUnavailable => {...model, place: PlaceFailed}
+  | PlaceSent(haulId, place) =>
+    isCurrentHaul(model, haulId)
+      ? {
+          ...model,
+          place: PlaceSaved(place, fixOfPlaceState(model.place)->Option.flatMap(fix => fix.tookMs)),
+        }
+      : model
+  | PlaceSendFailed(haulId) =>
+    isCurrentHaul(model, haulId)
+      ? {
+          ...model,
+          place: switch model.place {
+          | PlaceSending(fix) => PlaceNotSent(fix)
+          | other => other
+          },
+        }
+      : model
+  | PlaceRejected(haulId) => isCurrentHaul(model, haulId) ? {...model, place: PlaceFailed} : model
   }

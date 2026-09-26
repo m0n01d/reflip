@@ -152,6 +152,8 @@ The script prints one JSON result line and puts its screenshots in the output di
 node scripts/haul-smoke.mjs
 ```
 
+`scripts/place-check.mjs` is a repeatable check of the haul view's place line: a saved gps fix, a late haul id, the outbox surviving a reload, a denied prompt, a failed-then-retried prompt, the outbox surviving a reload after Done and the email note, and a privacy check of the brain's own log. Run it the same way, `node scripts/place-check.mjs`. Like `haul-smoke.mjs`, it never sends an email, because `FIXTURES=1` always uses the outbox.
+
 ## Live keys
 
 `~/.config/reflip/env` has all five secrets since 2026-09-25. The first live haul ran that day: 3 photos, $0.42 in Claude, one email sent. `EbayClient.statsFor` returned live eBay stats for the three fixture items the same day.

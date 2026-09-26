@@ -119,7 +119,7 @@ let handleRtt = (
 
 // -- Haul mode routes (docs/spec-haul-mode.md "The routes") -----------------
 
-type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string)
+type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string) | SetPlace(string)
 
 let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
   let parts = pathname->String.split("/")->Array.filter(s => s != "")
@@ -138,6 +138,8 @@ let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
           Some(AddScene(id))
         } else if c == "done" {
           Some(MarkDone(id))
+        } else if c == "place" {
+          Some(SetPlace(id))
         } else {
           None
         }
@@ -212,6 +214,8 @@ let handleCreateHaul = async (
   }
 
 let maxPhotoBytes = 15 * 1024 * 1024
+
+let maxPlaceBytes = 4096
 
 // Shared by handleScene (/api/scene) and StreamRoute.handle
 // (/api/scene/stream): runs the eBay merge and the box decode, in that
@@ -397,6 +401,46 @@ let handleMarkDone = (
       haulStatusResponse(config, store, haulId, 200, res)
     }
   }
+
+let handleSetPlace = async (
+  _config: Config.t,
+  store: Store.t,
+  haulId: string,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+): unit => {
+  let body = await Node.HttpServer.readBody(req)
+  if Node.Buffer.length(body) > maxPlaceBytes {
+    errorJson(res, 413, "body over 4096 bytes")
+  } else {
+    let text = Node.Buffer.toStringWithEncoding(body, "utf8")
+    switch JSON.parseOrThrow(text) {
+    | exception JsExn(_) => errorJson(res, 400, "invalid JSON body")
+    | json =>
+      switch Place.decodeInput(json) {
+      | Error(reason) => errorJson(res, 400, reason)
+      | Ok(input) =>
+        let now = Date.toISOString(Date.make())
+        let place: Types.place = {
+          lat: input.lat,
+          lon: input.lon,
+          accuracyM: input.accuracyM,
+          source: input.source,
+          at: now,
+        }
+        switch Store.setPlace(store, ~haulId, ~place) {
+        | None => errorJson(res, 404, "no such haul")
+        | Some(stored) =>
+          jsonResponse(
+            res,
+            200,
+            Json.obj([("haulId", Json.str(haulId)), ("place", Types.encodePlace(stored))]),
+          )
+        }
+      }
+    }
+  }
+}
 
 let handleScene = async (
   config: Config.t,
@@ -607,6 +651,7 @@ let route = async (
   | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)
   | Some(MarkDone(haulId)) => handleMarkDone(config, store, worker, haulId, res)
   | Some(ScenePhoto(sceneId)) => handleScenePhoto(config, sceneId, res)
+  | Some(SetPlace(haulId)) => await handleSetPlace(config, store, haulId, req, res)
   | None =>
   switch parseScenePath(method, pathname) {
   | Some(Stop(sceneId)) => handleSceneStop(sceneId, res)

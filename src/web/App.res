@@ -326,13 +326,16 @@ let queuePhotos = async (
   let _ = await Promise.all(Array.map(files, file => queuePhoto(dispatch, haulId, file)))
 }
 
-let startHaul = async (dispatch: AppState.msg => unit, storeName: string) => {
+let startHaul = async (dispatch: AppState.msg => unit, storeName: string): option<string> => {
   dispatch(AppState.StartHaul)
   switch await Api.postHaul(storeName) {
   | Ok(status) =>
     await WebApi.idbSetString(AppState.currentHaulKey, status.haulId)
     dispatch(AppState.HaulStarted(status))
-  | Error(msg) => dispatch(AppState.HaulStartFailed(msg))
+    Some(status.haulId)
+  | Error(msg) =>
+    dispatch(AppState.HaulStartFailed(msg))
+    None
   }
 }
 
@@ -360,20 +363,101 @@ let restoreQueueFor = async (dispatch: AppState.msg => unit, haulId: string) => 
 
 // On load: is there a haul in progress? IndexedDB survives a reload, so a
 // haul the page never got to close keeps its queue.
-let restoreHaul = async (dispatch: AppState.msg => unit) =>
+let restoreHaul = async (dispatch: AppState.msg => unit): option<string> =>
   switch (await WebApi.idbGetUnknown(AppState.currentHaulKey))->Nullable.toOption {
-  | None => ()
+  | None => None
   | Some(v) =>
     let haulId = await WebApi.unknownToText(v)
     switch await Api.getHaulStatus(haulId) {
     | Ok(status) =>
       dispatch(AppState.HaulStarted(status))
       await restoreQueueFor(dispatch, haulId)
+      Some(haulId)
     | Error(msg) =>
       await WebApi.idbDel(AppState.currentHaulKey)
       dispatch(AppState.HaulStartFailed(msg))
+      None
     }
   }
+
+// The position (docs/spec-haul-map.md "The position"). Asked in parallel
+// with the haul start, never awaited before it — a slow or denied GPS must
+// not hold up the scan shell showing the haul.
+let askPlace = async (dispatch: AppState.msg => unit): option<AppState.placeFix> =>
+  switch WebApi.geolocation->Nullable.toOption {
+  | None =>
+    dispatch(AppState.PlaceUnavailable)
+    None
+  | Some(geo) => {
+      let start = Date.now()
+      let result = await Promise.make((resolve, _reject) =>
+        WebApi.getCurrentPosition(
+          geo,
+          pos => resolve(Ok(pos)),
+          err => resolve(Error(err)),
+          {WebApi.enableHighAccuracy: true, timeout: 15000, maximumAge: 60000},
+        )
+      )
+      switch result {
+      | Error(err) =>
+        dispatch(err.code == 1 ? AppState.PlaceGeoDenied : AppState.PlaceUnavailable)
+        None
+      | Ok(pos) =>
+        let tookMs = Date.now() -. start
+        let fix: AppState.placeFix = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy,
+          tookMs: Some(tookMs),
+        }
+        dispatch(AppState.PlaceFixed(fix))
+        Some(fix)
+      }
+    }
+  }
+
+// Writes the outbox key before the POST, so a reload before the reply
+// lands still has the fix to retry. Sent and Rejected both clear it — a
+// rejection (400/404) cannot succeed on a resend. NotSent keeps it for
+// the next restorePlaces sweep or Try again tap.
+let sendPlace = async (dispatch: AppState.msg => unit, haulId: string, fix: AppState.placeFix) => {
+  let body = AppState.encodePlaceBody(fix)
+  await WebApi.idbSetString(AppState.placeKey(haulId), body)
+  switch await Api.postPlace(haulId, body) {
+  | Sent(place) =>
+    await WebApi.idbDel(AppState.placeKey(haulId))
+    dispatch(AppState.PlaceSent(haulId, place))
+  | Rejected(_) =>
+    await WebApi.idbDel(AppState.placeKey(haulId))
+    dispatch(AppState.PlaceRejected(haulId))
+  | NotSent(_) => dispatch(AppState.PlaceSendFailed(haulId))
+  }
+}
+
+// Sends every queued place|<id> outbox entry left over from a previous
+// session. Only the current haul's own dispatch reaches the view — a
+// stale entry for a haul that is no longer open sends silently, since no
+// PlaceSaved would have anywhere on screen to land.
+let restorePlaces = async (dispatch: AppState.msg => unit, currentHaulId: option<string>) => {
+  let keys = await WebApi.idbKeysUnknown()
+  let keyTexts = await Promise.all(Array.map(keys, WebApi.unknownToText))
+  let haulIds = keyTexts->Array.filterMap(AppState.parsePlaceKey)
+  let _ = await Promise.all(
+    Array.map(haulIds, async haulId =>
+      switch (await WebApi.idbGetUnknown(AppState.placeKey(haulId)))->Nullable.toOption {
+      | None => ()
+      | Some(v) =>
+        let text = await WebApi.unknownToText(v)
+        switch AppState.decodePlaceBody(text) {
+        | None => ()
+        | Some(fix) =>
+          let sendDispatch = Some(haulId) == currentHaulId ? dispatch : (_ => ())
+          await sendPlace(sendDispatch, haulId, fix)
+        }
+      }
+    ),
+  )
+}
 
 // One upload at a time, per the plan. On success the IndexedDB entry is
 // deleted; on failure the photo stays queued and a backoff timer retries
@@ -754,6 +838,7 @@ module HaulView = {
     ~onDone: ReactEvent.Mouse.t => unit,
     ~onNewHaul: ReactEvent.Mouse.t => unit,
     ~onToggleGem: string => unit,
+    ~onPlaceTryAgain: unit => unit,
   ) => {
     let onPhone = Array.length(model.queue)
     let stopped = status.stopReason->Option.isSome
@@ -776,6 +861,7 @@ module HaulView = {
     let totalPhotos =
       status.counts.queued + status.counts.running + status.counts.valued + status.counts.failed + onPhone
     let storeName = status.name->Option.getOr("")->String.trim
+    let placeLineResult = AppState.placeLine(model.place, status.place)
     let isOffline = model.queue->Array.some(item => item.status == AppState.WaitingRetry)
     let gemsTitle = isWalk && !stopped ? "Gems so far" : "Gems"
     // Tally tiles: build a run of one-tag-per-photo boxes without Belt.Array.make,
@@ -843,6 +929,19 @@ module HaulView = {
             </span>
             <HaulClock startedAt={status.startedAt} />
           </div>
+          {switch placeLineResult {
+          | None => React.null
+          | Some({text, tryAgain}) =>
+            <div className="haul-place-line">
+              <span> {React.string(text)} </span>
+              {tryAgain
+                ? <button
+                    type_="button" className="haul-place-retry" onClick={_ => onPlaceTryAgain()}>
+                    {React.string("Try again")}
+                  </button>
+                : React.null}
+            </div>
+          }}
           <h1 className="scan-headline">
             {React.string(
               gemCount > 0
@@ -1177,9 +1276,16 @@ let make = () => {
   let model = rewind.model
   let dispatch = rewind.dispatch
 
-  // -- mount: restore a haul in progress from IndexedDB ---------------------
+  // -- mount: restore a haul in progress from IndexedDB, then send any
+  // place outbox entries left from a previous session. restoreHaul returns
+  // the restored haul id directly — rewind.live in this closure is fixed to
+  // the first render's value (React.useEffect0 only ever runs this closure
+  // once), so it would never reflect the HaulStarted dispatched above.
   React.useEffect0(() => {
-    restoreHaul(dispatch)->Promise.ignore
+    (async () => {
+      let currentHaulId = await restoreHaul(dispatch)
+      await restorePlaces(dispatch, currentHaulId)
+    })()->Promise.ignore
     None
   })
 
@@ -1329,8 +1435,37 @@ let make = () => {
   let onStoreNameChange = (event: ReactEvent.Form.t) =>
     dispatch(AppState.SetStoreName(WebApi.targetValue(WebApi.eventTarget(event))))
 
-  let onStartHaul = (_event: ReactEvent.Mouse.t) =>
-    startHaul(dispatch, String.trim(model.storeName))->Promise.ignore
+  // The position ask starts alongside the haul start, not after it — a
+  // slow or denied GPS must never hold up the scan shell. Each ask is
+  // paired with its own start: if the start fails, the fix (if any) is
+  // dropped with no extra state, since HaulStartFailed already routes the
+  // view away from anywhere a place line would render.
+  let onStartHaul = (_event: ReactEvent.Mouse.t) => {
+    let started = startHaul(dispatch, String.trim(model.storeName))
+    let asked = askPlace(dispatch)
+    (async () => {
+      let haulId = await started
+      let fix = await asked
+      switch (haulId, fix) {
+      | (Some(id), Some(f)) => await sendPlace(dispatch, id, f)
+      | _ => ()
+      }
+    })()->Promise.ignore
+  }
+
+  // Reads rewind.live, never rewind.model, per the rewind rule (this
+  // repo's CLAUDE.md "Time-travel debugger (rewind)") — a past model must
+  // not send a fix against a haul that is no longer live.
+  let onPlaceTryAgain = (): unit => {
+    dispatch(AppState.PlaceAskAgain)
+    (async () => {
+      let fix = await askPlace(dispatch)
+      switch (fix, AppState.haulStatusOf(rewind.live.haul)) {
+      | (Some(f), Some(status)) => await sendPlace(dispatch, status.haulId, f)
+      | _ => ()
+      }
+    })()->Promise.ignore
+  }
 
   let onToggleGem = (findId: string) => dispatch(AppState.ToggleGem(findId))
 
@@ -1394,6 +1529,7 @@ let make = () => {
         onDone
         onNewHaul
         onToggleGem
+        onPlaceTryAgain
       />
     }}
   </div>
