@@ -162,13 +162,15 @@ the place slice: `POST /api/hauls/:id/place`, the haul status reply's
 `place` field, and `Shared.decodePlace` all already exist and are not
 touched here.
 
-- [ ] P1. WebApi.res: typed geolocation bindings — an abstract `geolocation`
+- [x] P1. WebApi.res: typed geolocation bindings — an abstract `geolocation`
       type, `@val @scope("navigator") external geolocation:
       Nullable.t<geolocation>`, a `@send` `getCurrentPosition` taking
       (success, error, options), and records for the coords (latitude,
       longitude, accuracy), the position (coords), the error (code) and the
-      options (enableHighAccuracy, timeout, maximumAge).
-- [ ] P2. AppState.res, pure, with AppStateTest cases: `placeFix`, a `place`
+      options (enableHighAccuracy, timeout, maximumAge). `npm test`: 973
+      ok, 0 not ok (unchanged — new bindings, not yet called). Commit:
+      35c4c96
+- [x] P2. AppState.res, pure, with AppStateTest cases: `placeFix`, a `place`
       field on the model with states not asked / asking / sending(fix) /
       not sent(fix) / saved(option<fix>) / denied / failed (constructor
       names disjoint from every msg name); msgs asked (Try again),
@@ -176,6 +178,130 @@ touched here.
       rejected; StartHaul sets asking, NewHaul resets to not asked;
       `placeKey`/`parsePlaceKey` (and confirm `parseQueueKey` still ignores
       a place key); `encodePlaceBody`/`decodePlaceBody`; `placeLine`.
+      Implemented per the design notes below, no deviations except one:
+      `placeLine`'s brief signature `option<{text: string, tryAgain:
+      bool}>` does not parse in ReScript 12 (inline record types are only
+      allowed inside a variant constructor or nested in another record
+      type) — added a two-field named type `placeLineText` and return
+      `option<placeLineText>` instead; every call site still reads
+      `Some({text: ..., tryAgain: ...})`. Msg names: `PlaceAskAgain`
+      ("asked (Try again)"), `PlaceFixed(fix)`, `PlaceGeoDenied`
+      ("denied"), `PlaceUnavailable`, `PlaceSent(Types.place)`,
+      `PlaceSendFailed`, `PlaceRejected` — kept distinct from the
+      `Place{NotAsked,Asking,Sending,NotSent,Saved,Denied,Failed}` state
+      constructors per the brief. `PlaceSent`/`PlaceRejected` both read
+      the fix already in flight via a new small helper `fixOfPlaceState`.
+      `npm test`: 1001 ok, 0 not ok (973 baseline + 28 new). Commit:
+      4deb3b4
+
+## Design notes for P3-P5 (so a fresh agent can pick this up cold)
+
+**Api.res (P3)**: add near the other haul-mode functions (postHaul,
+getHaulStatus, postHaulDone). Signature: `postPlace(haulId: string, body:
+string): promise<placeResult>` where `type placeResult = Sent(Types.place)
+| Rejected(int) | NotSent(string)`. Body: `fetchString` POST to
+`/api/hauls/` ++ haulId ++ `/place` with `Content-Type: application/json`,
+same shape as `postHaulDone`/`postHaul`. On `responseOk` decode the JSON's
+"place" field with `Shared.decodePlace` (already exists) — `Some(p) =>
+Sent(p)`, `None => NotSent("could not read the reply: missing place")`. On
+not-ok: status 400 or 404 -> `Rejected(status)`; anything else -> `NotSent(await
+readErrorReason(resp))`. Network error (`JsExn`) -> `NotSent("could not
+reach the server")`.
+
+**App.res (P4)**: `askPlace(dispatch): promise<option<AppState.placeFix>>`
+— `WebApi.geolocation->Nullable.toOption`, `None` dispatches
+`PlaceUnavailable` and resolves `None`. `Some(geo)`: wrap
+`WebApi.getCurrentPosition` in `Promise.make((resolve, _reject) => ...)`
+exactly like `Resize.res`'s `toBlobRaw` wrapper (resolve an `Ok`/`Error`
+so both callbacks funnel through one await); measure `tookMs` with
+`Date.now()` before/after (not `WebApi.now()`/performance.now — the brief
+is explicit: "Measure tookMs with Date.now"); options `{enableHighAccuracy:
+true, timeout: 15000, maximumAge: 60000}`; error code 1 ->
+`PlaceGeoDenied`, any other code -> `PlaceUnavailable`; success -> build an
+`AppState.placeFix` from `pos.coords`, dispatch `PlaceFixed(fix)`, resolve
+`Some(fix)`.
+
+`sendPlace(dispatch, haulId, fix)`: `await
+WebApi.idbSetString(AppState.placeKey(haulId),
+AppState.encodePlaceBody(fix))`, then `Api.postPlace`. `Sent(place) =>`
+delete the outbox key, `dispatch(AppState.PlaceSent(place))`.
+`Rejected(_) =>` delete the outbox key (a resend cannot succeed),
+`dispatch(AppState.PlaceRejected)`. `NotSent(_) =>` keep the key,
+`dispatch(AppState.PlaceSendFailed)`. For "send the others silently" on
+load (below), call this same function with `dispatch = _ => ()`.
+
+Wire into `onStartHaul` (around App.res L1332): change `startHaul` to
+return `promise<option<string>>` (the new haulId on success, `None` on
+`HaulStartFailed` — it already dispatches either way, just add `Some(...)`
+/`None` as the resolved value after each dispatch). Kick off `let started
+= startHaul(...)` and `let asked = askPlace(dispatch)` in the same
+handler (both start immediately — this is what "must not wait" means),
+then `(async () => { let haulId = await started; let fix = await asked;
+switch (haulId, fix) { | (Some(id), Some(f)) => await sendPlace(dispatch,
+id, f) | _ => () } })()->Promise.ignore`. A failed start naturally drops
+the fix (the `_ => ()` branch) with no extra state needed — `HaulStartFailed`
+already routes the view back to `NoHaul`/`ScanShell`, where `place` is not
+rendered, and the next `StartHaul` resets `place` to `PlaceAsking` anyway.
+
+A "Try again" handler (new, wired to the P5 button): `let
+onPlaceTryAgain = (_event) => { dispatch(AppState.PlaceAskAgain);
+(async () => { let fix = await askPlace(dispatch); switch (fix,
+AppState.haulStatusOf(rewind.live.haul)) { | (Some(f), Some(status)) =>
+await sendPlace(dispatch, status.haulId, f) | _ => () } })()
+->Promise.ignore }` — reads `rewind.live`, never `model`, per the
+rewind rule in this repo's CLAUDE.md. Pass it down to `HaulView` as a new
+prop, e.g. `~onPlaceTryAgain`.
+
+On-load restore (new function near `restoreHaul`/`restoreQueueFor`, called
+from the same `React.useEffect0` mount effect right after `restoreHaul`
+resolves — needs sequencing, e.g. `restoreHaul(dispatch)->then(() =>
+restorePlaces(dispatch))`, since it needs to know the just-restored current
+haul id): `restorePlaces(dispatch)` reads `WebApi.idbKeysUnknown()`, maps
+through `unknownToText`, `Array.filterMap(AppState.parsePlaceKey)` (each
+match is a bare haulId, unlike `parseQueueKey`'s pair), then for each
+haulId reads `WebApi.idbGetUnknown(AppState.placeKey(haulId))`, decodes
+with `AppState.decodePlaceBody` (drop silently on `None`), and calls
+`sendPlace` — pass the real `dispatch` only when
+`Some(haulId) == AppState.haulStatusOf(model.haul)->Option.map(s =>
+s.haulId)` (read via a snapshot taken once before the loop, e.g. inside
+the `then` callback where the restored model is known), else `_ => ()`.
+
+**View (P5)**: in `HaulView.make` (src/web/App.res, module starts L746),
+add `~onPlaceTryAgain: unit => unit` to the props list, and read
+`model.place` (already passed via the existing `~model` prop — no new
+prop needed for the state) plus `status.place` (already on
+`Types.haulStatus`). Compute `let placeLineResult =
+AppState.placeLine(model.place, status.place)` near the other
+header-area `let`s (around L778, next to `storeName`). In the JSX, inside
+`.scan-card-top-row`'s parent block, right after that row closes (after
+L845's `</div>`, i.e. right after the `HaulClock`), render: `{switch
+placeLineResult { | None => React.null | Some({text, tryAgain}) =>
+<div className="haul-place-line"> <span> {React.string(text)} </span>
+{tryAgain ? <button type_="button" className="haul-place-retry"
+onClick={_ => onPlaceTryAgain()}> {React.string("Try again")} </button>
+: React.null} </div> }}`. Note ReScript's JSX prop for the HTML `type`
+attribute on `<button>` is `type_` (see other `<input type_=...>` uses
+in this file, e.g. ScanShell/EbayBlock, if any — grep first). Wire the
+new prop through at the call site (App.res L1387-1397,
+`<HaulView model phase status ... />`) with `onPlaceTryAgain` (the
+handler from P4). CSS: add `.haul-place-line` (quiet meta text — mirror
+`.haul-stop-note`'s `color: var(--scan-mode-track); font-size: 13px;
+line-height: 1.4;`, plus `margin-top: 2px; display: flex; align-items:
+baseline; gap: 6px; flex-wrap: wrap;`) and `.haul-place-retry` (a small
+text button: `background: none; border: none; padding: 0; font: inherit;
+font-size: 13px; color: var(--scan-link); text-decoration: underline;
+text-underline-offset: 2px; cursor: pointer;`) to `src/web/scan.css`,
+near `.haul-store-name` (L1815) / `.haul-stop-note` (L1808).
+
+After P4/P5 land, run `npm run build` and use dev-browser (or the iOS
+Simulator's Safari, since this is a phone page — geolocation needs a
+secure context, and `http://127.0.0.1` counts) to tap "Add photos" via
+`FIXTURES=1 PORT=8787 npm start`, confirm the haul view shows a place
+line (the browser will prompt for location permission — grant it for a
+real "Place saved" line, or deny it to see "No place" — geolocation is not
+in fixture mode's scope, it talks to the real browser API and the real
+`/api/hauls/:id/place` route, which is already live per step 4 above).
+Screenshot both the granted and the denied paths before calling P5 done.
 - [ ] P3. Api.res: `postPlace(haulId, body)` → `Sent(Types.place)` on 200,
       `Rejected(status)` on 400/404, `NotSent(reason)` otherwise (bad
       status, network error, or a 200 whose place does not decode).
