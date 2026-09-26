@@ -1332,6 +1332,19 @@ body:has(.scan-shell) {
   font-weight: 650;
 }
 
+.scan-ebay-sub {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--scan-muted);
+}
+
+.scan-ebay-hint {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--scan-muted);
+}
+
 .scan-ebay-note {
   margin-top: 2px;
   font-family: var(--scan-font-mono);
