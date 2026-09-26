@@ -410,53 +410,325 @@ let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
 // its box drawn on it (PhotoView, reused from the scene view) — a tap on
 // the sold link must not also toggle the card, so that link stops the
 // click from bubbling up to the card's own onClick.
+// The walk ticket's elapsed-time clock (decision 6): a leaf component with
+// its own 1s interval, so the tick lives here and not in a model field —
+// a model tick would add one rewind entry every second. `startedAt` is
+// the haul's ISO 8601 start time from the server; HaulLayout.clockText
+// does the "m:ss, or h:mm:ss after an hour" text formatting.
+module HaulClock = {
+  @react.component
+  let make = (~startedAt: string) => {
+    let startMs = Date.getTime(Date.fromString(startedAt))
+    let (nowMs, setNowMs) = React.useState(() => Date.now())
+    React.useEffect(() => {
+      let id = WebApi.setInterval(() => setNowMs(_ => Date.now()), 1000)
+      Some(() => WebApi.clearInterval(id))
+    }, [])
+    let elapsedSeconds = Float.toInt(Math.max(0.0, (nowMs -. startMs) /. 1000.0))
+    <span className="haul-clock"> {React.string(HaulLayout.clockText(elapsedSeconds))} </span>
+  }
+}
+
+// One gem in the Haul gems list: a collapsed row (a 44x44 photo thumbnail
+// with an orange rank sticker, name, where, price and confidence) that
+// expands in place into the detail — a 358x184 crop of the gem's own box
+// plus number stickers for any OTHER gems sharing the same photo, size,
+// price, confidence dots, where, and the eBay range-bar block or "No eBay
+// stats". Restyled from docs/design/haul-ui/Main.dc.html L207-298 (step
+// 3 of the Haul UI restyle brief). `rank` is the gem's 1-based position
+// in `allGems` (decision 4 — the API already sorts best-first), and
+// `allGems` is `status.gems` itself, passed down so this card can find
+// its own photo's OTHER gems for the pin stickers without HaulLayout
+// needing to know about ranking.
 module GemCard = {
   @react.component
-  let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
-    <li className="item" onClick={_ => onToggle(gem.findId)}>
-      <div className="item-top">
-        <CropView
-          box={gem.box}
-          photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-          imageWidth={gem.imageWidth}
-          imageHeight={gem.imageHeight}
-        />
-        <div className="item-info">
-          <div className="item-name">
-            {React.string(gem.name)}
-            {gem.size == "" ? React.null : React.string(" (" ++ gem.size ++ ")")}
-          </div>
-          <div className="item-range">
-            {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
-          </div>
+  let make = (
+    ~gem: Types.haulGem,
+    ~rank: int,
+    ~allGems: array<Types.haulGem>,
+    ~isOpen: bool,
+    ~onToggle: string => unit,
+  ) => {
+    let label =
+      "Gem " ++
+      Int.toString(rank) ++
+      ": " ++
+      gem.name ++
+      ", " ++
+      ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd) ++
+      ", " ++
+      ScanState.confidenceWord(gem.confidence)
+    <div className={rank == 1 ? "haul-gem-item haul-gem-item-first" : "haul-gem-item"}>
+      <button
+        type_="button"
+        ariaLabel={label}
+        ariaExpanded={isOpen}
+        className="haul-gem-row"
+        onClick={_ => onToggle(gem.findId)}>
+        <span className="haul-gem-thumb-wrap">
+          <span className="haul-gem-thumb">
+            {switch (gem.box, gem.imageWidth, gem.imageHeight) {
+            | (Some(box), Some(imageWidth), Some(imageHeight)) =>
+              let t = HaulLayout.thumbOf(box, ~imageWidth, ~imageHeight)
+              <img
+                className="haul-gem-thumb-img"
+                src={Api.scenePhotoUrl(gem.sceneId)}
+                alt=""
+                style={{
+                  JsxDOMStyle.left: HaulLayout.pxStr(t.imgLeftPx),
+                  top: HaulLayout.pxStr(t.imgTopPx),
+                  width: HaulLayout.pxStr(t.imgWidthPx),
+                }}
+              />
+            | _ => React.null
+            }}
+          </span>
+          <span className="haul-gem-sticker"> {React.string(Int.toString(rank))} </span>
+        </span>
+        <span className="haul-gem-info">
+          <span className="haul-gem-name"> {React.string(gem.name)} </span>
           {switch gem.where {
-          | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+          | Some(w) => <span className="haul-gem-where"> {React.string(w)} </span>
           | None => React.null
           }}
-          <div className="item-confidence">
-            {React.string("confidence " ++ fmtPct(gem.confidence))}
-          </div>
-        </div>
-      </div>
-      <EbayBlock ebay={gem.ebay} />
-      <a
-        className="sold-link"
-        href={gem.soldSearchUrl}
-        target="_blank"
-        rel="noreferrer"
-        onClick={ReactEvent.Mouse.stopPropagation}>
-        {React.string("Sold listings")}
-      </a>
+        </span>
+        <span className="haul-gem-price-col">
+          <span className="haul-gem-price">
+            {React.string(ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd))}
+          </span>
+          <span className="haul-gem-conf">
+            {React.string(ScanState.confidenceWord(gem.confidence))}
+          </span>
+        </span>
+      </button>
       {isOpen
-        ? <PhotoView
-            photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-            imageWidth={gem.imageWidth}
-            imageHeight={gem.imageHeight}
-            selectedBox={gem.box}
-            onPhotoTap={_ => ()}
-          />
+        ? {
+            let filled = Float.toInt(Math.round(gem.confidence *. 5.0))
+            <div className="haul-gem-detail">
+              <div className="scan-sheet-crop">
+                {switch (gem.box, gem.imageWidth, gem.imageHeight) {
+                | (Some(box), Some(imageWidth), Some(imageHeight)) =>
+                  let crop = HaulLayout.cropOf(box, ~imageWidth, ~imageHeight)
+                  let others =
+                    allGems
+                    ->Array.mapWithIndex((g, i) => (i + 1, g))
+                    ->Array.filter(((r, g)) => r != rank && g.sceneId == gem.sceneId)
+                    ->Array.filterMap(((r, g)) =>
+                      switch g.box {
+                      | Some(b) => Some((r, b))
+                      | None => None
+                      }
+                    )
+                  let pins = HaulLayout.pinsOn(~crop, ~others)
+                  <>
+                    <img
+                      className="scan-sheet-crop-img"
+                      src={Api.scenePhotoUrl(gem.sceneId)}
+                      alt={"Close-up of " ++ Int.toString(rank)}
+                      style={{
+                        JsxDOMStyle.left: HaulLayout.pxStr(crop.imgLeftPx),
+                        top: HaulLayout.pxStr(crop.imgTopPx),
+                        width: HaulLayout.pxStr(crop.imgWidthPx),
+                      }}
+                    />
+                    <span
+                      className="scan-sheet-crop-box"
+                      style={{
+                        JsxDOMStyle.left: HaulLayout.pxStr(crop.boxLeftPx),
+                        top: HaulLayout.pxStr(crop.boxTopPx),
+                        width: HaulLayout.pxStr(crop.boxWidthPx),
+                        height: HaulLayout.pxStr(crop.boxHeightPx),
+                      }}
+                    />
+                    {pins
+                    ->Array.map(p =>
+                      <span
+                        key={p.num}
+                        className="haul-crop-pin"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(p.leftPx),
+                          top: HaulLayout.pxStr(p.topPx),
+                          transform: "rotate(" ++ Int.toString(p.rotateDeg) ++ "deg)",
+                        }}>
+                        {React.string(p.num)}
+                      </span>
+                    )
+                    ->React.array}
+                  </>
+                | _ => React.null
+                }}
+              </div>
+              {gem.size == ""
+                ? React.null
+                : <div className="haul-gem-size"> {React.string(gem.size)} </div>}
+              <div className="scan-sheet-price-row">
+                <span className="scan-sheet-price">
+                  {React.string(ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd))}
+                </span>
+                <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
+              </div>
+              <div className="scan-sheet-conf-row">
+                <span className="scan-sheet-dots">
+                  {[0, 1, 2, 3, 4]
+                  ->Array.map(i =>
+                    <span
+                      key={Int.toString(i)}
+                      className={"scan-sheet-dot" ++ (i < filled ? " scan-sheet-dot-filled" : "")}
+                    />
+                  )
+                  ->React.array}
+                </span>
+                <span className="scan-sheet-conf-word">
+                  {React.string(ScanState.confidenceWord(gem.confidence))}
+                </span>
+                <span className="scan-sheet-conf-num">
+                  {React.string(Float.toFixed(gem.confidence, ~digits=2))}
+                </span>
+              </div>
+              {switch gem.where {
+              | Some(w) =>
+                <div className="haul-gem-where-row">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M12 21s-6.5-5.6-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z" />
+                    <circle cx="12" cy="10.5" r="2.3" />
+                  </svg>
+                  <span> {React.string(w)} </span>
+                </div>
+              | None => React.null
+              }}
+              <div className="scan-ebay">
+                <div className="scan-ebay-top">
+                  <span className="scan-ebay-label"> {React.string("eBay")} </span>
+                  <span className="scan-ebay-flag">
+                    {React.string(
+                      gem.ebay->Option.isSome
+                        ? "· active asking, not sold"
+                        : "· no stats",
+                    )}
+                  </span>
+                </div>
+                {switch gem.ebay {
+                | Some(stats) =>
+                  let labMin = fmtUsd(stats.minUsd)
+                  let labMed = fmtUsd(stats.medianUsd)
+                  let labMax = fmtUsd(stats.maxUsd)
+                  let bandText =
+                    "Claude’s " ++ ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd)
+                  let bar = HaulLayout.barOf(
+                    ~ebay=stats,
+                    ~lowUsd=gem.estimateLowUsd,
+                    ~highUsd=gem.estimateHighUsd,
+                    ~labMin,
+                    ~labMed,
+                    ~labMax,
+                    ~bandText,
+                  )
+                  let barAriaLabel =
+                    "eBay asking prices " ++
+                    labMin ++
+                    " to " ++
+                    labMax ++
+                    ", median " ++
+                    labMed ++
+                    ". " ++
+                    bandText ++
+                    "."
+                  <>
+                    <div className="haul-ebay-stats">
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("listings")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(Int.toString(stats.count))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("range")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(fmtUsd(stats.minUsd) ++ "–" ++ fmtUsd(stats.maxUsd))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("median")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(fmtUsd(stats.medianUsd))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="haul-ebay-bar" role="img" ariaLabel={barAriaLabel}>
+                      <span
+                        className="haul-ebay-bar-label"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMinLeftPx), top: "0px"}}>
+                        {React.string(labMin)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-label haul-ebay-bar-label-med"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMedLeftPx), top: "0px"}}>
+                        {React.string(labMed)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-label"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMaxLeftPx), top: "0px"}}>
+                        {React.string(labMax)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-line"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(bar.lineLeftPx),
+                          width: HaulLayout.pxStr(bar.lineWidthPx),
+                        }}
+                      />
+                      <span
+                        className="haul-ebay-bar-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.tickMinLeftPx)}}
+                      />
+                      <span
+                        className="haul-ebay-bar-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.tickMaxLeftPx)}}
+                      />
+                      <span
+                        className="haul-ebay-bar-med-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.medLeftPx)}}
+                      />
+                      <span className="haul-ebay-bar-track-bg" />
+                      <span
+                        className="haul-ebay-bar-band"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(bar.bandLeftPx),
+                          width: HaulLayout.pxStr(bar.bandWidthPx),
+                        }}
+                      />
+                      <span
+                        className="haul-ebay-bar-band-text"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.bandTextLeftPx)}}>
+                        {React.string(bandText)}
+                      </span>
+                    </div>
+                  </>
+                | None => <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                }}
+                <a
+                  className="scan-ebay-sold-btn"
+                  href={gem.soldSearchUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={ReactEvent.Mouse.stopPropagation}>
+                  {React.string("Check sold prices on eBay")}
+                </a>
+              </div>
+            </div>
+          }
         : React.null}
-    </li>
+    </div>
+  }
 }
 
 module HaulView = {
@@ -550,10 +822,12 @@ module HaulView = {
       {Array.length(status.gems) > 0
         ? <ul className="items">
             {status.gems
-            ->Array.map(gem =>
+            ->Array.mapWithIndex((gem, i) =>
               <GemCard
                 key={gem.findId}
                 gem
+                rank={i + 1}
+                allGems=status.gems
                 isOpen={model.openGem == Some(gem.findId)}
                 onToggle=onToggleGem
               />

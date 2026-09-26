@@ -226,4 +226,10 @@ let run = () => {
 
   // -- pxStr -----------------------------------------------------------------
   TestKit.check("pxStr rounds to one decimal", HaulLayout.pxStr(39.8342) == "39.8px")
+
+  // -- clockText ---------------------------------------------------------
+  TestKit.check("clockText under a minute", HaulLayout.clockText(7) == "0:07")
+  TestKit.check("clockText under an hour", HaulLayout.clockText(125) == "2:05")
+  TestKit.check("clockText after an hour", HaulLayout.clockText(3661) == "1:01:01")
+  TestKit.check("clockText clamps a negative value to 0", HaulLayout.clockText(-5) == "0:00")
 }

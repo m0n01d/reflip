@@ -270,3 +270,21 @@ let barOf = (
 // -- A CSS pixel string, one decimal place, same as canvas's px() helper --
 
 let pxStr = (v: float): string => Float.toFixed(v, ~digits=1) ++ "px"
+
+// -- The walk ticket's clock (decision 6) --------------------------------
+
+// Zero-pad to two digits (canvas's two()).
+let two = (n: int): string => n < 10 ? "0" ++ Int.toString(n) : Int.toString(n)
+
+// Elapsed time since the haul started: "m:ss" under an hour, "h:mm:ss"
+// after (decision 6). This is only the text formatting — App.res's
+// HaulClock leaf component owns the 1s tick and the Date math that
+// produces `elapsedSeconds`, so a model tick does not add a rewind entry
+// every second.
+let clockText = (elapsedSeconds: int): string => {
+  let v = elapsedSeconds < 0 ? 0 : elapsedSeconds
+  let h = v / 3600
+  let m = mod(v, 3600) / 60
+  let s = mod(v, 60)
+  h > 0 ? Int.toString(h) ++ ":" ++ two(m) ++ ":" ++ two(s) : Int.toString(m) ++ ":" ++ two(s)
+}
