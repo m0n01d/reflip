@@ -78,7 +78,7 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 - `App.make` renders `rewind.model`, not a plain `useReducer` state. While paused on a past entry, the screen shows that past state.
 - Effects and refs must read `rewind.live`, not `rewind.model`. A past model once stopped and aborted a live scan. Two effects had this bug, H1 and H2, fixed on 2026-09-25.
 - Read `rewind.live` in any new effect or ref that touches the network or a live handle.
-- The library is `github:m0n01d/rewind`. The repo is private now.
+- The library is `github:m0n01d/rewind`. The repo became public on 2026-09-25, so a cloud session installs it with no GitHub key. npm downloads it as a tarball from `codeload.github.com`, so the `git+ssh` URL in the lockfile does not need a key.
 - The panel hides its Export and Import buttons. reflip calls `Rewind.use` with no `~codec`. A live click-path check on 2026-09-25 confirmed both buttons stay off the panel.
 
 ## How to run
