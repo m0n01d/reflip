@@ -406,20 +406,47 @@ After that, `node scripts/haul-smoke.mjs --skip-build` passed.
 
 A reviewer read the diff to `7d47a4d`. The brain half is sound. Do these, then run C1 and C2.
 
-- [ ] R1. App.res mount effect: `restoreHaul` returns the restored haul id (`option<string>`),
-      and `restorePlaces` gets that id. `rewind.live` in that closure is the first render's
-      value, so today the current haul id is always None there.
-- [ ] R2. `PlaceSaved` keeps the brain's reply: `PlaceSaved(option<Types.place>, option<float>)`,
-      with the second value the tookMs. `placeLine` shows "Place saved", with " · ±N m" and
-      " · T s" when known, for every saved state. It never shows "No place yet" for a saved state.
+- [x] R1 (commit e769567). App.res mount effect: `restoreHaul` returns the restored haul id
+      (`option<string>`), and `restorePlaces` gets that id directly. Removed the wrong
+      comment — `rewind.live` in that closure is fixed to the first render's value
+      (`React.useEffect0`'s closure runs once), so it never reflected the HaulStarted
+      dispatch. `npm test`: 1001 ok, 0 not ok.
+- [x] R2 (commit 271053c). `src/web/AppState.res` so far:
+      `placeState`'s `PlaceSaved` is now `PlaceSaved(option<Types.place>, option<float>)` (was
+      `option<placeFix>`); `msg`'s `PlaceSent` is now `PlaceSent(option<Types.place>)` (was
+      `Types.place`); `fixOfPlaceState`'s `PlaceSaved` arm now returns `None` (a saved state no
+      longer carries a full fix). Still to do, in order:
+      1. `placeLine` (L242ish): rewrite so the "brain: None" branch's `PlaceSaved` case reads
+         the new two-field payload and never returns "No place yet" for it. Plan: a local
+         `placeSavedText = (p: Types.place, tookMs: option<float>): string` (switch on
+         `p.source`, Pin -> "Place set by hand", Gps -> "Place saved · " ++ accuracy ++ took)
+         used by both the `Some(p)` branch (brain has it) and `PlaceSaved(Some(p), tookMs)`;
+         add a `PlaceSaved(None, tookMs)` arm giving `"Place saved" ++ took` (R5 will make Api
+         return this shape on a 200 whose place doesn't decode — still counts as saved).
+      2. `update`'s `PlaceSent(place)` case: build
+         `PlaceSaved(place, fixOfPlaceState(model.place)->Option.flatMap(fix => fix.tookMs))`.
+      3. `src/web/App.res` `sendPlace`'s `Sent(place) => ... dispatch(AppState.PlaceSent(Some(place)))`
+         (wrap in `Some`; `Api.postPlace` itself is untouched until R5).
+      4. `src/tests/AppStateTest.res` `runPlace`: every `AppState.PlaceSaved(Some(fix))` literal
+         and the `AppState.PlaceSent({...})` call need the new shapes. Add the two cases the
+         brief calls for: a `PlaceSent` dispatched from `PlaceAsking`/`PlaceFailed`/`PlaceNotAsked`
+         gives `placeLine` text "Place saved · ±N m" (no took suffix, since `fixOfPlaceState`
+         gives `None` from those states); a `PlaceSent` from `PlaceSending(fix-with-tookMs)`
+         keeps the fix's `tookMs` and the text adds " · T s". Build the `Types.place` value used
+         in `PlaceSent`'s payload with `accuracyM: Some(13.0)` etc., `source: Gps`.
+      5. `npx rescript build`, fix fallout, `npm test`, then commit and tick this line.
+      Do R4 (haul id on the same three msgs) as a separate step/commit after R2 is green — R4
+      changes `PlaceSent`/`PlaceSendFailed`/`PlaceRejected`'s payload again (prepend `string`),
+      touching the same `update` arms and the same `sendPlace` call site, so finish R2 first.
 - [ ] R3. The worker sends the body from `requestBodyFor`. ClaudeClient gets a send that takes a
       body. Its 400 retry removes the "output_config" key from that same body. The old
       `send`/`call` go through it, so the scan route is unchanged. HaulWorker gets
       `requestFor(t, scene)`, which gives the model, the mode and the body. `requestBodyFor` maps it
       to the body, and runScene sends that body. Test: the body with structuredOutput true,
       minus "output_config", equals the body with structuredOutput false.
-- [ ] R4. The send-result msgs (sent, send failed, rejected) carry the haul id. `update` ignores
-      a msg whose haul id is not the current haul's.
-- [ ] R5. `Place.decodeInput` rejects a lat, lon or accuracyM that is not finite (`1e999`).
-      `Api.postPlace`: a 200 whose place does not decode deletes the key and counts as saved.
+- [x] R4 (commit 37314a9). The send-result msgs (sent, send failed, rejected) carry the haul id.
+      `update` ignores a msg whose haul id is not the current haul's.
+- [x] R5 (commit 6a8f1c5). `Place.decodeInput` rejects a lat, lon or accuracyM that is not finite
+      (`1e999`). `Api.postPlace`: a 200 whose place does not decode deletes the key and counts as
+      saved.
 
