@@ -1168,14 +1168,9 @@ body:has(.scan-shell) {
 }
 
 .scan-sheet-crop {
-  /* Full-bleed: HaulLayout.cropOf assumes this box renders at exactly
-     358px (the card's outer width), so this cancels the 14px side
-     padding of the .haul-gem-detail parent it sits in (its only user,
-     confirmed by grep) rather than being inset like the surrounding
-     text rows. */
   position: relative;
-  margin: 4px -14px 0;
-  width: auto;
+  margin-top: 4px;
+  width: 100%;
   height: 184px;
   border-radius: 12px;
   overflow: hidden;
@@ -1308,12 +1303,7 @@ body:has(.scan-shell) {
 /* -- eBay block ------------------------------------------------------------------- */
 
 .scan-ebay {
-  /* Full-bleed like .scan-sheet-crop above: HaulLayout.barWidthPx assumes
-     this box's own 14px padding + 1px border is the only inset (matching
-     the canvas, EbayBlock.dc.html), so cancel the .haul-gem-detail
-     parent's 14px side padding here too (its only user, confirmed by
-     grep) instead of stacking a second inset on top of it. */
-  margin: 16px -14px 0;
+  margin-top: 16px;
   padding: 14px;
   border: 1px solid var(--scan-card-border);
   border-radius: var(--scan-radius);
@@ -1598,6 +1588,18 @@ body:has(.scan-shell) {
   padding: 0 14px 16px;
   overflow: hidden;
   animation: haul-gem-detail-open .25s ease-out;
+}
+
+/* Full-bleed inside a gem detail, as on the canvas. HaulLayout.cropOf
+   assumes a 358 px crop and HaulLayout.barWidthPx a 328 px eBay track, so
+   cancel the detail's 14 px side padding. Scan's sheet keeps its inset. */
+.haul-gem-detail .scan-sheet-crop {
+  margin: 4px -14px 0;
+  width: auto;
+}
+
+.haul-gem-detail .scan-ebay {
+  margin: 16px -14px 0;
 }
 
 /* A true grid-rows accordion needs the detail's children collapsed into one

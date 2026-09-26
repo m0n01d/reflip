@@ -993,8 +993,9 @@ module HaulView = {
       | Finishing(_) => React.null
       | _ =>
         switch model.haulError {
-        | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
-        | None => React.null
+        // The offline notice already says why an upload is waiting.
+        | Some(msg) if !isOffline => <div className="haul-error"> {React.string(msg)} </div>
+        | _ => React.null
         }
       }}
       {walkingOrFinishing && Array.length(status.failed) > 0
