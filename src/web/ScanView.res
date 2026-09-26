@@ -377,7 +377,11 @@ let make = (
           : React.null}
         {ScanState.isEnded(model) && Array.length(alsoItems) > 0
           ? <div className="scan-also">
-              <button type_="button" onClick={toggleAlso} className="scan-also-toggle">
+              <button
+                type_="button"
+                onClick={toggleAlso}
+                ariaExpanded={alsoOpen}
+                className="scan-also-toggle">
                 <span className="scan-also-title-col">
                   <span className="scan-also-title">
                     {React.string("Also seen · " ++ Int.toString(Array.length(alsoItems)))}
