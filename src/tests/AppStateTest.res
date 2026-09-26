@@ -242,12 +242,15 @@ let runPlace = () => {
   TestKit.check("a fresh model has not asked for a place", p0.place == AppState.PlaceNotAsked)
   let p1 = AppState.update(p0, AppState.StartHaul)
   TestKit.check("StartHaul sets asking", p1.place == AppState.PlaceAsking)
+  // R4: the send-result msgs below carry a haul id and are ignored unless
+  // it matches the model's current (Active) haul, so give p1 one to match.
+  let p1Active = {...p1, haul: AppState.Active(sampleHaulStatus)}
   let p1b = {...p1, place: AppState.PlaceSaved(None, None)}
   let p1c = AppState.update(p1b, AppState.NewHaul)
   TestKit.check("NewHaul resets the place back to not asked", p1c.place == AppState.PlaceNotAsked)
 
   // -- the msg transitions --------------------------------------------------
-  let p2 = AppState.update(p1, AppState.PlaceFixed(fix))
+  let p2 = AppState.update(p1Active, AppState.PlaceFixed(fix))
   TestKit.check("PlaceFixed moves asking to sending, with the fix", p2.place == AppState.PlaceSending(fix))
   let sentPlace: Types.place = {
     lat: fix.lat,
@@ -256,7 +259,7 @@ let runPlace = () => {
     source: Gps,
     at: "2026-09-26T00:00:00.000Z",
   }
-  let p3 = AppState.update(p2, AppState.PlaceSent(Some(sentPlace)))
+  let p3 = AppState.update(p2, AppState.PlaceSent("haul-1", Some(sentPlace)))
   TestKit.check(
     "PlaceSent moves sending to saved, keeping the fix's tookMs that was in flight",
     p3.place == AppState.PlaceSaved(Some(sentPlace), Some(456.0)),
@@ -266,7 +269,7 @@ let runPlace = () => {
     AppState.placeLine(p3.place, None) ==
       Some({AppState.text: "Place saved · ±13 m · 0.5 s", tryAgain: false}),
   )
-  let p3b = AppState.update(p1, AppState.PlaceSent(Some(sentPlace)))
+  let p3b = AppState.update(p1Active, AppState.PlaceSent("haul-1", Some(sentPlace)))
   TestKit.check(
     "PlaceSent from asking (no fix in flight) saves with no tookMs",
     p3b.place == AppState.PlaceSaved(Some(sentPlace), None),
@@ -276,10 +279,18 @@ let runPlace = () => {
     AppState.placeLine(p3b.place, None) ==
       Some({AppState.text: "Place saved · ±13 m", tryAgain: false}),
   )
-  let p4 = AppState.update(p2, AppState.PlaceSendFailed)
+  // R4: a send-result msg for a haul that is not (or no longer) the
+  // model's current haul is ignored outright.
+  let p3Stale = AppState.update(p2, AppState.PlaceSent("haul-2", Some(sentPlace)))
+  TestKit.check("PlaceSent for a different haul is ignored", p3Stale.place == p2.place)
+  let p4 = AppState.update(p2, AppState.PlaceSendFailed("haul-1"))
   TestKit.check("PlaceSendFailed moves sending to not sent, keeping the fix", p4.place == AppState.PlaceNotSent(fix))
-  let p5 = AppState.update(p2, AppState.PlaceRejected)
+  let p4Stale = AppState.update(p2, AppState.PlaceSendFailed("haul-2"))
+  TestKit.check("PlaceSendFailed for a different haul is ignored", p4Stale.place == p2.place)
+  let p5 = AppState.update(p2, AppState.PlaceRejected("haul-1"))
   TestKit.check("PlaceRejected moves to failed (a resend cannot succeed)", p5.place == AppState.PlaceFailed)
+  let p5Stale = AppState.update(p2, AppState.PlaceRejected("haul-2"))
+  TestKit.check("PlaceRejected for a different haul is ignored", p5Stale.place == p2.place)
   let p6 = AppState.update(p1, AppState.PlaceGeoDenied)
   TestKit.check("PlaceGeoDenied moves asking to denied", p6.place == AppState.PlaceDenied)
   let p7 = AppState.update(p1, AppState.PlaceUnavailable)

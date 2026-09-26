@@ -137,9 +137,9 @@ type msg =
   | PlaceFixed(placeFix)
   | PlaceGeoDenied
   | PlaceUnavailable
-  | PlaceSent(option<Types.place>)
-  | PlaceSendFailed
-  | PlaceRejected
+  | PlaceSent(string, option<Types.place>)
+  | PlaceSendFailed(string)
+  | PlaceRejected(string)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -289,6 +289,13 @@ let haulStatusOf = (phase: haulPhase): option<Types.haulStatus> =>
   | Active(status) | Finishing(status) | Finished(status) => Some(status)
   }
 
+// R4: a send-result msg (PlaceSent/PlaceSendFailed/PlaceRejected) names the
+// haul it was sent for. This is false once the user has moved on to a
+// different haul (or none), so update ignores the msg instead of
+// clobbering the new haul's place state with a stale result.
+let isCurrentHaul = (model: model, haulId: string): bool =>
+  haulStatusOf(model.haul)->Option.mapOr(false, status => status.haulId == haulId)
+
 // 5 s, 15 s, then 60 s forever. A photo is never dropped, so there is no
 // final give-up tier.
 // The "uploaded" chip. The brain's scene count survives a reload, but it
@@ -430,16 +437,22 @@ let update = (model: model, msg: msg): model =>
   | PlaceFixed(fix) => {...model, place: PlaceSending(fix)}
   | PlaceGeoDenied => {...model, place: PlaceDenied}
   | PlaceUnavailable => {...model, place: PlaceFailed}
-  | PlaceSent(place) => {
-      ...model,
-      place: PlaceSaved(place, fixOfPlaceState(model.place)->Option.flatMap(fix => fix.tookMs)),
-    }
-  | PlaceSendFailed => {
-      ...model,
-      place: switch model.place {
-      | PlaceSending(fix) => PlaceNotSent(fix)
-      | other => other
-      },
-    }
-  | PlaceRejected => {...model, place: PlaceFailed}
+  | PlaceSent(haulId, place) =>
+    isCurrentHaul(model, haulId)
+      ? {
+          ...model,
+          place: PlaceSaved(place, fixOfPlaceState(model.place)->Option.flatMap(fix => fix.tookMs)),
+        }
+      : model
+  | PlaceSendFailed(haulId) =>
+    isCurrentHaul(model, haulId)
+      ? {
+          ...model,
+          place: switch model.place {
+          | PlaceSending(fix) => PlaceNotSent(fix)
+          | other => other
+          },
+        }
+      : model
+  | PlaceRejected(haulId) => isCurrentHaul(model, haulId) ? {...model, place: PlaceFailed} : model
   }
