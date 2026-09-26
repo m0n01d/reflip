@@ -133,3 +133,12 @@ concatenate subject+text+html, and assert the same three strings are absent ther
 
 (attempts and errors go here — none yet for step 1, it went clean once the
 downstream `place: None` placeholders were added)
+
+Steps 2 and 3 also went clean, no failed attempts. A TURN-COUNTER note
+arrived (turn 60) right after step 3's hand-off commit, while only
+reading src/Server.res's `resq list` output for step 4 reconnaissance —
+no step-4 edits were made. Server.res facts for the next agent: haulRoute
+type at L122, parseHaulPath L124-163, route dispatch L594-690,
+handleAddScene (body-read + size-limit pattern to reuse) L289-348,
+maxPhotoBytes L214, handleMarkDone (a same-shape simple POST handler)
+L384-399, handleGetHaul L350-355. Step 4 is otherwise unstarted.
