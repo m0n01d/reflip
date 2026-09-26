@@ -1980,3 +1980,185 @@ body:has(.scan-shell) {
   line-height: 18px;
   color: var(--scan-muted);
 }
+
+/* -- Dock, finishing bar, fail bar (step 4) ------------------------------ */
+
+/* The canvas draws these absolutely inside its own 390px phone frame. This
+   app has no such frame (.scan-shell is a fluid flex column), so instead
+   they reuse .scan-sheet-panel's own technique above: fixed to the
+   viewport, centered, capped at the app's own content width. */
+
+.haul-walk-spacer {
+  flex-shrink: 0;
+  height: 124px;
+}
+
+.haul-dock,
+.haul-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  max-width: 480px;
+  height: 124px;
+  box-sizing: border-box;
+  transform: translate(-50%, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--scan-dash-2);
+  background-color: var(--scan-bg);
+  z-index: 10;
+}
+
+.haul-dock {
+  padding-left: 16px;
+  padding-right: 16px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  align-items: center;
+}
+
+.haul-dock-add {
+  justify-self: start;
+  width: 96px;
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--scan-ink);
+  cursor: pointer;
+}
+
+.haul-dock-add-icon {
+  width: 56px;
+  height: 56px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--scan-ink);
+  background-color: var(--scan-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.haul-dock-add-label {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.haul-dock-snap {
+  justify-self: center;
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18), 0 10px 22px rgba(27, 24, 19, .22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .12s ease-out;
+}
+
+.haul-dock-snap:active {
+  transform: scale(.94);
+}
+
+.haul-dock-snap-ring {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .5);
+}
+
+.haul-dock-snap-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.haul-dock-snap-label {
+  font-size: 15px;
+  font-weight: 750;
+  font-stretch: 85%;
+}
+
+.haul-dock-done {
+  justify-self: end;
+  width: 96px;
+  height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.haul-bar {
+  padding-left: 20px;
+  padding-right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.haul-bar-badge {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  transform: rotate(-7deg);
+}
+
+.haul-bar-ring {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .6);
+  animation: haul-bar-spin 1.6s linear infinite;
+}
+
+.haul-bar-fail .haul-bar-ring {
+  animation: none;
+}
+
+.haul-bar-text {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+@keyframes haul-bar-spin {
+  from {
+    transform: rotate(-7deg);
+  }
+  to {
+    transform: rotate(353deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .haul-bar-ring {
+    animation: none;
+  }
+
+  .haul-dock-snap {
+    transition: none;
+  }
+}

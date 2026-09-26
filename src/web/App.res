@@ -901,10 +901,6 @@ module HaulView = {
             <span> {React.string("Put a quarter next to small items to show their size.")} </span>
           </div>
         : React.null}
-      {switch model.haulError {
-      | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
-      | None => React.null
-      }}
       {switch phase {
       | Finished(_) =>
         <>
@@ -917,34 +913,12 @@ module HaulView = {
               </button>
             : React.null}
         </>
-      | Finishing(_) =>
-        <div className="status"> {React.string("finishing — uploading what's left")} </div>
+      | Finishing(_) => React.null
       | _ =>
-        <div className="haul-buttons">
-          <label className="take-photo">
-            <input
-              className="visually-hidden"
-              type_="file"
-              accept="image/*"
-              capture=#environment
-              onChange={onTakePhoto}
-            />
-            {React.string("Take photo")}
-          </label>
-          <label className="take-photo">
-            <input
-              className="visually-hidden"
-              type_="file"
-              accept="image/*"
-              multiple=true
-              onChange={onAddPhotos}
-            />
-            {React.string("Add photos")}
-          </label>
-          <button className="take-photo" onClick={onDone}>
-            {React.string("Done")}
-          </button>
-        </div>
+        switch model.haulError {
+        | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
+        | None => React.null
+        }
       }}
       {isWalk && Array.length(status.failed) > 0
         ? <section ariaLabel="Failed photos" className="haul-failed">
@@ -1015,6 +989,81 @@ module HaulView = {
             )}
           </div>
         : React.null}
+      {isWalk ? <div ariaHidden={true} className="haul-walk-spacer" /> : React.null}
+      {switch phase {
+      | Finished(_) => React.null
+      | Finishing(_) =>
+        <div role="status" className={"haul-bar" ++ (model.doneAttempts > 0 ? " haul-bar-fail" : "")}>
+          <span ariaHidden={true} className="haul-bar-badge">
+            <span ariaHidden={true} className="haul-bar-ring" />
+          </span>
+          <span className="haul-bar-text">
+            {React.string(
+              model.doneAttempts > 0
+                ? "Can’t reach reflip to finish. It tries again on its own."
+                : HaulLayout.finishingText(~onPhone, ~valuing=tally.valuing),
+            )}
+          </span>
+        </div>
+      | _ =>
+        <div role="group" ariaLabel="Haul controls" className="haul-dock">
+          <label className="haul-dock-add">
+            <input
+              className="visually-hidden"
+              type_="file"
+              accept="image/*"
+              multiple=true
+              onChange={onAddPhotos}
+            />
+            <span ariaHidden={true} className="haul-dock-add-icon">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                ariaHidden={true}>
+                <path d="M7 3.5h11.5A2.5 2.5 0 0 1 21 6v11" />
+                <rect x="3" y="7" width="14" height="13.5" rx="2" />
+                <path d="M3 17.5l4-4 3.5 3.5 2-2 4.5 4.5" />
+                <circle cx="12.5" cy="11" r="1.3" />
+              </svg>
+            </span>
+            <span className="haul-dock-add-label"> {React.string("Add photos")} </span>
+          </label>
+          <label ariaLabel="Snap a photo" className="haul-dock-snap">
+            <input
+              className="visually-hidden"
+              type_="file"
+              accept="image/*"
+              capture=#environment
+              onChange={onTakePhoto}
+            />
+            <span ariaHidden={true} className="haul-dock-snap-ring" />
+            <span className="haul-dock-snap-inner">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinejoin="round"
+                ariaHidden={true}>
+                <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+                <circle cx="12" cy="13" r="3.6" />
+              </svg>
+              <span className="haul-dock-snap-label"> {React.string("Snap")} </span>
+            </span>
+          </label>
+          <button type_="button" className="haul-dock-done" onClick={onDone}>
+            {React.string("Done")}
+          </button>
+        </div>
+      }}
     </div>
   }
 }
