@@ -232,4 +232,36 @@ let run = () => {
   TestKit.check("clockText under an hour", HaulLayout.clockText(125) == "2:05")
   TestKit.check("clockText after an hour", HaulLayout.clockText(3661) == "1:01:01")
   TestKit.check("clockText clamps a negative value to 0", HaulLayout.clockText(-5) == "0:00")
+
+  // -- timeOf / stampDateOf (decision 9) ------------------------------------
+  // The hour and the calendar day depend on the machine's zone, so these
+  // check the shape of the formatted string, never an exact value.
+  switch String.split(HaulLayout.timeOf("2026-09-26T18:07:00.000Z"), ":") {
+  | [h, rest] =>
+    let hNum = Int.fromString(h)->Option.getOr(-1)
+    TestKit.check("timeOf: the hour is 1-12", hNum >= 1 && hNum <= 12)
+    switch String.split(rest, " ") {
+    | [m, period] =>
+      let mNum = Int.fromString(m)->Option.getOr(-1)
+      TestKit.check("timeOf: the minutes are two digits 0-59", String.length(m) == 2 && mNum >= 0 && mNum <= 59)
+      TestKit.check("timeOf: the period is AM or PM", period == "AM" || period == "PM")
+    | _ => TestKit.check("timeOf: has a minutes and a period", false)
+    }
+  | _ => TestKit.check("timeOf: has exactly one colon", false)
+  }
+
+  switch String.split(HaulLayout.stampDateOf("2026-09-26T18:07:00.000Z"), " ") {
+  | [month, day, year] =>
+    TestKit.check(
+      "stampDateOf: the month is a known 3-letter abbreviation",
+      Array.includes(
+        ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"],
+        month,
+      ),
+    )
+    let dayNum = Int.fromString(day)->Option.getOr(-1)
+    TestKit.check("stampDateOf: the day is 1-31", dayNum >= 1 && dayNum <= 31)
+    TestKit.check("stampDateOf: the year is 4 digits", String.length(year) == 4)
+  | _ => TestKit.check("stampDateOf: has a month, a day and a year", false)
+  }
 }

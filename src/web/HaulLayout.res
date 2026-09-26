@@ -288,3 +288,45 @@ let clockText = (elapsedSeconds: int): string => {
   let s = mod(v, 60)
   h > 0 ? Int.toString(h) ++ ":" ++ two(m) ++ ":" ++ two(s) : Int.toString(m) ++ ":" ++ two(s)
 }
+
+// -- Receipt time and stamp date (decision 9) -----------------------------
+
+// Local clock time, browser zone — canvas's timeOf(): "3:07 PM". Tests
+// check the shape only, never an exact hour: the hour depends on the
+// machine's zone, which src/tests/HaulLayoutTest.res must not assume.
+let timeOf = (iso: string): string => {
+  let d = Date.fromString(iso)
+  let h24 = Date.getHours(d)
+  let m = Date.getMinutes(d)
+  let period = h24 >= 12 ? "PM" : "AM"
+  let h12 = mod(h24, 12) == 0 ? 12 : mod(h24, 12)
+  Int.toString(h12) ++ ":" ++ two(m) ++ " " ++ period
+}
+
+// Three-letter month name for the stamp date, always upper case.
+let monthAbbrev = (m: int): string =>
+  switch m {
+  | 0 => "JAN"
+  | 1 => "FEB"
+  | 2 => "MAR"
+  | 3 => "APR"
+  | 4 => "MAY"
+  | 5 => "JUN"
+  | 6 => "JUL"
+  | 7 => "AUG"
+  | 8 => "SEP"
+  | 9 => "OCT"
+  | 10 => "NOV"
+  | _ => "DEC"
+  }
+
+// The receipt stamp date, local zone — canvas's "SEP 26 2026". Comes
+// from emailedAt (decision 9).
+let stampDateOf = (iso: string): string => {
+  let d = Date.fromString(iso)
+  monthAbbrev(Date.getMonth(d)) ++
+  " " ++
+  Int.toString(Date.getDate(d)) ++
+  " " ++
+  Int.toString(Date.getFullYear(d))
+}
