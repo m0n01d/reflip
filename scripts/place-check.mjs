@@ -7,12 +7,13 @@
 //                                [--headed] [--timeout 180] [--keep-data]
 //
 // It builds the app, starts src/Main.res.mjs in fixture mode on a free port
-// with a throwaway DATA_DIR and no live secrets, then drives six cases
+// with a throwaway DATA_DIR and no live secrets, then drives seven cases
 // through dev-browser (scripts/place-check.browser.js): a saved gps fix, a
 // haul id that arrives late, the outbox after a reload, a denied prompt, a
-// failed-then-retried prompt, and (in this wrapper, not the browser script,
-// since it needs the server's own log file) a privacy check that the
-// brain's stdout/stderr never name the coordinates used in the other
+// failed-then-retried prompt, the outbox surviving a reload that happens
+// after Done and the email note, and (in this wrapper, not the browser
+// script, since it needs the server's own log file) a privacy check that
+// the brain's stdout/stderr never name the coordinates used in the other
 // cases. It prints one JSON result line to stdout and exits 0 only when
 // every case passed. Everything else goes to stderr.
 //
@@ -64,12 +65,13 @@ const START = Date.now();
 
 const runId = "placecheck-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 const shotPrefix = runId;
-const shotSuffixes = ["saved", "not-sent", "denied", "failed"];
+const shotSuffixes = ["saved", "not-sent", "denied", "failed", "done-reload"];
 const shotFileNames = {
   saved: "place-saved.png",
   "not-sent": "place-not-sent.png",
   denied: "place-denied.png",
   failed: "place-failed.png",
+  "done-reload": "place-done-reload.png",
 };
 
 // The two case-1 fixture coordinates (Anchorage, AK). Case 6 (privacy)

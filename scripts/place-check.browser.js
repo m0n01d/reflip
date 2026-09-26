@@ -4,13 +4,16 @@
 //   { port, shotPrefix, timeoutSec }
 // before piping the two together to `dev-browser --browser reflip-place`.
 //
-// Five cases, each on its own anonymous page so permission/geolocation
+// Six cases, each on its own anonymous page so permission/geolocation
 // state never leaks between them: a saved gps fix, a haul id that arrives
-// late, the outbox surviving a reload, a denied prompt, and a failed
-// prompt that a "Try again" tap then saves. A sixth case (privacy — the
-// brain's own log must never carry a fixture coordinate) needs the
-// server's log file, which this sandbox cannot read, so scripts/place-check.mjs
-// checks that one itself after this script exits.
+// late, the outbox surviving a reload, a denied prompt, a failed prompt
+// that a "Try again" tap then saves, and the outbox surviving a reload
+// that happens after Done and the email note (the "outbox on a done
+// haul" case, which proves the reload path updates the current haul's
+// line with no further tap). A seventh case (privacy — the brain's own
+// log must never carry a fixture coordinate) needs the server's log
+// file, which this sandbox cannot read, so scripts/place-check.mjs checks
+// that one itself after this script exits.
 //
 // See ~/.claude/projects/-Users-dwight-code-reflip/memory/reflip-smoke-gotchas.md
 // for the IndexedDB gotchas this script works around (deleteDatabase blocked
@@ -24,7 +27,7 @@ const CASE1_LAT = 61.2181;
 const CASE1_LON = -149.9003;
 const CASE1_ACCURACY = 35;
 
-const cases = { saved: {}, late: {}, outbox: {}, denied: {}, failed: {} };
+const cases = { saved: {}, late: {}, outbox: {}, denied: {}, failed: {}, outboxDone: {} };
 const failures = [];
 const result = { ok: false, failures, cases, shots: [] };
 
@@ -385,13 +388,81 @@ async function caseFailed() {
   }
 }
 
-// -- run all five, each isolated by its own try/catch above --------------------
+// -- case 6: outbox on a done haul ---------------------------------------------
+
+async function caseOutboxDone() {
+  const page = await browser.newPage();
+  try {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await resetState(page);
+    await page.context().grantPermissions(["geolocation"]);
+    await page.context().setGeolocation({ latitude: CASE1_LAT, longitude: CASE1_LON, accuracy: CASE1_ACCURACY });
+    await page.route("**/api/hauls/*/place", (route) => route.abort());
+    await gotoApp(page);
+    const haulId = await startHaulAndWait(page);
+    cases.outboxDone.haulId = haulId;
+
+    const text = await waitForPlaceText(page, (t) => t.includes("Place not sent yet"), msLeft());
+    cases.outboxDone.textBefore = text;
+    if (!text.includes("Place not sent yet")) {
+      failures.push("case outboxDone: never showed 'Place not sent yet', last text: " + JSON.stringify(text));
+    }
+
+    // Tap Done, then wait for the done screen's email note. FIXTURES=1
+    // always uses the outbox instead of a real email (repo CLAUDE.md
+    // "Testing"), so the receipt's sub-line names the outbox once the
+    // digest lands and the haul's status polling stops.
+    await page.getByRole("button", { name: "Done", exact: true }).click({ timeout: msLeft() });
+    const doneDeadline = Date.now() + msLeft();
+    let receiptText = "";
+    while (Date.now() < doneDeadline) {
+      receiptText = await page.$eval(".haul-receipt-sub", (el) => el.textContent || "").catch(() => "");
+      if (receiptText.toLowerCase().includes("outbox")) break;
+      await page.waitForTimeout(250);
+    }
+    cases.outboxDone.receiptText = receiptText;
+    if (!receiptText.toLowerCase().includes("outbox")) {
+      failures.push(
+        "case outboxDone: the done screen's email note never named the outbox, last text: " +
+          JSON.stringify(receiptText)
+      );
+    }
+
+    await page.unroute("**/api/hauls/*/place");
+    await page.reload({ waitUntil: "domcontentloaded", timeout: msLeft() });
+
+    // No further tap: the reload path alone must flush the outbox and
+    // update the current haul's place line.
+    const text2 = await waitForPlaceText(page, (t) => t.includes("Place saved"), msLeft());
+    cases.outboxDone.textAfter = text2;
+    if (!text2.includes("Place saved")) {
+      failures.push(
+        "case outboxDone: place was never saved after reload with no further tap, last text: " +
+          JSON.stringify(text2)
+      );
+    }
+
+    const status = await fetchHaulStatus(page, haulId);
+    cases.outboxDone.placeAfter = status.place;
+    if (!status.place) failures.push("case outboxDone: GET /api/hauls/:id had no place after the reload");
+
+    result.shots.push(await saveScreenshot(await page.screenshot(), CONFIG.shotPrefix + "-done-reload.png"));
+    cases.outboxDone.ok = failures.filter((f) => f.startsWith("case outboxDone:")).length === 0;
+  } catch (e) {
+    failures.push("case outboxDone: uncaught: " + String(e && e.stack ? e.stack : e));
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
+// -- run all six, each isolated by its own try/catch above ---------------------
 
 await caseSaved();
 await caseLate();
 await caseOutbox();
 await caseDenied();
 await caseFailed();
+await caseOutboxDone();
 
 result.ok = failures.length === 0;
 console.log("PLACE_CHECK_RESULT " + JSON.stringify(result));
