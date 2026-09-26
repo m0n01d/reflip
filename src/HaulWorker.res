@@ -167,26 +167,33 @@ let prepared = (t: t, scene: Store.scene): result<(string, string, ClaudeClient.
     }
   }
 
-let requestBodyFor = (t: t, scene: Store.scene): result<JSON.t, string> =>
+let requestFor = (t: t, scene: Store.scene): result<(string, ClaudeClient.mode, JSON.t), string> =>
   prepared(t, scene)->Result.map(((model, imageBase64, mode)) =>
-    ClaudeClient.buildRequestBody(
-      ~model,
-      ~imageBase64,
-      ~structuredOutput=t.config.structuredOutput,
-      ~mode,
+    (
+      model,
+      mode,
+      ClaudeClient.buildRequestBody(
+        ~model,
+        ~imageBase64,
+        ~structuredOutput=t.config.structuredOutput,
+        ~mode,
+      ),
     )
   )
 
+let requestBodyFor = (t: t, scene: Store.scene): result<JSON.t, string> =>
+  requestFor(t, scene)->Result.map(((_, _, body)) => body)
+
 let runScene = async (t: t, scene: Store.scene): outcome =>
-  switch prepared(t, scene) {
+  switch requestFor(t, scene) {
   | Error(msg) => Failed(msg, None, None)
-  | Ok((model, imageBase64, mode)) => {
+  | Ok((model, mode, body)) => {
       let (width, height) = switch mode {
       | ClaudeClient.Haul({width, height}) => (width, height)
       | ClaudeClient.Scene({width, height}) => (width, height)
       }
       let claudeStart = Date.now()
-      switch await ClaudeClient.call(~config=t.config, ~model, ~imageBase64, ~mode) {
+      switch await ClaudeClient.callBody(~config=t.config, ~mode, ~body) {
       | Ok(decoded) => {
           let claudeMs = Date.now() -. claudeStart
           let costUsd = Pricing.usdCost(~model, ~usage=decoded.usage)
