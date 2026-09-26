@@ -474,3 +474,18 @@ A reviewer read the diff to `7d47a4d`. The brain half is sound. Do these, then r
       (`1e999`). `Api.postPlace`: a 200 whose place does not decode deletes the key and counts as
       saved.
 
+
+## Status on 2026-09-26
+
+MVP step 1 is done. PR m0n01d/reflip#28 holds it. `npm test`, `scripts/haul-smoke.mjs` and `scripts/place-check.mjs` passed on `469d17e`.
+
+MVP step 2, the phone test, waits for Dwight:
+
+1. Stop any other brain on port 8787.
+2. In this worktree, run `npm run build`, then `npm start`. `npm start` loads the live keys from `~/.config/reflip/env`.
+3. On the iPhone, open https://dwights-macbook-pro.tail128d00.ts.net in Safari. `tailscale serve` already proxies it to 127.0.0.1:8787, on the tailnet only.
+4. Start one haul indoors and one haul outdoors. For each, write down the "Place saved · ±N m · T s" line and whether iOS asked for the permission.
+5. Add the page to the Home Screen. Do step 4 again from the Home Screen icon.
+6. Write the results in `docs/spec-haul-map.md`, MVP step 2. If the results show a need, change the timeout (15 s now, in `App.askPlace`).
+
+Step 3 (`GET /api/hauls` and `HaulList.res`) can go on during the wait. Step 4, the Map view, waits for the results in the spec.
