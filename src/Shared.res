@@ -325,3 +325,56 @@ let decodeHaulStatus = (json: JSON.t): result<Types.haulStatus, string> =>
     }
   | _ => Error("haul status missing a required field")
   }
+
+let decodeHaulBuy = (json: JSON.t): result<Types.haulBuy, string> =>
+  switch (Json.stringField(json, "name"), Json.floatField(json, "paidUsd")) {
+  | (Some(name), Some(paidUsd)) =>
+    Ok({
+      Types.name,
+      paidUsd,
+      paidOn: Json.stringField(json, "paidOn"),
+      soldUsd: Json.floatField(json, "soldUsd"),
+      soldOn: Json.stringField(json, "soldOn"),
+    })
+  | _ => Error("buy missing a required field")
+  }
+
+let decodeHaulListRow = (json: JSON.t): result<Types.haulListRow, string> =>
+  switch (
+    Json.stringField(json, "haulId"),
+    Json.stringField(json, "startedAt"),
+    Json.intField(json, "photoCount"),
+    Json.intField(json, "gemCount"),
+    Json.floatField(json, "paidUsd"),
+    Json.arrayField(json, "buys"),
+  ) {
+  | (
+      Some(haulId),
+      Some(startedAt),
+      Some(photoCount),
+      Some(gemCount),
+      Some(paidUsd),
+      Some(buysJson),
+    ) =>
+    switch Array.map(buysJson, decodeHaulBuy)->Result.all {
+    | Ok(buys) =>
+      Ok({
+        Types.haulId,
+        name: Json.stringField(json, "name"),
+        startedAt,
+        place: Json.field(json, "place")->Option.flatMap(decodePlace),
+        photoCount,
+        gemCount,
+        paidUsd,
+        buys,
+      })
+    | Error(e) => Error(e)
+    }
+  | _ => Error("haul list row missing a required field")
+  }
+
+let decodeHaulList = (json: JSON.t): result<array<Types.haulListRow>, string> =>
+  switch JSON.Decode.array(json) {
+  | Some(rowsJson) => Array.map(rowsJson, decodeHaulListRow)->Result.all
+  | None => Error("haul list is not an array")
+  }
