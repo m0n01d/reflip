@@ -110,7 +110,10 @@ The steps go in order. Steps 1 to 4 do not need the budget spec. Step 5 taps Bou
 
 - A place for each photo, for a sale that covers many yards.
 - A place for a scan, and for a manual buy with no haul.
-- A place name from the coordinates (reverse geocoding). The Nominatim service has its own usage policy. Read it first.
+- A place name from the coordinates (reverse geocoding) with Google, as ternpike does. ternpike's `server/geocode.js` calls the Google Geocoding API from its server, so the API key never reaches the browser. It caches each result and limits the rate.
+  - The brain makes the call, with a new key in `~/.config/reflip/env`. It caches the name with the haul in `data/reflip.db`.
+  - The Geocoding API takes `latlng=` and returns an address. The Places API (New) Nearby Search can return the name of the store. Before the build, read the price and the terms of both, and choose one.
+  - This call sends the place to Google. Change the privacy rules in "Shape" in the same step.
 - A pin color by age, or a time slider.
 - Clusters for pins that crowd the map.
 - If Leaflet slows the first paint of the scan view, load Leaflet only in the Map view.
