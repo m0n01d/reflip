@@ -24,6 +24,11 @@ type gem = {
   // find has no box, or when the crop itself failed to build — either
   // way the card shows "no box" text and adds no image.
   crop: option<gemCrop>,
+  // This gem's profit estimate — the net at each end of the range, and
+  // the profit at each end if there is a tag price (Profit.netText,
+  // Profit.profitText). None only if a caller could not compute one; every
+  // real find can, so HaulEmail.digestGemsOf always fills it.
+  profit: option<Profit.estimate>,
 }
 
 type failedPhoto = {sceneId: string, error: string}
@@ -183,6 +188,14 @@ let gemHtml = (g: gem): string => {
   | Some(m) => "<div style=\"margin:2px 0;color:#555555\">eBay median: " ++ usd(m) ++ "</div>"
   | None => ""
   }
+  // Red only when it is a loss (Profit.isLoss); email HTML takes inline
+  // styles only, so the color is hard-coded here rather than in a class.
+  let profitLine = switch g.profit {
+  | Some(p) =>
+    let style = Profit.isLoss(p) ? "margin:2px 0;color:#cc0000" : "margin:2px 0;color:#555555"
+    "<div style=\"" ++ style ++ "\">" ++ Profit.lineText(p) ++ "</div>"
+  | None => ""
+  }
   let sizeSuffix = g.size == "" ? "" : " (" ++ escapeHtml(g.size) ++ ")"
   "<div style=\"margin:0 0 20px 0;padding-bottom:16px;border-bottom:1px solid #dddddd\">" ++
   cropHtml ++
@@ -195,6 +208,7 @@ let gemHtml = (g: gem): string => {
   "–" ++
   usd(g.estimateHighUsd) ++
   "</div>" ++
+  profitLine ++
   whereLine ++
   "<div style=\"margin:2px 0;color:#555555\">confidence: " ++
   pct(g.confidence) ++
@@ -289,6 +303,10 @@ let gemText = (g: gem): string => {
   | Some(m) => "  eBay median: " ++ usd(m) ++ "\n"
   | None => ""
   }
+  let profitLine = switch g.profit {
+  | Some(p) => "  " ++ Profit.lineText(p) ++ "\n"
+  | None => ""
+  }
   let sizeSuffix = g.size == "" ? "" : " (" ++ g.size ++ ")"
   g.name ++
   sizeSuffix ++
@@ -297,6 +315,7 @@ let gemText = (g: gem): string => {
   "–" ++
   usd(g.estimateHighUsd) ++
   "\n" ++
+  profitLine ++
   whereLine ++
   "  confidence: " ++
   pct(g.confidence) ++

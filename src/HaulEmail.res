@@ -129,6 +129,16 @@ let digestGemsOf = (
             width,
             height,
           }),
+          // Same pattern as HaulStatus.gemsOf: stored class, null gives
+          // medium, and the stored tag price.
+          profit: Some(
+            Profit.estimate(
+              ~lowUsd=f.estimateLowUsd,
+              ~highUsd=f.estimateHighUsd,
+              ~shipClass=f.shipClass->Option.getOr(Profit.Medium),
+              ~tagPriceUsd=f.tagPriceUsd,
+            ),
+          ),
         }
       })
   (gems, images)
