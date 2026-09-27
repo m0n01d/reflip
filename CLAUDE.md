@@ -106,6 +106,8 @@ To develop the page with fast reloads, run the brain in one shell and Vite in an
 
 To test the page from a phone on the tailnet, run `npm run build`, then `npm run tailnet`, then `npm start`. `npm run tailnet` points `tailscale serve` at the brain port and prints the HTTPS URL. The port is `PORT`, or 8787 if `PORT` is not set. The proxy is on the tailnet only, and it stays on after the script exits. The script finds the `tailscale` CLI on `PATH` or in `/Applications/Tailscale.app`. If Tailscale is off, the script prints `Tailscale is stopped.` and exits with code 1.
 
+The tailnet needs MagicDNS and HTTPS certificates. Both are on in the Tailscale admin console. The first request can take about 25 s, because Tailscale gets the TLS certificate then. The brain does not restart by itself. If nothing listens on the port, the proxy returns an error. To stop the proxy, run `tailscale serve reset`. That command clears every serve rule on the Mac. To make sure that the brain listens on `127.0.0.1` only, run `lsof -nP -iTCP:8787 -sTCP:LISTEN`. The output must show `127.0.0.1:8787`, not `*:8787`.
+
 ## Use `resq` when editing the `.res` files here
 
 `resq` reads and edits ReScript structurally. Prefer it over reading a whole file and hand-splicing text. Run `resq guide` for the full command reference.
