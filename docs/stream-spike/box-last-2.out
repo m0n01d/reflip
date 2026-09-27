@@ -1,0 +1,20 @@
+photo: /private/tmp/claude-501/-Users-dwight-code/884c8a85-ddf3-494b-8bae-c1feeecf9648/scratchpad/scene-5c0c5ba7/photo-1568x1176.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-last  search: on
+headers: 2029ms
+message_start: 2033ms  input_tokens=8595
+tool code_execution: start=27603ms done=123822ms status=-
+tool code_execution: start=28485ms done=123822ms status=detection_timeout
+tool code_execution: start=126348ms done=130619ms status=-
+search "vintage ceramic lighted church cottage figurine sold price": start=123809ms done=123821ms count=10
+search "vintage poinsettia creamer pitcher mid century value": start=130614ms done=130616ms count=10
+first text delta: 157945ms
+first box: 159349ms
+first item: 159410ms
+last item: 179310ms
+done: 180023ms
+items: 21
+usage: in=8595 out=8 cacheRead=0 cacheWrite=0 webSearch=0
+usd: $0.0173
+stop reason: (stream did not finish)
+items equal final decode: false
+outcome: timed_out

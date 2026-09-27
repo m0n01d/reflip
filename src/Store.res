@@ -1,0 +1,740 @@
+// SQLite store for haul mode: hauls, scenes and finds. Per docs/spec-haul-mode.md
+// "The brain" and CLAUDE.md — rows come back from Sqlite.res as JSON.t, and
+// every decode returns option, never a cast. Timestamps are ISO text from
+// Date.toISOString. Bools are INTEGER 0/1, so a bool column decodes through
+// a number, not JSON.Decode.bool.
+
+type t = Sqlite.t
+
+type haul = {
+  haulId: string,
+  name: option<string>,
+  startedAt: string,
+  doneAt: option<string>,
+  emailedAt: option<string>,
+  costUsd: float,
+  stopReason: option<string>,
+  emailNote: option<string>,
+  place: option<Types.place>,
+}
+
+type sceneStatus = Queued | Running | Done | Failed
+
+type scene = {
+  sceneId: string,
+  haulId: string,
+  clientId: string,
+  status: sceneStatus,
+  photoPath: string,
+  error: option<string>,
+  costUsd: option<float>,
+  claudeMs: option<float>,
+  otherCount: option<int>,
+  createdAt: string,
+  imageWidth: option<int>,
+  imageHeight: option<int>,
+}
+
+type find = {
+  findId: string,
+  sceneId: string,
+  model: string,
+  fixture: bool,
+  name: string,
+  query: string,
+  where: option<string>,
+  estimateLowUsd: float,
+  estimateHighUsd: float,
+  confidence: float,
+  category: option<string>,
+  promptVersion: string,
+  ebayJson: option<string>,
+  paidUsd: option<float>,
+  soldUsd: option<float>,
+  soldOn: option<string>,
+  soldWhere: option<string>,
+  createdAt: string,
+  size: string,
+  box: option<Types.box>,
+  shipClass: option<Profit.shipClass>,
+  feeEstUsd: option<float>,
+  postageEstUsd: option<float>,
+  tagPriceUsd: option<float>,
+}
+
+type counts = {
+  queued: int,
+  running: int,
+  done: int,
+  failed: int,
+}
+
+// -- Params -----------------------------------------------------------------
+
+let optText = (v: option<string>): Sqlite.param =>
+  switch v {
+  | Some(s) => Sqlite.Text(s)
+  | None => Sqlite.Null
+  }
+
+let optNum = (v: option<float>): Sqlite.param =>
+  switch v {
+  | Some(n) => Sqlite.Num(n)
+  | None => Sqlite.Null
+  }
+
+let optInt = (v: option<int>): Sqlite.param =>
+  switch v {
+  | Some(n) => Sqlite.Num(Int.toFloat(n))
+  | None => Sqlite.Null
+  }
+
+let boolNum = (b: bool): Sqlite.param => Sqlite.Num(b ? 1.0 : 0.0)
+
+// -- Status <-> text ----------------------------------------------------------
+
+let statusToString = (status: sceneStatus): string =>
+  switch status {
+  | Queued => "queued"
+  | Running => "running"
+  | Done => "done"
+  | Failed => "failed"
+  }
+
+let statusFromString = (s: string): option<sceneStatus> =>
+  switch s {
+  | "queued" => Some(Queued)
+  | "running" => Some(Running)
+  | "done" => Some(Done)
+  | "failed" => Some(Failed)
+  | _ => None
+  }
+
+// A bool column is stored as INTEGER 0/1, so node:sqlite hands the row back
+// with a JS number for it, not a JS boolean. JSON.Decode.bool would reject
+// that, so decode it as a number and compare.
+let boolFromIntField = (json: JSON.t, key: string): option<bool> =>
+  Json.floatField(json, key)->Option.map(n => n != 0.0)
+
+// -- Row decoders -------------------------------------------------------------
+
+// A hauls row has its place flattened into lat/lon/placeAccuracyM/
+// placeSource/placeAt columns (Types.place has no row of its own). All four
+// of lat, lon, placeSource and placeAt must be present and placeSource must
+// parse, or there is no place yet.
+let decodePlace = (json: JSON.t): option<Types.place> =>
+  switch (
+    Json.floatField(json, "lat"),
+    Json.floatField(json, "lon"),
+    Json.stringField(json, "placeSource"),
+    Json.stringField(json, "placeAt"),
+  ) {
+  | (Some(lat), Some(lon), Some(sourceStr), Some(at)) =>
+    Place.sourceFromString(sourceStr)->Option.map(source => {
+      Types.lat,
+      lon,
+      accuracyM: Json.floatField(json, "placeAccuracyM"),
+      source,
+      at,
+    })
+  | _ => None
+  }
+
+let decodeHaul = (json: JSON.t): option<haul> =>
+  switch (Json.stringField(json, "haulId"), Json.stringField(json, "startedAt"), Json.floatField(json, "costUsd")) {
+  | (Some(haulId), Some(startedAt), Some(costUsd)) =>
+    Some({
+      haulId,
+      name: Json.stringField(json, "name"),
+      startedAt,
+      doneAt: Json.stringField(json, "doneAt"),
+      emailedAt: Json.stringField(json, "emailedAt"),
+      costUsd,
+      stopReason: Json.stringField(json, "stopReason"),
+      emailNote: Json.stringField(json, "emailNote"),
+      place: decodePlace(json),
+    })
+  | _ => None
+  }
+
+let decodeScene = (json: JSON.t): option<scene> =>
+  switch (
+    Json.stringField(json, "sceneId"),
+    Json.stringField(json, "haulId"),
+    Json.stringField(json, "clientId"),
+    Json.stringField(json, "status")->Option.flatMap(statusFromString),
+    Json.stringField(json, "photoPath"),
+    Json.stringField(json, "createdAt"),
+  ) {
+  | (Some(sceneId), Some(haulId), Some(clientId), Some(status), Some(photoPath), Some(createdAt)) =>
+    Some({
+      sceneId,
+      haulId,
+      clientId,
+      status,
+      photoPath,
+      error: Json.stringField(json, "error"),
+      costUsd: Json.floatField(json, "costUsd"),
+      claudeMs: Json.floatField(json, "claudeMs"),
+      otherCount: Json.intField(json, "otherCount"),
+      createdAt,
+      imageWidth: Json.intField(json, "imageWidth"),
+      imageHeight: Json.intField(json, "imageHeight"),
+    })
+  | _ => None
+  }
+
+let decodeFind = (json: JSON.t): option<find> =>
+  switch (
+    Json.stringField(json, "findId"),
+    Json.stringField(json, "sceneId"),
+    Json.stringField(json, "model"),
+    boolFromIntField(json, "fixture"),
+    Json.stringField(json, "name"),
+    Json.stringField(json, "query"),
+    Json.floatField(json, "estimateLowUsd"),
+    Json.floatField(json, "estimateHighUsd"),
+    Json.floatField(json, "confidence"),
+    Json.stringField(json, "promptVersion"),
+    Json.stringField(json, "createdAt"),
+  ) {
+  | (
+      Some(findId),
+      Some(sceneId),
+      Some(model),
+      Some(fixture),
+      Some(name),
+      Some(query),
+      Some(estimateLowUsd),
+      Some(estimateHighUsd),
+      Some(confidence),
+      Some(promptVersion),
+      Some(createdAt),
+    ) =>
+    // All four box columns present means the find was stored with a valid
+    // box (Box.decode already dropped a degenerate one before insertFind);
+    // any other combination, including a pre-migration row, is None.
+    let box = switch (
+      Json.intField(json, "boxX1"),
+      Json.intField(json, "boxY1"),
+      Json.intField(json, "boxX2"),
+      Json.intField(json, "boxY2"),
+    ) {
+    | (Some(x1), Some(y1), Some(x2), Some(y2)) => Some({Types.x1, y1, x2, y2})
+    | _ => None
+    }
+    Some({
+      findId,
+      sceneId,
+      model,
+      fixture,
+      name,
+      query,
+      where: Json.stringField(json, "where"),
+      estimateLowUsd,
+      estimateHighUsd,
+      confidence,
+      category: Json.stringField(json, "category"),
+      promptVersion,
+      ebayJson: Json.stringField(json, "ebayJson"),
+      paidUsd: Json.floatField(json, "paidUsd"),
+      soldUsd: Json.floatField(json, "soldUsd"),
+      soldOn: Json.stringField(json, "soldOn"),
+      soldWhere: Json.stringField(json, "soldWhere"),
+      createdAt,
+      size: Json.stringField(json, "size")->Option.getOr(""),
+      box,
+      shipClass: Json.stringField(json, "shipClass")->Option.flatMap(Profit.fromString),
+      feeEstUsd: Json.floatField(json, "feeEstUsd"),
+      postageEstUsd: Json.floatField(json, "postageEstUsd"),
+      tagPriceUsd: Json.floatField(json, "tagPriceUsd"),
+    })
+  | _ => None
+  }
+
+// -- Open + schema ------------------------------------------------------------
+
+let openAt = (path: string): t => {
+  let db = Sqlite.make(path)
+
+  Sqlite.exec(
+    db,
+    `CREATE TABLE IF NOT EXISTS hauls (
+      haulId TEXT PRIMARY KEY,
+      name TEXT,
+      startedAt TEXT NOT NULL,
+      doneAt TEXT,
+      emailedAt TEXT,
+      costUsd REAL NOT NULL DEFAULT 0,
+      stopReason TEXT,
+      emailNote TEXT,
+      lat REAL,
+      lon REAL,
+      placeAccuracyM REAL,
+      placeSource TEXT,
+      placeAt TEXT
+    )`,
+  )
+
+  Sqlite.exec(
+    db,
+    `CREATE TABLE IF NOT EXISTS scenes (
+      sceneId TEXT PRIMARY KEY,
+      haulId TEXT NOT NULL,
+      clientId TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('queued','running','done','failed')),
+      photoPath TEXT NOT NULL,
+      error TEXT,
+      costUsd REAL,
+      claudeMs REAL,
+      otherCount INTEGER,
+      createdAt TEXT NOT NULL,
+      imageWidth INTEGER,
+      imageHeight INTEGER,
+      UNIQUE (haulId, clientId)
+    )`,
+  )
+  Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_scenes_haul_status ON scenes (haulId, status)`)
+
+  Sqlite.exec(
+    db,
+    `CREATE TABLE IF NOT EXISTS finds (
+      findId TEXT PRIMARY KEY,
+      sceneId TEXT NOT NULL,
+      model TEXT NOT NULL,
+      fixture INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      query TEXT NOT NULL,
+      "where" TEXT,
+      estimateLowUsd REAL NOT NULL,
+      estimateHighUsd REAL NOT NULL,
+      confidence REAL NOT NULL,
+      category TEXT,
+      promptVersion TEXT NOT NULL,
+      ebayJson TEXT,
+      paidUsd REAL,
+      soldUsd REAL,
+      soldOn TEXT,
+      soldWhere TEXT,
+      createdAt TEXT NOT NULL,
+      size TEXT,
+      boxX1 INTEGER,
+      boxY1 INTEGER,
+      boxX2 INTEGER,
+      boxY2 INTEGER,
+      shipClass TEXT,
+      feeEstUsd REAL,
+      postageEstUsd REAL,
+      tagPriceUsd REAL
+    )`,
+  )
+  Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
+
+  // A DB from before item boxes or the size field has a `finds` table
+  // missing those columns. CREATE TABLE IF NOT EXISTS above is a no-op on
+  // an existing table, so check PRAGMA table_info and add any column it
+  // doesn't already list.
+  let findsCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(finds)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasCol = (name: string): bool => Array.some(findsCols, c => c == name)
+  if !hasCol("size") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN size TEXT`)
+  }
+  if !hasCol("boxX1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX1 INTEGER`)
+  }
+  if !hasCol("boxY1") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY1 INTEGER`)
+  }
+  if !hasCol("boxX2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxX2 INTEGER`)
+  }
+  if !hasCol("boxY2") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY2 INTEGER`)
+  }
+
+  // A DB from before shipping-class profit estimates (docs/spec-profit.md,
+  // 2026-09-26) has a `finds` table with no profit columns. Same PRAGMA
+  // table_info check as the box migration above.
+  if !hasCol("shipClass") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN shipClass TEXT`)
+  }
+  if !hasCol("feeEstUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN feeEstUsd REAL`)
+  }
+  if !hasCol("postageEstUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN postageEstUsd REAL`)
+  }
+  if !hasCol("tagPriceUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN tagPriceUsd REAL`)
+  }
+
+  // A DB from before the scene photo size (docs/spec-item-boxes.md /
+  // docs/spec-haul-mode.md, 2026-09-25) has a `scenes` table with no size
+  // columns. Same PRAGMA table_info check as the finds migration above.
+  let scenesCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(scenes)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasScenesCol = (name: string): bool => Array.some(scenesCols, c => c == name)
+  if !hasScenesCol("imageWidth") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageWidth INTEGER`)
+  }
+  if !hasScenesCol("imageHeight") {
+    Sqlite.exec(db, `ALTER TABLE scenes ADD COLUMN imageHeight INTEGER`)
+  }
+
+  // A DB from before the haul map place slice (docs/spec-haul-map.md,
+  // 2026-09-26) has a `hauls` table with no place columns. Same PRAGMA
+  // table_info check as the finds and scenes migrations above.
+  let haulsCols =
+    Sqlite.all(Sqlite.prepare(db, `PRAGMA table_info(hauls)`), [])->Array.filterMap(row =>
+      Json.stringField(row, "name")
+    )
+  let hasHaulsCol = (name: string): bool => Array.some(haulsCols, c => c == name)
+  if !hasHaulsCol("lat") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN lat REAL`)
+  }
+  if !hasHaulsCol("lon") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN lon REAL`)
+  }
+  if !hasHaulsCol("placeAccuracyM") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeAccuracyM REAL`)
+  }
+  if !hasHaulsCol("placeSource") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeSource TEXT`)
+  }
+  if !hasHaulsCol("placeAt") {
+    Sqlite.exec(db, `ALTER TABLE hauls ADD COLUMN placeAt TEXT`)
+  }
+
+  db
+}
+
+let close = (db: t): unit => Sqlite.close(db)
+
+// -- Hauls --------------------------------------------------------------------
+
+let getHaul = (db: t, haulId: string): option<haul> => {
+  let stmt = Sqlite.prepare(db, "SELECT * FROM hauls WHERE haulId = ?")
+  Sqlite.get(stmt, [Sqlite.Text(haulId)])->Option.flatMap(decodeHaul)
+}
+
+let createHaul = (db: t, ~haulId: string, ~name: option<string>, ~now: string): haul => {
+  let stmt = Sqlite.prepare(
+    db,
+    "INSERT INTO hauls (haulId, name, startedAt, costUsd) VALUES (?, ?, ?, 0)",
+  )
+  Sqlite.run(stmt, [Sqlite.Text(haulId), optText(name), Sqlite.Text(now)])->ignore
+  {
+    haulId,
+    name,
+    startedAt: now,
+    doneAt: None,
+    emailedAt: None,
+    costUsd: 0.0,
+    stopReason: None,
+    emailNote: None,
+    place: None,
+  }
+}
+
+let addHaulCost = (db: t, ~haulId: string, delta: float): float => {
+  let stmt = Sqlite.prepare(db, "UPDATE hauls SET costUsd = costUsd + ? WHERE haulId = ?")
+  Sqlite.run(stmt, [Sqlite.Num(delta), Sqlite.Text(haulId)])->ignore
+  switch getHaul(db, haulId) {
+  | Some(h) => h.costUsd
+  | None => delta
+  }
+}
+
+// Keeps the first reason: a second call with the stop reason already set is
+// a no-op.
+let stopHaul = (db: t, ~haulId: string, ~reason: string): unit => {
+  let stmt = Sqlite.prepare(
+    db,
+    "UPDATE hauls SET stopReason = ? WHERE haulId = ? AND stopReason IS NULL",
+  )
+  Sqlite.run(stmt, [Sqlite.Text(reason), Sqlite.Text(haulId)])->ignore
+}
+
+let markDone = (db: t, ~haulId: string, ~now: string): unit => {
+  let stmt = Sqlite.prepare(db, "UPDATE hauls SET doneAt = ? WHERE haulId = ?")
+  Sqlite.run(stmt, [Sqlite.Text(now), Sqlite.Text(haulId)])->ignore
+}
+
+let markEmailed = (db: t, ~haulId: string, ~now: string, ~note: option<string>): unit => {
+  let stmt = Sqlite.prepare(db, "UPDATE hauls SET emailedAt = ?, emailNote = ? WHERE haulId = ?")
+  Sqlite.run(stmt, [Sqlite.Text(now), optText(note), Sqlite.Text(haulId)])->ignore
+}
+
+// A gps fix never overwrites a pin the person dropped by hand (Place.choose).
+// None if haulId names no haul.
+let setPlace = (db: t, ~haulId: string, ~place: Types.place): option<Types.place> =>
+  switch getHaul(db, haulId) {
+  | None => None
+  | Some(haul) =>
+    let chosen = Place.choose(~stored=haul.place, ~incoming=place)
+    let stmt = Sqlite.prepare(
+      db,
+      "UPDATE hauls SET lat = ?, lon = ?, placeAccuracyM = ?, placeSource = ?, placeAt = ? WHERE haulId = ?",
+    )
+    Sqlite.run(
+      stmt,
+      [
+        Sqlite.Num(chosen.lat),
+        Sqlite.Num(chosen.lon),
+        optNum(chosen.accuracyM),
+        Sqlite.Text(Place.sourceToString(chosen.source)),
+        Sqlite.Text(chosen.at),
+        Sqlite.Text(haulId),
+      ],
+    )->ignore
+    Some(chosen)
+  }
+
+// -- Scenes ---------------------------------------------------------------------
+
+let sceneByClient = (db: t, ~haulId: string, ~clientId: string): option<scene> => {
+  let stmt = Sqlite.prepare(db, "SELECT * FROM scenes WHERE haulId = ? AND clientId = ?")
+  Sqlite.get(stmt, [Sqlite.Text(haulId), Sqlite.Text(clientId)])->Option.flatMap(decodeScene)
+}
+
+// Inserts as queued. If clientId already exists for that haul, the existing
+// row is returned unchanged (a retried upload then costs nothing).
+let addScene = (
+  db: t,
+  ~haulId: string,
+  ~clientId: string,
+  ~sceneId: string,
+  ~photoPath: string,
+  ~now: string,
+  ~imageWidth: option<int>,
+  ~imageHeight: option<int>,
+): scene =>
+  switch sceneByClient(db, ~haulId, ~clientId) {
+  | Some(existing) => existing
+  | None => {
+      let stmt = Sqlite.prepare(
+        db,
+        "INSERT INTO scenes (sceneId, haulId, clientId, status, photoPath, createdAt, imageWidth, imageHeight) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)",
+      )
+      Sqlite.run(
+        stmt,
+        [
+          Sqlite.Text(sceneId),
+          Sqlite.Text(haulId),
+          Sqlite.Text(clientId),
+          Sqlite.Text(photoPath),
+          Sqlite.Text(now),
+          optInt(imageWidth),
+          optInt(imageHeight),
+        ],
+      )->ignore
+      {
+        sceneId,
+        haulId,
+        clientId,
+        status: Queued,
+        photoPath,
+        error: None,
+        costUsd: None,
+        claudeMs: None,
+        otherCount: None,
+        createdAt: now,
+        imageWidth,
+        imageHeight,
+      }
+    }
+  }
+
+// Oldest queued scene whose haul has no stopReason. rowid breaks ties when
+// two scenes share a createdAt timestamp, keeping insertion order (FIFO).
+let nextQueued = (db: t): option<scene> => {
+  let stmt = Sqlite.prepare(
+    db,
+    `SELECT scenes.* FROM scenes
+     JOIN hauls ON hauls.haulId = scenes.haulId
+     WHERE scenes.status = 'queued' AND hauls.stopReason IS NULL
+     ORDER BY scenes.createdAt ASC, scenes.rowid ASC
+     LIMIT 1`,
+  )
+  Sqlite.get(stmt, [])->Option.flatMap(decodeScene)
+}
+
+let setStatus = (db: t, ~sceneId: string, status: sceneStatus): unit => {
+  let stmt = Sqlite.prepare(db, "UPDATE scenes SET status = ? WHERE sceneId = ?")
+  Sqlite.run(stmt, [Sqlite.Text(statusToString(status)), Sqlite.Text(sceneId)])->ignore
+}
+
+// running -> queued (a restart then loses no photo). Returns the count.
+let resetRunning = (db: t): int => {
+  let stmt = Sqlite.prepare(db, "UPDATE scenes SET status = 'queued' WHERE status = 'running'")
+  let result = Sqlite.run(stmt, [])
+  Float.toInt(result.changes)
+}
+
+let finishScene = (
+  db: t,
+  ~sceneId: string,
+  ~costUsd: float,
+  ~claudeMs: float,
+  ~otherCount: option<int>,
+): unit => {
+  let stmt = Sqlite.prepare(
+    db,
+    "UPDATE scenes SET status = 'done', costUsd = ?, claudeMs = ?, otherCount = ? WHERE sceneId = ?",
+  )
+  Sqlite.run(
+    stmt,
+    [Sqlite.Num(costUsd), Sqlite.Num(claudeMs), optInt(otherCount), Sqlite.Text(sceneId)],
+  )->ignore
+}
+
+let failScene = (
+  db: t,
+  ~sceneId: string,
+  ~error: string,
+  ~costUsd: option<float>,
+  ~claudeMs: option<float>,
+): unit => {
+  let stmt = Sqlite.prepare(
+    db,
+    "UPDATE scenes SET status = 'failed', error = ?, costUsd = ?, claudeMs = ? WHERE sceneId = ?",
+  )
+  Sqlite.run(
+    stmt,
+    [Sqlite.Text(error), optNum(costUsd), optNum(claudeMs), Sqlite.Text(sceneId)],
+  )->ignore
+}
+
+let scenesOf = (db: t, haulId: string): array<scene> => {
+  let stmt = Sqlite.prepare(
+    db,
+    "SELECT * FROM scenes WHERE haulId = ? ORDER BY createdAt ASC, rowid ASC",
+  )
+  Sqlite.all(stmt, [Sqlite.Text(haulId)])->Array.filterMap(decodeScene)
+}
+
+let counts = (db: t, haulId: string): counts => {
+  let scenes = scenesOf(db, haulId)
+  let countOf = status => Array.filter(scenes, s => s.status == status)->Array.length
+  {
+    queued: countOf(Queued),
+    running: countOf(Running),
+    done: countOf(Done),
+    failed: countOf(Failed),
+  }
+}
+
+// -- Finds ----------------------------------------------------------------------
+
+let insertFind = (db: t, find: find): unit => {
+  let stmt = Sqlite.prepare(
+    db,
+    `INSERT INTO finds (
+      findId, sceneId, model, fixture, name, query, "where",
+      estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
+      ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size,
+      boxX1, boxY1, boxX2, boxY2,
+      shipClass, feeEstUsd, postageEstUsd, tagPriceUsd
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+  Sqlite.run(
+    stmt,
+    [
+      Sqlite.Text(find.findId),
+      Sqlite.Text(find.sceneId),
+      Sqlite.Text(find.model),
+      boolNum(find.fixture),
+      Sqlite.Text(find.name),
+      Sqlite.Text(find.query),
+      optText(find.where),
+      Sqlite.Num(find.estimateLowUsd),
+      Sqlite.Num(find.estimateHighUsd),
+      Sqlite.Num(find.confidence),
+      optText(find.category),
+      Sqlite.Text(find.promptVersion),
+      optText(find.ebayJson),
+      optNum(find.paidUsd),
+      optNum(find.soldUsd),
+      optText(find.soldOn),
+      optText(find.soldWhere),
+      Sqlite.Text(find.createdAt),
+      Sqlite.Text(find.size),
+      optInt(find.box->Option.map(b => b.x1)),
+      optInt(find.box->Option.map(b => b.y1)),
+      optInt(find.box->Option.map(b => b.x2)),
+      optInt(find.box->Option.map(b => b.y2)),
+      optText(find.shipClass->Option.map(Profit.toString)),
+      optNum(find.feeEstUsd),
+      optNum(find.postageEstUsd),
+      optNum(find.tagPriceUsd),
+    ],
+  )->ignore
+}
+
+// The finds of one haul, through scenes.haulId.
+let findsOf = (db: t, haulId: string): array<find> => {
+  let stmt = Sqlite.prepare(
+    db,
+    `SELECT finds.* FROM finds
+     JOIN scenes ON scenes.sceneId = finds.sceneId
+     WHERE scenes.haulId = ?
+     ORDER BY finds.createdAt ASC, finds.rowid ASC`,
+  )
+  Sqlite.all(stmt, [Sqlite.Text(haulId)])->Array.filterMap(decodeFind)
+}
+
+// All hauls, newest first. rowid is SQLite's implicit column, so no
+// explicit rowid select is needed to order by it.
+let listHauls = (db: t): array<haul> => {
+  let stmt = Sqlite.prepare(db, `SELECT * FROM hauls ORDER BY startedAt DESC, rowid DESC`)
+  Sqlite.all(stmt, [])->Array.filterMap(decodeHaul)
+}
+
+// Scene count per haul, every status. A haul with zero scenes is simply
+// absent from the dict -- callers read it with Option.getOr(0).
+let photoCountsOf = (db: t): Dict.t<int> => {
+  let stmt = Sqlite.prepare(db, `SELECT haulId, COUNT(*) AS n FROM scenes GROUP BY haulId`)
+  let counts = Dict.make()
+  Sqlite.all(stmt, [])->Array.forEach(row =>
+    switch (Json.stringField(row, "haulId"), Json.intField(row, "n")) {
+    | (Some(haulId), Some(n)) => Dict.set(counts, haulId, n)
+    | _ => ()
+    }
+  )
+  counts
+}
+
+// Every find across every haul, paired with its haulId (finds has no
+// haulId column of its own -- only scenes does). Oldest first, so a
+// haul's buys come out oldest first too (HaulList.build just filters,
+// it never re-sorts).
+let findsAll = (db: t): array<(string, find)> => {
+  let stmt = Sqlite.prepare(
+    db,
+    `SELECT finds.*, scenes.haulId AS haulId FROM finds
+     JOIN scenes ON scenes.sceneId = finds.sceneId
+     ORDER BY finds.createdAt ASC, finds.rowid ASC`,
+  )
+  Sqlite.all(stmt, [])->Array.filterMap(row =>
+    switch (Json.stringField(row, "haulId"), decodeFind(row)) {
+    | (Some(haulId), Some(find)) => Some((haulId, find))
+    | _ => None
+    }
+  )
+}
+
+// The estimate for a stored find. HaulStatus.gemsOf and
+// HaulEmail.digestGemsOf both built this the same way from a find; this is
+// their one shared call. A missing shipClass defaults to Profit.defaultClass.
+let profitOf = (f: find): Profit.estimate =>
+  Profit.estimate(
+    ~lowUsd=f.estimateLowUsd,
+    ~highUsd=f.estimateHighUsd,
+    ~shipClass=f.shipClass->Option.getOr(Profit.defaultClass),
+    ~tagPriceUsd=f.tagPriceUsd,
+  )

@@ -1,0 +1,166 @@
+{
+  "total": 35,
+  "covered": 16,
+  "coveredDots": [
+    {
+      "index": 0,
+      "ariaLabel": "Item 1",
+      "badge": "gem",
+      "cx": 182.109375,
+      "cy": 201.828125,
+      "coveringTag": "span",
+      "coveringClass": "scan-pin-badge-gem",
+      "coveringPinAriaLabel": "Item 33"
+    },
+    {
+      "index": 3,
+      "ariaLabel": "Item 4",
+      "badge": "plain",
+      "cx": 208.234375,
+      "cy": 116.546875,
+      "coveringTag": "span",
+      "coveringClass": "scan-pin-badge-gem",
+      "coveringPinAriaLabel": "Item 39"
+    },
+    {
+      "index": 4,
+      "ariaLabel": "Item 5",
+      "badge": "plain",
+      "cx": 231.1875,
+      "cy": 115.640625,
+      "coveringTag": "span",
+      "coveringClass": "scan-pin-badge-gem",
+      "coveringPinAriaLabel": "Item 39"
+    },
+    {
+      "index": 5,
+      "ariaLabel": "Item 6",
+      "badge": "gem",
+      "cx": 248.296875,
+      "cy": 121.359375,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 9"
+    },
+    {
+      "index": 6,
+      "ariaLabel": "Item 7",
+      "badge": "gem",
+      "cx": 259.140625,
+      "cy": 152.75,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 10"
+    },
+    {
+      "index": 7,
+      "ariaLabel": "Item 8",
+      "badge": "plain",
+      "cx": 293.40625,
+      "cy": 132.203125,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 10"
+    },
+    {
+      "index": 8,
+      "ariaLabel": "Item 9",
+      "badge": "plain",
+      "cx": 266.5625,
+      "cy": 129.328125,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 10"
+    },
+    {
+      "index": 10,
+      "ariaLabel": "Item 11",
+      "badge": "plain",
+      "cx": 184.9375,
+      "cy": 139.046875,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 13"
+    },
+    {
+      "index": 11,
+      "ariaLabel": "Item 12",
+      "badge": "plain",
+      "cx": 196.921875,
+      "cy": 133.328125,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 13"
+    },
+    {
+      "index": 12,
+      "ariaLabel": "Item 13",
+      "badge": "plain",
+      "cx": 205.484375,
+      "cy": 139.609375,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 22"
+    },
+    {
+      "index": 15,
+      "ariaLabel": "Item 16",
+      "badge": "plain",
+      "cx": 221.484375,
+      "cy": 155.59375,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 22"
+    },
+    {
+      "index": 17,
+      "ariaLabel": "Item 18",
+      "badge": "plain",
+      "cx": 162.453125,
+      "cy": 167,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 45"
+    },
+    {
+      "index": 18,
+      "ariaLabel": "Item 19",
+      "badge": "plain",
+      "cx": 185.296875,
+      "cy": 162.4375,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 45"
+    },
+    {
+      "index": 22,
+      "ariaLabel": "Item 23",
+      "badge": "gem",
+      "cx": 40.546875,
+      "cy": 108.796875,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 24"
+    },
+    {
+      "index": 23,
+      "ariaLabel": "Item 24",
+      "badge": "plain",
+      "cx": 47.96875,
+      "cy": 121.359375,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 25"
+    },
+    {
+      "index": 26,
+      "ariaLabel": "Item 27",
+      "badge": "gem",
+      "cx": 254.59375,
+      "cy": 217.796875,
+      "coveringTag": "button",
+      "coveringClass": "scan-pin",
+      "coveringPinAriaLabel": "Item 31"
+    }
+  ]
+}

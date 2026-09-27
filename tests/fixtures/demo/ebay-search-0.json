@@ -1,0 +1,56 @@
+{
+  "href": "https://api.ebay.com/buy/browse/v1/item_summary/search?q=vintage+Pyrex+nesting+mixing+bowls+set&limit=50",
+  "total": 6,
+  "limit": 50,
+  "offset": 0,
+  "itemSummaries": [
+    {
+      "itemId": "v1|fixture-0-1|0",
+      "title": "Vintage Pyrex Nesting Mixing Bowls Set of 4 Primary Colors",
+      "price": {"value": "58.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-1",
+      "shippingOptions": [{"shippingCost": {"value": "12.50", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-0-2|0",
+      "title": "Pyrex Cinderella Mixing Bowl Set Vintage",
+      "price": {"value": "42.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-2",
+      "shippingOptions": [{"shippingCost": {"value": "15.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-0-3|0",
+      "title": "Pyrex Nesting Bowl Set Butterprint Pattern",
+      "price": {"value": "89.99", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-3",
+      "shippingOptions": [{"shippingCost": {"value": "18.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-0-4|0",
+      "title": "Vintage Pyrex Mixing Bowls Clear Glass Set of 3",
+      "price": {"value": "28.50", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-4",
+      "shippingOptions": [{"shippingCost": {"value": "10.00", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-0-5|0",
+      "title": "Pyrex Gooseberry Nesting Bowl Set 4pc",
+      "price": {"value": "65.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-5",
+      "shippingOptions": [{"shippingCost": {"value": "14.25", "currency": "USD"}}]
+    },
+    {
+      "itemId": "v1|fixture-0-6|0",
+      "title": "Pyrex Mixing Bowl Set Snowflake Blue",
+      "price": {"value": "74.00", "currency": "USD"},
+      "condition": "Used",
+      "itemWebUrl": "https://www.ebay.com/itm/fixture-0-6",
+      "shippingOptions": [{"shippingCost": {"value": "16.00", "currency": "USD"}}]
+    }
+  ]
+}

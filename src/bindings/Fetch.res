@@ -8,6 +8,19 @@ type response
 module AbortSignal = {
   type t
   @val @scope("AbortSignal") external timeout: int => t = "timeout"
+
+  @val @scope("AbortSignal") external any: array<t> => t = "any"
+
+  @get external aborted: t => bool = "aborted"
+
+  // FixtureReplay.res's sleep(): listens for the one-shot "abort" event so
+  // an in-flight setTimeout can be cleared early, instead of only noticing
+  // `stop` the next time something already checks `aborted`. `listener` is
+  // typed `unit => unit`, not the DOM Event -- every caller here ignores
+  // the event object, so there is nothing to decode from it.
+  @send external addEventListener: (t, string, unit => unit) => unit = "addEventListener"
+  @send
+  external removeEventListener: (t, string, unit => unit) => unit = "removeEventListener"
 }
 
 type requestInit = {
@@ -19,10 +32,28 @@ type requestInit = {
 
 @val external fetch: (string, ~init: requestInit=?) => promise<response> = "fetch"
 
+// A second typed binding for the same global `fetch`, for a binary
+// (Buffer) request body — Node's fetch (undici) accepts a Buffer as-is,
+// byte for byte, where a plain-string body would get re-encoded as UTF-8
+// and corrupt bytes over 0x7f. Tests use this to POST a real JPEG.
+type requestInitBuffer = {
+  method?: string,
+  headers?: dict<string>,
+  body?: Node.Buffer.t,
+  signal?: AbortSignal.t,
+}
+
+@val external fetchBuffer: (string, ~init: requestInitBuffer=?) => promise<response> = "fetch"
+
 @get external status: response => int = "status"
 @get external ok: response => bool = "ok"
 @send external text: response => promise<string> = "text"
 @send external json: response => promise<JSON.t> = "json"
+// A binary response body (a JPEG served back from GET /api/scenes/:id/photo,
+// per docs/spec-haul-mode.md "The routes") — `text` above would corrupt any
+// byte over 0x7f, same reason `fetchBuffer` exists for a binary request
+// body. `Node.Buffer.fromArrayBuffer` converts what this resolves to.
+@send external arrayBuffer: response => promise<Node.Buffer.arrayBufferLike> = "arrayBuffer"
 
 // Basic-auth header value for the eBay client-credentials grant.
 @val external btoa: string => string = "btoa"
@@ -32,3 +63,36 @@ type headers
 @get external responseHeaders: response => headers = "headers"
 
 @send external getHeader: (headers, string) => Nullable.t<string> = "get"
+
+module AbortController = {
+  type t
+  @new external make: unit => t = "AbortController"
+  @get external signal: t => AbortSignal.t = "signal"
+  @send external abort: t => unit = "abort"
+}
+
+// Opaque: we only pass a chunk through to TextDecoder.decode, never inspect
+// its bytes in ReScript.
+module Uint8Array = {
+  type t
+}
+
+type readableStream
+
+type readableStreamReader
+
+// response.body is `ReadableStream | null` — Nullable, converted with
+// Nullable.toOption at the call site, per this file's existing getHeader.
+@get external bodyRaw: response => Nullable.t<readableStream> = "body"
+
+let body = (resp: response): option<readableStream> => Nullable.toOption(bodyRaw(resp))
+
+@send external getReader: readableStream => readableStreamReader = "getReader"
+
+// `value` is absent (not just empty) on the final `{done: true}` chunk in
+// some engines, so it is an optional field, not a plain Uint8Array.
+type readResult = {done: bool, value?: Uint8Array.t}
+
+@send external read: readableStreamReader => promise<readResult> = "read"
+
+@send external cancel: readableStreamReader => promise<unit> = "cancel"
