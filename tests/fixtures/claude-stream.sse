@@ -248,7 +248,7 @@ event: content_block_delta
 data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":"4, \"sources\":"}}
 
 event: content_block_delta
-data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" [], \"shipClass\": \"small\", \"tagPriceUsd\": 2.5}], \"quarterSeen\": true}"}}
+data: {"type":"content_block_delta","index":7,"delta":{"type":"text_delta","text":" [], \"shipClass\": \"large\", \"tagPriceUsd\": 2.5}], \"quarterSeen\": true}"}}
 
 event: content_block_stop
 data: {"type":"content_block_stop","index":7}

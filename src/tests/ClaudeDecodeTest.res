@@ -32,9 +32,9 @@ let run = () => {
           Some((Profit.Medium, Some(12.0))),
       )
       TestKit.check(
-        "scene fixture's board game lot is small with a $2.50 tag",
+        "scene fixture's board game lot is large with a $2.50 tag",
         Array.get(decoded.items, 2)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
-          Some((Profit.Small, Some(2.5))),
+          Some((Profit.Large, Some(2.5))),
       )
     }
   | Error(_) => TestKit.check("fixture decodes", false)

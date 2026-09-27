@@ -17,8 +17,10 @@ Per `docs/spec-scale-ref.md`, `claude-scene.json` has `quarterSeen: true`
 at the top level, and each fixture's items mix a `size` value, an empty
 `size`, and a missing `size` key, so a decode exercises all three cases.
 Per `docs/spec-profit.md`, each fixture's three items also carry, in
-order, `shipClass` `large`, `medium` and `small`, with `tagPriceUsd`
-`null`, `12` and `2.5`.
+order, `tagPriceUsd` `null`, `12` and `2.5`. Their `shipClass` values are
+`large`, `medium` and `small` in `claude-haul.json`. In `claude-scene.json`
+and `claude-stream.sse`, they are `large`, `medium` and `large`, because a
+board game lot does not fit a small box.
 
 `table.jpg` is 64x48 pixels. Each item in `claude-scene.json` has a `box`
 in pixels of that image, so fixture mode shows boxes when you send
