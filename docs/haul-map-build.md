@@ -524,6 +524,35 @@ source. A live call on a fixture brain gave `photoCount` 2 and `gemCount`
   result as JSON. It logs nothing about the rows.
 - `GET /api/hauls` now parses to the new `ListHauls` route.
 
+## Step 4: Map view
+
+Working tree: /Users/dwight/code/reflip/.claude/worktrees/practical-meninsky-40aacd
+Branch: claude/haul-map-view (stacked on PR 29)
+
+Scope: docs/spec-haul-map.md lines 11-19, 32-51 and 72-76 only.
+
+Checklist:
+
+- [ ] 1. Install leaflet 1.9.4. Add src/web/Leaflet.res with typed externals
+      for the calls the spec lists. Load leaflet/dist/leaflet.css through
+      Vite with a linked CSS file, no raw script tag.
+- [ ] 2. src/web/MapState.res: the pure model, the msg type and update.
+      Pure helpers: the range filter, the pin style, and the fit rule.
+      src/tests/MapStateTest.res, registered in AllTests.res.
+- [ ] 3. AppState.res: add MapTab to tab, a map field to model, a Map msg,
+      and the hash helpers for #map.
+- [ ] 4. Api.res: getHauls for GET /api/hauls, reusing the Set place call.
+- [ ] 5. App.res: load hauls when the Map view opens and after a Set place
+      succeeds. Wire the URL hash. WebApi.res gets the hash bindings.
+- [ ] 6. ScanShell.res: the Map tab button and its content.
+      src/web/MapView.res: the map ref effects, the pins, the range chips,
+      the list and the panel. scan.css gets the new classes.
+- [ ] 7. npm test passes.
+- [ ] 8. npm run build, then a dev-browser check by hand at 390x844, with
+      shots in docs/shots/haul-map/.
+
+### Log
+
 ## Status on 2026-09-26
 
 MVP step 1 is done. PR m0n01d/reflip#28 holds it. `npm test`, `scripts/haul-smoke.mjs` and `scripts/place-check.mjs` passed on `469d17e`.
