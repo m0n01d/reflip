@@ -89,6 +89,7 @@ let build = (db: Store.t, config: Config.t, haulId: string): option<Types.haulSt
         gems,
         otherCount: otherFinds + otherFromScenes,
         failed: failedOf(scenes),
+        place: haul.place,
       })
     }
   }

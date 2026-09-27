@@ -470,6 +470,63 @@ let run = () => {
   }
   Store.close(migDb2)
 
+  // -- migrating a pre-place hauls table on open --------------------------------
+  TestKit.section("Store: migrates a hauls table with no place columns")
+
+  let migDir3 = Node.Path.join([Node.Os.tmpdir(), "reflip-store-test-" ++ Node.Crypto.randomUUID()])
+  Node.Fs.mkdirSync(migDir3, {recursive: true})
+  let migPath3 = Node.Path.join([migDir3, "old.db"])
+
+  // The pre-place `hauls` schema, hand-built with the raw Sqlite binding —
+  // the same shape Store.openAt's own CREATE TABLE IF NOT EXISTS wrote
+  // before this change, and so a no-op against a DB that already has it.
+  let oldDb3 = Sqlite.make(migPath3)
+  Sqlite.exec(
+    oldDb3,
+    `CREATE TABLE hauls (
+      haulId TEXT PRIMARY KEY,
+      name TEXT,
+      startedAt TEXT NOT NULL,
+      doneAt TEXT,
+      emailedAt TEXT,
+      costUsd REAL NOT NULL DEFAULT 0,
+      stopReason TEXT,
+      emailNote TEXT
+    )`,
+  )
+  Sqlite.exec(
+    oldDb3,
+    `INSERT INTO hauls (haulId, startedAt, costUsd) VALUES ('haul-mig3', '2026-09-26T09:00:00.000Z', 0)`,
+  )
+  Sqlite.close(oldDb3)
+
+  let migDb3 = Store.openAt(migPath3)
+  switch Store.getHaul(migDb3, "haul-mig3") {
+  | Some(h) => TestKit.check("a pre-migration haul with no place columns reads back with no place", h.place == None)
+  | None => TestKit.check("getHaul found the pre-migration haul", false)
+  }
+  let migPlace3: Types.place = {
+    lat: 47.6,
+    lon: -122.3,
+    accuracyM: Some(10.0),
+    source: Gps,
+    at: "2026-09-26T09:00:01.000Z",
+  }
+  let placedMig3 = Store.setPlace(migDb3, ~haulId="haul-mig3", ~place=migPlace3)
+  TestKit.check(
+    "a DB with the old hauls schema opens and stores a place",
+    placedMig3 == Some(migPlace3),
+  )
+  switch Store.getHaul(migDb3, "haul-mig3") {
+  | Some(h) =>
+    TestKit.check(
+      "the migrated place columns round-trip through a fresh read",
+      h.place == Some(migPlace3),
+    )
+  | None => TestKit.check("getHaul found the migrated haul", false)
+  }
+  Store.close(migDb3)
+
   // -- counts -------------------------------------------------------------------
   TestKit.section("Store: counts")
 
@@ -517,6 +574,56 @@ let run = () => {
     }
   | None => TestKit.check("haul-mark exists", false)
   }
+
+  // -- setPlace round-trips and keeps a stored pin over an incoming gps -----------
+  TestKit.section("Store: setPlace round-trips a place")
+
+  let _haulPlace = Store.createHaul(db, ~haulId="haul-place", ~name=None, ~now="2026-09-26T09:00:00.000Z")
+  let gpsPlace: Types.place = {
+    lat: 47.6180431,
+    lon: -122.3514229,
+    accuracyM: Some(13.37),
+    source: Gps,
+    at: "2026-09-26T09:00:01.000Z",
+  }
+  let setGps = Store.setPlace(db, ~haulId="haul-place", ~place=gpsPlace)
+  TestKit.check("setPlace on a fresh haul returns the incoming gps place", setGps == Some(gpsPlace))
+  switch Store.getHaul(db, "haul-place") {
+  | Some(h) => TestKit.check("the gps place round-trips through getHaul", h.place == Some(gpsPlace))
+  | None => TestKit.check("haul-place exists", false)
+  }
+
+  TestKit.section("Store: setPlace keeps a stored pin over a later gps fix")
+
+  let _haulPin = Store.createHaul(db, ~haulId="haul-pin", ~name=None, ~now="2026-09-26T09:10:00.000Z")
+  let pinPlace: Types.place = {
+    lat: 1.0,
+    lon: 2.0,
+    accuracyM: None,
+    source: Pin,
+    at: "2026-09-26T09:10:01.000Z",
+  }
+  let laterGps: Types.place = {
+    lat: 3.0,
+    lon: 4.0,
+    accuracyM: Some(8.0),
+    source: Gps,
+    at: "2026-09-26T09:10:02.000Z",
+  }
+  Store.setPlace(db, ~haulId="haul-pin", ~place=pinPlace)->ignore
+  let afterGps = Store.setPlace(db, ~haulId="haul-pin", ~place=laterGps)
+  TestKit.check("setPlace with a gps fix after a pin returns the stored pin", afterGps == Some(pinPlace))
+  switch Store.getHaul(db, "haul-pin") {
+  | Some(h) => TestKit.check("the stored pin survives the gps fix", h.place == Some(pinPlace))
+  | None => TestKit.check("haul-pin exists", false)
+  }
+
+  TestKit.section("Store: setPlace on an unknown haul returns None")
+
+  TestKit.check(
+    "setPlace on an unknown haulId returns None",
+    Store.setPlace(db, ~haulId="no-such-haul", ~place=gpsPlace) == None,
+  )
 
   // -- row decoders return None for a missing column ---------------------------
   TestKit.section("Store: row decoders return None on a missing column")

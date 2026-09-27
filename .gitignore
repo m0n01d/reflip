@@ -3,3 +3,4 @@ lib/
 *.res.mjs
 data/
 dist/
+src/BuildInfo.res

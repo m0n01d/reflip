@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=23.4.0"
+  },
   "scripts": {
-    "build": "rescript build && vite build",
+    "build": "node scripts/write-build-info.mjs && rescript build && vite build",
     "clean": "rescript clean",
-    "dev": "rescript build -w",
+    "dev": "node scripts/write-build-info.mjs && rescript build -w",
     "dev:web": "vite",
     "test": "npm run build && node src/tests/AllTests.res.mjs",
     "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs",
@@ -21,6 +24,7 @@
     "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
     "idb-keyval": "^6.3.0",
+    "leaflet": "^1.9.4",
     "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

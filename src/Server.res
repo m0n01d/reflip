@@ -63,9 +63,21 @@ let parseRttPath = (pathname: string): option<string> => {
   }
 }
 
+// index.html is the one file that decides which hashed bundle a client
+// loads — Vite's own [name]-[hash].js/.css filenames are already
+// cache-proof (a content change is a new filename), so index.html itself
+// must never be cached, or a stale page can keep pointing at a bundle
+// that no longer exists on the next deploy.
+let noStoreHeaders = Dict.fromArray([("Cache-Control", "no-store")])
+
 let handleRoot = (config: Config.t, res: Node.HttpServer.response): unit =>
   if Node.Fs.existsSync(config.distIndexPath) {
-    textResponse(res, 200, "text/html", Node.Fs.readFileUtf8(config.distIndexPath, "utf8"))
+    Node.HttpServer.writeHead(
+      res,
+      200,
+      Dict.fromArray([("Content-Type", "text/html"), ("Cache-Control", "no-store")]),
+    )
+    Node.HttpServer.endWithBody(res, Node.Fs.readFileUtf8(config.distIndexPath, "utf8"))
   } else {
     textResponse(res, 200, "text/html", placeholderHtml)
   }
@@ -77,19 +89,39 @@ let handleRoot = (config: Config.t, res: Node.HttpServer.response): unit =>
 // filesystem. In practice `pathname` already had any ".." collapsed by the
 // WHATWG URL parser in `route` below, but that is this function's caller's
 // business, not a reason to skip checking here too.
+//
+// Cache-Control: everything under Vite's own /assets/ is named
+// [name]-[hash].ext — the same URL never serves different bytes, so it is
+// safe to cache forever. Anything else (the manifest, the icons, and
+// index.html's own fallback path) gets no-store, same reasoning as
+// handleRoot above — none of them are content-hashed, so a stale cached
+// copy after a deploy would just be wrong with no way to detect it.
 let handleStatic = (config: Config.t, pathname: string, res: Node.HttpServer.response): unit => {
   let resolved = Node.Path.join([config.distDir, pathname])
   if String.startsWith(resolved, config.distDir ++ "/") && Node.Fs.existsSync(resolved) {
-    Node.HttpServer.writeHead(
-      res,
-      200,
-      Dict.fromArray([("Content-Type", contentTypeFor(resolved))]),
-    )
+    let cacheHeaders = String.startsWith(pathname, "/assets/")
+      ? Dict.fromArray([("Cache-Control", "public, max-age=31536000, immutable")])
+      : noStoreHeaders
+    cacheHeaders->Dict.set("Content-Type", contentTypeFor(resolved))
+    Node.HttpServer.writeHead(res, 200, cacheHeaders)
     endWithBuffer(res, Node.Fs.readFileBuffer(resolved))
   } else {
     textResponse(res, 404, "text/plain", "not found")
   }
 }
+
+// GET /api/version: what's actually running, so a curl from anywhere on
+// the tailnet can confirm a deploy landed without opening the phone.
+let handleVersion = (res: Node.HttpServer.response): unit =>
+  jsonResponse(
+    res,
+    200,
+    Json.obj([
+      ("commitSha", Json.str(BuildInfo.commitSha)),
+      ("dirty", Json.boolJ(BuildInfo.dirty)),
+      ("builtAt", Json.str(BuildInfo.builtAt)),
+    ]),
+  )
 
 let handleRtt = (
   config: Config.t,
@@ -119,11 +151,16 @@ let handleRtt = (
 
 // -- Haul mode routes (docs/spec-haul-mode.md "The routes") -----------------
 
-type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string)
+type haulRoute = ListHauls | CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string) | SetPlace(string)
 
 let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
   let parts = pathname->String.split("/")->Array.filter(s => s != "")
   switch (method, Array.length(parts)) {
+  | ("GET", 2) => {
+      let a = Array.getUnsafe(parts, 0)
+      let b = Array.getUnsafe(parts, 1)
+      a == "api" && b == "hauls" ? Some(ListHauls) : None
+    }
   | ("POST", 2) =>
     let a = Array.getUnsafe(parts, 0)
     let b = Array.getUnsafe(parts, 1)
@@ -138,6 +175,8 @@ let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
           Some(AddScene(id))
         } else if c == "done" {
           Some(MarkDone(id))
+        } else if c == "place" {
+          Some(SetPlace(id))
         } else {
           None
         }
@@ -212,6 +251,8 @@ let handleCreateHaul = async (
   }
 
 let maxPhotoBytes = 15 * 1024 * 1024
+
+let maxPlaceBytes = 4096
 
 // Shared by handleScene (/api/scene) and StreamRoute.handle
 // (/api/scene/stream): runs the eBay merge and the box decode, in that
@@ -354,6 +395,11 @@ let handleGetHaul = (
   res: Node.HttpServer.response,
 ): unit => haulStatusResponse(config, store, haulId, 200, res)
 
+// GET /api/hauls: no logging of the rows -- place stays out of every log,
+// same rule as handleSetPlace.
+let handleListHauls = (config: Config.t, store: Store.t, res: Node.HttpServer.response): unit =>
+  jsonResponse(res, 200, Types.encodeHaulList(HaulList.fromStore(store, config)))
+
 // The stored photo of a scene (docs/spec-haul-mode.md "The routes"). The id
 // gets the same 1-to-64-of-[A-Za-z0-9-] check as a client id, then the path
 // is joined and checked the same way handleStatic checks dist/: resolve it,
@@ -397,6 +443,46 @@ let handleMarkDone = (
       haulStatusResponse(config, store, haulId, 200, res)
     }
   }
+
+let handleSetPlace = async (
+  _config: Config.t,
+  store: Store.t,
+  haulId: string,
+  req: Node.HttpServer.request,
+  res: Node.HttpServer.response,
+): unit => {
+  let body = await Node.HttpServer.readBody(req)
+  if Node.Buffer.length(body) > maxPlaceBytes {
+    errorJson(res, 413, "body over 4096 bytes")
+  } else {
+    let text = Node.Buffer.toStringWithEncoding(body, "utf8")
+    switch JSON.parseOrThrow(text) {
+    | exception JsExn(_) => errorJson(res, 400, "invalid JSON body")
+    | json =>
+      switch Place.decodeInput(json) {
+      | Error(reason) => errorJson(res, 400, reason)
+      | Ok(input) =>
+        let now = Date.toISOString(Date.make())
+        let place: Types.place = {
+          lat: input.lat,
+          lon: input.lon,
+          accuracyM: input.accuracyM,
+          source: input.source,
+          at: now,
+        }
+        switch Store.setPlace(store, ~haulId, ~place) {
+        | None => errorJson(res, 404, "no such haul")
+        | Some(stored) =>
+          jsonResponse(
+            res,
+            200,
+            Json.obj([("haulId", Json.str(haulId)), ("place", Types.encodePlace(stored))]),
+          )
+        }
+      }
+    }
+  }
+}
 
 let handleScene = async (
   config: Config.t,
@@ -602,11 +688,13 @@ let route = async (
   let url = Node.Url.make(Node.HttpServer.url(req), "http://127.0.0.1")
   let pathname = Node.Url.pathname(url)
   switch parseHaulPath(method, pathname) {
+  | Some(ListHauls) => handleListHauls(config, store, res)
   | Some(CreateHaul) => await handleCreateHaul(config, store, req, res)
   | Some(AddScene(haulId)) => await handleAddScene(config, store, worker, haulId, req, res)
   | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)
   | Some(MarkDone(haulId)) => handleMarkDone(config, store, worker, haulId, res)
   | Some(ScenePhoto(sceneId)) => handleScenePhoto(config, sceneId, res)
+  | Some(SetPlace(haulId)) => await handleSetPlace(config, store, haulId, req, res)
   | None =>
   switch parseScenePath(method, pathname) {
   | Some(Stop(sceneId)) => handleSceneStop(sceneId, res)
@@ -614,6 +702,8 @@ let route = async (
   | None =>
   if method == "GET" && pathname == "/" {
     handleRoot(config, res)
+  } else if method == "GET" && pathname == "/api/version" {
+    handleVersion(res)
   } else if method == "POST" && pathname == "/api/scene/stream" {
     let rawModel = Node.Url.searchParams(url)->Node.Url.getParam("model")->Nullable.toOption
     switch rawModel {

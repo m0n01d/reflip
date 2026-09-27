@@ -18,10 +18,12 @@ let make = (
   ~onStartHaul: ReactEvent.Mouse.t => unit,
 ) => {
   let scanDispatch = (m: ScanState.msg) => dispatch(AppState.Scan(m))
+  let mapDispatch = (m: MapState.msg) => dispatch(AppState.Map(m))
   let phase = model.scan.phase
   let isReady = phase == ScanState.Ready
   let onScanTab = _ => dispatch(AppState.SetActiveTab(AppState.ScanTab))
   let onHaulTab = _ => dispatch(AppState.SetActiveTab(AppState.HaulTab))
+  let onMapTab = _ => dispatch(AppState.SetActiveTab(AppState.MapTab))
   let openSettings = _ => dispatch(AppState.SetSettingsOpen(true))
   let closeSettings = _ => dispatch(AppState.SetSettingsOpen(false))
   let onStop = (_: ReactEvent.Mouse.t) => scanDispatch(ScanState.StopTapped)
@@ -38,6 +40,9 @@ let make = (
       <div className="scan-header-logo">
         <span ariaHidden={true} className="scan-header-dot" />
         <span className="scan-header-word"> {React.string("reflip")} </span>
+        <span className="scan-header-build" title={"built " ++ BuildInfo.builtAt}>
+          {React.string(BuildInfo.commitSha ++ (BuildInfo.dirty ? "+" : ""))}
+        </span>
       </div>
       <div className="scan-header-actions">
         {if isReady {
@@ -100,6 +105,14 @@ let make = (
             className={"scan-mode-btn" ++
             (model.activeTab == AppState.HaulTab ? " scan-mode-btn-active" : "")}>
             {React.string("Haul")}
+          </button>
+          <button
+            type_="button"
+            ariaPressed={model.activeTab == AppState.MapTab ? #"true" : #"false"}
+            onClick={onMapTab}
+            className={"scan-mode-btn" ++
+            (model.activeTab == AppState.MapTab ? " scan-mode-btn-active" : "")}>
+            {React.string("Map")}
           </button>
         </div>
         {switch model.activeTab {
@@ -173,26 +186,65 @@ let make = (
             </div>
           </div>
         | AppState.HaulTab =>
-          // Unchanged from the original inline markup — same classNames,
-          // same behavior. Only its visibility (now gated behind the Haul
-          // tab instead of always-on) changed.
-          <section className="haul-start">
-            <h2> {React.string("Haul mode")} </h2>
-            <input
-              className="store-name"
-              type_="text"
-              placeholder="Store name (optional)"
-              value={model.storeName}
-              onChange={onStoreNameChange}
-            />
-            <button className="take-photo" onClick={onStartHaul}>
-              {React.string("Start haul")}
-            </button>
+          // Restyled per docs/design/haul-ui/Main.dc.html L63-88 (step 6).
+          // Same store-name input and start button, same onStoreNameChange
+          // / onStartHaul handlers — only markup and styles changed.
+          <section className="haul-ready">
+            <h1 className="haul-ready-title"> {React.string("Out on a haul?")} </h1>
+            <p className="haul-ready-sub">
+              {React.string(
+                "Snap as you walk. Gems come back while you shop, and the full list lands in your inbox.",
+              )}
+            </p>
+            <div className="haul-ready-card-shadow">
+              <div className="haul-ready-card">
+                <label htmlFor="haul-store-input" className="haul-ready-label">
+                  {React.string("STORE")}
+                </label>
+                <div className="haul-ready-input-wrap">
+                  {model.storeName == ""
+                    ? <span ariaHidden={true} className="haul-ready-hint">
+                        {React.string("Store name (optional)")}
+                      </span>
+                    : React.null}
+                  <input
+                    id="haul-store-input"
+                    className="haul-ready-input"
+                    type_="text"
+                    autoComplete="off"
+                    value={model.storeName}
+                    onChange={onStoreNameChange}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="haul-ready-start-wrap">
+              <button type_="button" className="haul-ready-start" onClick={onStartHaul}>
+                <span ariaHidden={true} className="haul-ready-start-ring" />
+                <span className="haul-ready-start-inner">
+                  <svg
+                    width="46"
+                    height="46"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M5 9h14l-1.2 10.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z" />
+                    <path d="M9 9V7a3 3 0 0 1 6 0v2" />
+                  </svg>
+                  <span className="haul-ready-start-label"> {React.string("Start a haul")} </span>
+                </span>
+              </button>
+            </div>
             {switch model.haulError {
             | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
             | None => React.null
             }}
           </section>
+        | AppState.MapTab => <MapView model={model.map} dispatch={mapDispatch} />
         }}
       </>
     } else {

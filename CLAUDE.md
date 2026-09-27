@@ -92,6 +92,8 @@ FIXTURES=1 PORT=8787 npm start
 
 `npm run build` builds the ReScript, then the Vite bundle, into `dist/`. After that, `npm start` serves the page at `http://127.0.0.1:8787/`.
 
+The Node version comes from `.tool-versions`, which asdf reads. The file lists 26.0.0, then 22.16.0, and asdf runs the first one that is installed. The stream spike ran on 26.0.0 (`docs/stream-spike.md`). The Mac mini has no 26.0.0, so it runs 22.16.0. The store imports `node:sqlite`. That module needs no flag on Node 22.13.0 or later in the 22 line, or on 23.4.0 or later. Checked 2026-09-27 against `nodejs.org/api/sqlite.html`. The `engines` field in `package.json` holds that range. Node 23.0.0 is the global asdf default on the Mac mini, and it is outside that range. On it, `npm start` stops at once with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`.
+
 With the server running, in another shell:
 
 ```sh
@@ -151,6 +153,8 @@ The script prints one JSON result line and puts its screenshots in the output di
 ```sh
 node scripts/haul-smoke.mjs
 ```
+
+`scripts/place-check.mjs` is a repeatable check of the haul view's place line: a saved gps fix, a late haul id, the outbox surviving a reload, a denied prompt, a failed-then-retried prompt, the outbox surviving a reload after Done and the email note, and a privacy check of the brain's own log. Run it the same way, `node scripts/place-check.mjs`. Like `haul-smoke.mjs`, it never sends an email, because `FIXTURES=1` always uses the outbox.
 
 ## Live keys
 

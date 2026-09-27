@@ -71,6 +71,31 @@ type requestInitString = {method: string, headers: Dict.t<string>, body: string}
 @val external setInterval: (unit => unit, int) => float = "setInterval"
 @val external clearInterval: float => unit = "clearInterval"
 
+// XMLHttpRequest, typed narrowly for one job: POST a blob with a real,
+// cross-browser upload-progress event. fetch has none (see
+// docs/spec-upload-progress.md's Research) — xhr.upload.onprogress is the
+// only one that also works in Safari/iOS Safari.
+type xhr
+type xhrUpload
+type progressEvent = {loaded: float, total: float, lengthComputable: bool}
+@new external makeXhr: unit => xhr = "XMLHttpRequest"
+@send external xhrOpen: (xhr, string, string) => unit = "open"
+@send external xhrSetRequestHeader: (xhr, string, string) => unit = "setRequestHeader"
+@send external xhrSend: (xhr, blob) => unit = "send"
+@get external xhrUploadOf: xhr => xhrUpload = "upload"
+@get external xhrStatus: xhr => int = "status"
+@get external xhrResponseText: xhr => string = "responseText"
+@set external onUploadProgress: (xhrUpload, progressEvent => unit) => unit = "onprogress"
+@set external onXhrLoad: (xhr, unit => unit) => unit = "onload"
+@set external onXhrError: (xhr, unit => unit) => unit = "onerror"
+@set external onXhrAbort: (xhr, unit => unit) => unit = "onabort"
+// Fires as response bytes arrive too (not just the upload side above) —
+// ScanApi.res's own upload reads xhr.responseText progressively off this,
+// the same "readyState 3" technique SSE-over-XHR has used since long
+// before fetch streams existed (baseline since Safari 4).
+@set external onXhrProgress: (xhr, unit => unit) => unit = "onprogress"
+@send external xhrAbort: xhr => unit = "abort"
+
 @get external blobType: blob => string = "type"
 
 // A Blob constructor: lets AppStateTest build a real queue item without a
@@ -150,6 +175,7 @@ type abortController
 type abortSignal
 @new external makeAbortController: unit => abortController = "AbortController"
 @get external abortSignalOf: abortController => abortSignal = "signal"
+@send external onAbortSignalEvent: (abortSignal, string, unit => unit) => unit = "addEventListener"
 @send external abortControllerAbort: abortController => unit = "abort"
 
 type requestInitBlobSignal = {method: string, headers: Dict.t<string>, body: blob, signal: abortSignal}
@@ -190,7 +216,33 @@ type windowLike
 @val external windowGlobal: windowLike = "window"
 @send external addWindowListener: (windowLike, string, unit => unit) => unit = "addEventListener"
 
+// window.location.hash, for the Map view's #map (docs/spec-haul-map.md
+// "The page"). Read once on mount and set on every tab switch — App.res
+// owns both edges, AppState.tabOfHash/hashOfTab stay pure.
+type location
+@get external location: windowLike => location = "location"
+@get external locationHash: location => string = "hash"
+@set external setLocationHash: (location, string) => unit = "hash"
+
 @send
 external removeDocumentListener: (document, string, unit => unit) => unit = "removeEventListener"
 
 @send external removeWindowListener: (windowLike, string, unit => unit) => unit = "removeEventListener"
+
+// -- Geolocation (docs/spec-haul-map.md "The position") --------------------
+// navigator.geolocation is undefined outside a secure context and on some
+// older browsers, so it is read as nullable rather than assumed present.
+
+type geolocationCoords = {latitude: float, longitude: float, accuracy: float}
+type geolocationPosition = {coords: geolocationCoords}
+type geolocationPositionError = {code: int}
+type geolocationOptions = {enableHighAccuracy: bool, timeout: int, maximumAge: int}
+type geolocation
+@val @scope("navigator") external geolocation: Nullable.t<geolocation> = "geolocation"
+@send
+external getCurrentPosition: (
+  geolocation,
+  geolocationPosition => unit,
+  geolocationPositionError => unit,
+  geolocationOptions,
+) => unit = "getCurrentPosition"

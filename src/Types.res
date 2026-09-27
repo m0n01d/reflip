@@ -31,6 +31,16 @@ type box = {
   y2: int,
 }
 
+type placeSource = Gps | Pin
+
+type place = {
+  lat: float,
+  lon: float,
+  accuracyM: option<float>,
+  source: placeSource,
+  at: string,
+}
+
 type ebayStats = {
   count: int,
   minUsd: float,
@@ -122,6 +132,28 @@ type haulStatus = {
   gems: array<haulGem>,
   otherCount: int,
   failed: array<failedPhoto>,
+  place: option<place>,
+}
+
+type haulBuy = {
+  name: string,
+  paidUsd: float,
+  // The finds table has no paidOn column yet. Budget MVP step 2 adds it,
+  // with manualBuys. Until then, every buy's paidOn is None.
+  paidOn: option<string>,
+  soldUsd: option<float>,
+  soldOn: option<string>,
+}
+
+type haulListRow = {
+  haulId: string,
+  name: option<string>,
+  startedAt: string,
+  place: option<place>,
+  photoCount: int,
+  gemCount: int,
+  paidUsd: float,
+  buys: array<haulBuy>,
 }
 
 type sceneReply = {
@@ -161,6 +193,29 @@ let encodeBox = (b: box): JSON.t =>
     Json.num(Int.toFloat(b.y1)),
     Json.num(Int.toFloat(b.x2)),
     Json.num(Int.toFloat(b.y2)),
+  ])
+
+let encodePlace = (p: place): JSON.t =>
+  Json.obj([
+    ("lat", Json.num(p.lat)),
+    ("lon", Json.num(p.lon)),
+    (
+      "accuracyM",
+      switch p.accuracyM {
+      | Some(a) => Json.num(a)
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "source",
+      Json.str(
+        switch p.source {
+        | Gps => "gps"
+        | Pin => "pin"
+        },
+      ),
+    ),
+    ("at", Json.str(p.at)),
   ])
 
 let encodeReplyItem = (it: replyItem): JSON.t =>
@@ -304,4 +359,46 @@ let encodeHaulStatus = (s: haulStatus): JSON.t =>
     ("gems", Json.arr(Array.map(s.gems, encodeHaulGem))),
     ("otherCount", Json.num(Int.toFloat(s.otherCount))),
     ("failed", Json.arr(Array.map(s.failed, encodeFailedPhoto))),
+    (
+      "place",
+      switch s.place {
+      | Some(p) => encodePlace(p)
+      | None => JSON.Encode.null
+      },
+    ),
   ])
+
+let encodeHaulBuy = (b: haulBuy): JSON.t =>
+  Json.obj([
+    ("name", Json.str(b.name)),
+    ("paidUsd", Json.num(b.paidUsd)),
+    ("paidOn", encodeOptString(b.paidOn)),
+    (
+      "soldUsd",
+      switch b.soldUsd {
+      | Some(v) => Json.num(v)
+      | None => JSON.Encode.null
+      },
+    ),
+    ("soldOn", encodeOptString(b.soldOn)),
+  ])
+
+let encodeHaulListRow = (r: haulListRow): JSON.t =>
+  Json.obj([
+    ("haulId", Json.str(r.haulId)),
+    ("name", encodeOptString(r.name)),
+    ("startedAt", Json.str(r.startedAt)),
+    (
+      "place",
+      switch r.place {
+      | Some(p) => encodePlace(p)
+      | None => JSON.Encode.null
+      },
+    ),
+    ("photoCount", Json.num(Int.toFloat(r.photoCount))),
+    ("gemCount", Json.num(Int.toFloat(r.gemCount))),
+    ("paidUsd", Json.num(r.paidUsd)),
+    ("buys", Json.arr(Array.map(r.buys, encodeHaulBuy))),
+  ])
+
+let encodeHaulList = (rows: array<haulListRow>): JSON.t => Json.arr(Array.map(rows, encodeHaulListRow))

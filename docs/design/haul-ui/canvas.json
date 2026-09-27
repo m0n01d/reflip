@@ -1,0 +1,131 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Done.dc.html": {
+      "h": 1900,
+      "title": "Done · haul receipt",
+      "w": 390,
+      "x": 2350,
+      "y": 0
+    },
+    "EbayBlock.dc.html": {
+      "h": 880,
+      "title": "eBay block: stats, no stats",
+      "w": 390,
+      "x": 1880,
+      "y": 1244
+    },
+    "Failed.dc.html": {
+      "h": 844,
+      "title": "Failed photos, Done retrying",
+      "w": 390,
+      "x": 1410,
+      "y": 1244
+    },
+    "Finishing.dc.html": {
+      "h": 844,
+      "title": "Finishing · 20:52",
+      "w": 390,
+      "x": 1880,
+      "y": 0
+    },
+    "FirstSnaps.dc.html": {
+      "h": 844,
+      "title": "First snaps · 4:12",
+      "w": 390,
+      "x": 470,
+      "y": 0
+    },
+    "Gem.dc.html": {
+      "h": 2000,
+      "title": "Gem open · 19:40",
+      "w": 390,
+      "x": 1410,
+      "y": 0
+    },
+    "GemsLanding.dc.html": {
+      "h": 844,
+      "title": "Gems landing · 18:36",
+      "w": 390,
+      "x": 940,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "h": 844,
+      "is_interactive": true,
+      "title": "Main (play me)",
+      "w": 390,
+      "x": 0,
+      "y": 1244
+    },
+    "NoSignal.dc.html": {
+      "h": 844,
+      "title": "No signal · 20:40",
+      "w": 390,
+      "x": 470,
+      "y": 1244
+    },
+    "Ready.dc.html": {
+      "h": 844,
+      "title": "Ready",
+      "w": 390,
+      "x": 0,
+      "y": 0
+    },
+    "Stopped.dc.html": {
+      "h": 844,
+      "title": "Stopped: budget reached",
+      "w": 390,
+      "x": 940,
+      "y": 1244
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-25T23:04:23Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "about": {
+      "text": "The top row walks one sample haul: 13 photos at the Birch St. estate sale in 22:40, for $1.82 of the $10.00 budget. Every photo is the table photo from the Scan canvas. The 7 gems are its real items with a high estimate of $20 or more, with their real names, prices and boxes. The where and size lines are sample text. The eBay stats come from the test fixture (n=6 and n=5), not a real eBay call. Main plays the haul as a time-lapse at 4x, about 36 haul seconds each second. It taps Done at 20:50 if you do not. Stopped is a second sample haul of 72 photos that ran into the budget.",
+      "w": 390,
+      "x": 0,
+      "y": 2168
+    },
+    "row1": {
+      "kind": "title1",
+      "maxW": 2740,
+      "text": "Haul: snap as you walk, gems come back",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "row2": {
+      "kind": "title1",
+      "maxW": 2270,
+      "text": "Try it, and the other states",
+      "w": 240,
+      "x": 0,
+      "y": 944
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Ready.dc.html",
+    "FirstSnaps.dc.html",
+    "GemsLanding.dc.html",
+    "Gem.dc.html",
+    "Finishing.dc.html",
+    "Done.dc.html",
+    "NoSignal.dc.html",
+    "Stopped.dc.html",
+    "Failed.dc.html",
+    "EbayBlock.dc.html"
+  ],
+  "pages": [],
+  "title": "reflip haul mode"
+}

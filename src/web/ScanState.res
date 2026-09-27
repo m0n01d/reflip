@@ -57,6 +57,7 @@ type model = {
   selectedModel: Shared.model,
   photoUrl: option<string>,
   uploadBytes: int, // known client-side the moment a photo is picked
+  uploadedBytes: int, // bytes actually sent so far, from ScanApi's XHR upload-progress event
   sceneId: option<string>,
   sentWidth: int,
   sentHeight: int,
@@ -92,6 +93,7 @@ let initialModel: model = {
   selectedModel: Shared.defaultModel,
   photoUrl: None,
   uploadBytes: 0,
+  uploadedBytes: 0,
   sceneId: None,
   sentWidth: 0,
   sentHeight: 0,
@@ -121,6 +123,7 @@ type msg =
   | ConnectionLost
   | Reconnected
   | NewScan
+  | UploadProgress(int) // bytes sent so far, from ScanApi's XHR upload-progress event
   // Bug A (288738f review): the first POST failed outright, or a
   // reconnect had no scene id to use — either way there is nothing left
   // to retry. Terminal, like an `Ended` from the server, but carries the
@@ -348,6 +351,7 @@ let update = (m: model, msg: msg): model =>
   | ConnectionLost => {...m, reconnecting: true}
   | Reconnected => {...m, reconnecting: false}
   | NewScan => initialModel
+  | UploadProgress(bytes) => {...m, uploadedBytes: bytes}
   | RttMeasured(ms) => {...m, rttMs: Some(ms)}
   }
 
@@ -515,6 +519,15 @@ let headline = (m: model): string =>
     }
   }
 
+// The reason text SendFailed/ErrorEvent recorded, if any — so "could not
+// finish" is never a dead end: the real cause (a network error, a bad
+// status, a timeout) shows right on the card instead of hiding in a model
+// field nothing renders. See docs/spec-upload-progress.md's follow-up:
+// this is exactly what real cellular testing needed to diagnose an
+// instant failure remotely.
+let lastErrorReason = (m: model): option<string> =>
+  Array.get(m.errors, Array.length(m.errors) - 1)->Option.map(((_t, msg)) => msg)
+
 let sub = (m: model): string =>
   connectionState(m) == Reconnecting
     ? "Connection dropped. Catching up…"
@@ -529,7 +542,9 @@ let sub = (m: model): string =>
       let n = Array.length(visibleStickers(m))
       n > 0 ? "Kept the " ++ plural(n, "item", "items") ++ " found so far." : "Nothing had landed yet."
     }
-  | Ended(ScanEvent.EndStatus.Failed) => "Something went wrong. Kept what it found."
+  | Ended(ScanEvent.EndStatus.Failed) =>
+    "Something went wrong" ++
+    lastErrorReason(m)->Option.mapOr("", r => " (" ++ r ++ ")") ++ ". Kept what it found."
   | Live =>
     if m.stopRequested {
       "Finishing up the items already found."

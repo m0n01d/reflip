@@ -90,6 +90,16 @@ body:has(.scan-shell) {
   letter-spacing: -0.02em;
 }
 
+/* What's actually deployed, at a glance — a build with local uncommitted
+   changes gets a trailing "+" so a spike-in-progress deploy is obvious. */
+.scan-header-build {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
 .scan-header-actions {
   display: flex;
   align-items: center;
@@ -160,7 +170,7 @@ body:has(.scan-shell) {
   margin: 2px 16px 0;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   background-color: var(--scan-mode-track);
   border-radius: 14px;
@@ -479,6 +489,24 @@ body:has(.scan-shell) {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* Upload progress lives on the photo itself, not the status card below —
+   a bar along the bottom edge, unmissable and unambiguous: visible only
+   while the photo is actually going out, gone the moment it's not. */
+.scan-upload-border {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+.scan-upload-border-fill {
+  height: 6px;
+  background-color: var(--scan-orange);
+  transition: width .15s linear;
 }
 
 .scan-pin {
@@ -1434,4 +1462,1382 @@ body:has(.scan-shell) {
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+/* == Haul mode: gem card (GemCard, HaulClock) — docs/design/haul-ui/Main.dc.html
+   L198-298, EbayBlock.dc.html. .scan-sheet-crop/-price/-conf and .scan-ebay*
+   are reused verbatim (see HANDOFF-haul-ui.md); only the row, thumb, sticker,
+   where-row, crop pins, clock and the 3-stat/range-bar eBay layout are new. */
+
+.haul-gem-item {
+  border-top: 1px dashed var(--scan-dash-2);
+  animation: haul-gem-land 1.2s ease-out;
+}
+
+@keyframes haul-gem-land {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+    background-color: var(--scan-highlight);
+  }
+  30% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
+.haul-gem-item-first {
+  border-top: 0;
+}
+
+.haul-gem-row {
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px;
+  border: 0;
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-family: inherit;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.haul-gem-thumb-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+}
+
+.haul-gem-thumb {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: var(--scan-photo-bg);
+}
+
+.haul-gem-thumb-img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+
+.haul-gem-sticker {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 1px 3px rgba(27, 24, 19, .35);
+  animation: haul-gem-sticker-pop .35s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes haul-gem-sticker-pop {
+  from {
+    transform: rotate(-8deg) scale(.5);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(-8deg) scale(1.12);
+    opacity: 1;
+  }
+  to {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.haul-gem-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.haul-gem-name {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.haul-gem-where {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haul-gem-price-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.haul-gem-price {
+  font-family: var(--scan-font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.haul-gem-conf {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.haul-gem-detail {
+  padding: 0 14px 16px;
+  overflow: hidden;
+  animation: haul-gem-detail-open .25s ease-out;
+}
+
+/* Full-bleed inside a gem detail, as on the canvas. HaulLayout.cropOf
+   assumes a 358 px crop and HaulLayout.barWidthPx a 328 px eBay track, so
+   cancel the detail's 14 px side padding. Scan's sheet keeps its inset. */
+.haul-gem-detail .scan-sheet-crop {
+  margin: 4px -14px 0;
+  width: auto;
+}
+
+.haul-gem-detail .scan-ebay {
+  margin: 16px -14px 0;
+}
+
+/* A true grid-rows accordion needs the detail's children collapsed into one
+   wrapper row; this element renders several flat children (crop, price,
+   dots, where, eBay block), so max-height stands in for grid-template-rows
+   here. animation-fill-mode is the default (none), so once the .25s run
+   ends the element's max-height reverts to its un-animated value (unset),
+   and real content is never clipped. A second tap unmounts the node
+   outright (React), so only the open direction animates — there is no
+   unmount transition without JS. */
+@keyframes haul-gem-detail-open {
+  from {
+    max-height: 0;
+    opacity: 0;
+  }
+  to {
+    max-height: 600px;
+    opacity: 1;
+  }
+}
+
+.haul-gem-size {
+  margin-top: 10px;
+  font-size: 15px;
+  line-height: 1.3;
+  color: var(--scan-muted);
+}
+
+.haul-gem-where-row {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--scan-muted-2);
+}
+
+.haul-crop-pin {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 26px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card), 0 3px 8px rgba(27, 24, 19, .45);
+}
+
+.haul-clock {
+  flex-shrink: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.haul-ebay-stats {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 84px;
+  gap: 8px;
+}
+
+.haul-ebay-stat-label {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-ebay-stat-value {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.haul-ebay-bar {
+  position: relative;
+  margin-top: 12px;
+  height: 66px;
+}
+
+.haul-ebay-bar-label {
+  position: absolute;
+  top: 0;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+}
+
+.haul-ebay-bar-label-med {
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-ebay-bar-line {
+  position: absolute;
+  top: 25px;
+  height: 1.5px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-tick {
+  position: absolute;
+  top: 19px;
+  width: 1.5px;
+  height: 14px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-med-tick {
+  position: absolute;
+  top: 17px;
+  width: 3px;
+  height: 18px;
+  border-radius: 1px;
+  background-color: var(--scan-ink);
+}
+
+.haul-ebay-bar-track-bg {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 40px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--scan-mode-track);
+}
+
+.haul-ebay-bar-band {
+  position: absolute;
+  top: 40px;
+  height: 8px;
+  border-radius: 4px;
+  background-color: var(--scan-orange);
+}
+
+.haul-ebay-bar-band-text {
+  position: absolute;
+  top: 52px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted-2);
+  white-space: nowrap;
+}
+
+/* == Haul mode: walk ticket (stop banner, tally, legend, offline, budget,
+   quarter tip, failed photos, others line) — Main.dc.html L90-196, L300-302.
+   scan-shell, scan-card, scan-headline, scan-sub, scan-empty, scan-gems and
+   scan-section/scan-rows-card are reused verbatim (see HANDOFF-haul-ui.md);
+   these are the classes new to HaulView's restyled ticket. */
+
+.haul-stop-banner {
+  margin: -14px -16px 14px;
+  padding: 12px 16px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.haul-stop-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: var(--scan-font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 28px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--scan-card);
+  transform: rotate(-8deg);
+}
+
+.haul-stop-title {
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.haul-stop-reason {
+  margin-top: 2px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--scan-mode-track);
+}
+
+.haul-stop-note {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--scan-mode-track);
+}
+
+.haul-place-line {
+  margin-top: 2px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: var(--scan-muted);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.haul-place-retry {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--scan-link);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.haul-store-name {
+  min-width: 0;
+  font-size: 20px;
+  line-height: 1.15;
+  font-weight: 750;
+  font-stretch: 85%;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haul-tally {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--scan-dash);
+}
+
+.haul-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.haul-tile {
+  position: relative;
+  box-sizing: border-box;
+  width: 10px;
+  height: 14px;
+  border-radius: 2px;
+  border: 0 solid transparent;
+  background-color: transparent;
+  animation: haul-tile-drop .2s ease-out;
+}
+
+.haul-tile-valued {
+  background-color: var(--scan-ink);
+  animation: haul-tile-pop .22s ease-out;
+}
+
+.haul-tile-valuing {
+  border: 1px solid var(--scan-ink);
+  background-color: var(--scan-highlight);
+  background-image: linear-gradient(
+    45deg,
+    var(--scan-orange) 25%,
+    transparent 25%,
+    transparent 50%,
+    var(--scan-orange) 50%,
+    var(--scan-orange) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 6px 6px;
+  animation: haul-tile-hatch-drift 1s linear infinite;
+}
+
+@keyframes haul-tile-drop {
+  from {
+    transform: translateY(-6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes haul-tile-hatch-drift {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 6px 6px;
+  }
+}
+
+@keyframes haul-tile-pop {
+  from {
+    transform: scale(1.35);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.haul-tile-phone {
+  border: 1px dashed var(--scan-ink);
+}
+
+.haul-tile-notvalued {
+  border: 1px solid var(--scan-ink);
+}
+
+.haul-tile-failed {
+  border: 1px solid var(--scan-ink);
+}
+
+.haul-tile-cross {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  color: var(--scan-ink);
+}
+
+.haul-legend {
+  margin-top: 8px;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--scan-muted-2);
+}
+
+.haul-offline {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background-color: var(--scan-bg);
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.haul-offline-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  transform: rotate(-8deg);
+}
+
+.haul-offline-text {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+.haul-upload-row {
+  margin-top: 14px;
+}
+
+.haul-upload-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-upload-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-upload-track {
+  position: relative;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.haul-upload-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .2s ease;
+}
+
+.haul-budget-row {
+  margin-top: 14px;
+}
+
+.haul-budget-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-budget-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-budget-track {
+  position: relative;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.haul-budget-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .6s ease;
+}
+
+.haul-budget-notch {
+  position: absolute;
+  top: 0;
+  width: 1.5px;
+  height: 6px;
+  margin-left: -0.75px;
+  background-color: var(--scan-card);
+}
+
+.haul-tip {
+  margin: 14px 16px 0;
+  max-width: 310px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 7px 16px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 16px;
+  background-color: var(--scan-card);
+  color: var(--scan-muted-2);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.haul-failed {
+  margin: 14px 16px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  background-color: var(--scan-card);
+}
+
+.haul-failed-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.haul-failed-icon {
+  position: relative;
+  flex-shrink: 0;
+  width: 14px;
+  height: 20px;
+  box-sizing: border-box;
+  border-radius: 3px;
+  border: 1.5px solid var(--scan-ink);
+  color: var(--scan-ink);
+}
+
+.haul-failed-icon svg {
+  position: absolute;
+  left: 0;
+  top: 3px;
+}
+
+.haul-failed-title {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+
+.haul-failed-row {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--scan-dash-2);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--scan-ink);
+  overflow-wrap: anywhere;
+}
+
+.haul-others {
+  margin: 14px 16px 0;
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--scan-muted);
+}
+
+/* -- Receipt, stamp, Start a new haul (step 5) --------------------------- */
+
+.haul-receipt {
+  position: relative;
+  margin: 14px 16px 0;
+  padding: 14px 16px 24px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-card);
+  filter: drop-shadow(0 1px 0 rgba(27, 24, 19, .10)) drop-shadow(0 6px 12px rgba(27, 24, 19, .07));
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  animation: haul-receipt-print .4s ease-out;
+}
+
+@keyframes haul-receipt-print {
+  from {
+    transform: translateY(-18px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.haul-receipt-label {
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.haul-receipt-hero {
+  margin: 8px 0 0;
+  font-size: 28px;
+  line-height: 1.05;
+  font-weight: 750;
+  font-stretch: 82%;
+  letter-spacing: -0.01em;
+}
+
+.haul-receipt-sub {
+  margin: 4px 0 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: var(--scan-muted-2);
+}
+
+.haul-receipt-rows {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--scan-dash);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  line-height: 22px;
+}
+
+.haul-receipt-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.haul-receipt-row-k {
+  white-space: nowrap;
+  color: var(--scan-muted-2);
+}
+
+.haul-receipt-row-dots {
+  flex-grow: 1;
+  min-width: 12px;
+  border-bottom: 1.5px dotted var(--scan-dotted);
+}
+
+.haul-receipt-row-v {
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.haul-stamp {
+  position: absolute;
+  right: 16px;
+  top: 22px;
+  padding: 3px;
+  border: 2px solid var(--scan-ink);
+  border-radius: 7px;
+  color: var(--scan-ink);
+  transform: rotate(-8deg) scale(1);
+  opacity: .88;
+  animation: haul-stamp-land .3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes haul-stamp-land {
+  from {
+    transform: rotate(-8deg) scale(1.3);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-8deg) scale(1);
+    opacity: .88;
+  }
+}
+
+.haul-stamp-inner {
+  padding: 5px 12px 4px;
+  border: 1px solid var(--scan-ink);
+  border-radius: 4px;
+  text-align: center;
+  font-family: var(--scan-font-mono);
+}
+
+.haul-stamp-word {
+  margin-right: -0.18em;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 24px;
+  letter-spacing: .18em;
+}
+
+.haul-stamp-date {
+  margin-right: -0.16em;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 13px;
+  letter-spacing: .16em;
+}
+
+.haul-new-haul {
+  margin: 22px 16px 32px;
+  width: calc(100% - 32px);
+  max-width: 358px;
+  height: 56px;
+  border: 0;
+  border-radius: 14px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18);
+}
+
+/* -- Dock, finishing bar, fail bar (step 4) ------------------------------ */
+
+/* The canvas draws these absolutely inside its own 390px phone frame. This
+   app has no such frame (.scan-shell is a fluid flex column), so instead
+   they reuse .scan-sheet-panel's own technique above: fixed to the
+   viewport, centered, capped at the app's own content width. */
+
+.haul-walk-spacer {
+  flex-shrink: 0;
+  height: 124px;
+}
+
+.haul-dock,
+.haul-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  width: 100%;
+  max-width: 480px;
+  height: 124px;
+  box-sizing: border-box;
+  transform: translate(-50%, 0);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--scan-dash-2);
+  background-color: var(--scan-bg);
+  z-index: 10;
+}
+
+.haul-dock {
+  padding-left: 16px;
+  padding-right: 16px;
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 96px;
+  align-items: center;
+}
+
+.haul-dock-add {
+  justify-self: start;
+  width: 96px;
+  height: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--scan-ink);
+  cursor: pointer;
+}
+
+.haul-dock-add-icon {
+  width: 56px;
+  height: 56px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid var(--scan-ink);
+  background-color: var(--scan-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.haul-dock-add-label {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.haul-dock-snap {
+  justify-self: center;
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18), 0 10px 22px rgba(27, 24, 19, .22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform .12s ease-out;
+}
+
+.haul-dock-snap:active {
+  transform: scale(.96);
+}
+
+.haul-dock-snap-ring {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  right: 5px;
+  bottom: 5px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .5);
+}
+
+/* The ring turns while a photo is on the phone or valuing (docs/haul-ui.md motion 2). */
+.haul-dock-snap-ring-busy {
+  animation: haul-snap-ring-turn 6s linear infinite;
+}
+
+@keyframes haul-snap-ring-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.haul-dock-snap-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+
+.haul-dock-snap-label {
+  font-size: 15px;
+  font-weight: 750;
+  font-stretch: 85%;
+}
+
+.haul-dock-done {
+  justify-self: end;
+  width: 96px;
+  height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  font-family: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.haul-bar {
+  padding-left: 20px;
+  padding-right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.haul-bar-badge {
+  position: relative;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  transform: rotate(-7deg);
+}
+
+.haul-bar-ring {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  right: 4px;
+  bottom: 4px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .6);
+  animation: haul-bar-spin 1.6s linear infinite;
+}
+
+/* The ring keeps turning during a fail-bar retry too (docs/haul-ui.md
+   section 5, item 2: "the dashed ring turns while a photo is on the phone
+   or valuing, and during a failed Done retry"). It shares .haul-bar-ring's
+   animation unconditionally; only prefers-reduced-motion stops it. */
+
+.haul-bar-text {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+@keyframes haul-bar-spin {
+  from {
+    transform: rotate(-7deg);
+  }
+  to {
+    transform: rotate(353deg);
+  }
+}
+
+/* -- Haul Ready screen (step 6, docs/design/haul-ui/Main.dc.html L63-88) -- */
+
+.haul-ready {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+}
+
+.haul-ready-title {
+  margin: 30px 0 0;
+  font-size: 54px;
+  line-height: 0.92;
+  font-weight: 800;
+  font-stretch: 78%;
+  letter-spacing: -0.025em;
+}
+
+.haul-ready-sub {
+  margin: 14px 0 0;
+  max-width: 310px;
+  font-size: 17px;
+  line-height: 1.4;
+  color: var(--scan-muted-2);
+}
+
+.haul-ready-card-shadow {
+  flex-shrink: 0;
+  margin-top: 18px;
+  filter: drop-shadow(0 1px 0 rgba(27, 24, 19, .10)) drop-shadow(0 6px 12px rgba(27, 24, 19, .07));
+}
+
+.haul-ready-card {
+  padding: 12px 14px 22px;
+  border-radius: 12px 12px 0 0;
+  background-color: var(--scan-card);
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%;
+}
+
+.haul-ready-label {
+  display: block;
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  color: var(--scan-muted);
+}
+
+.haul-ready-input-wrap {
+  position: relative;
+  margin-top: 6px;
+  height: 48px;
+}
+
+.haul-ready-hint {
+  position: absolute;
+  left: 15.5px;
+  top: 0;
+  font-size: 17px;
+  line-height: 48px;
+  color: var(--scan-muted);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.haul-ready-input {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 48px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0 14px;
+  border: 1.5px solid var(--scan-ink);
+  border-radius: 10px;
+  background-color: transparent;
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 17px;
+}
+
+.haul-ready-start-wrap {
+  flex-grow: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.haul-ready-start {
+  position: relative;
+  width: 212px;
+  height: 212px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-family: inherit;
+  transform: rotate(-7deg);
+  box-shadow: 0 2px 0 rgba(27, 24, 19, .18), 0 16px 32px rgba(27, 24, 19, .22);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.haul-ready-start-ring {
+  position: absolute;
+  left: 9px;
+  top: 9px;
+  right: 9px;
+  bottom: 9px;
+  border-radius: 50%;
+  border: 2px dashed rgba(27, 24, 19, .5);
+}
+
+.haul-ready-start-inner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.haul-ready-start-label {
+  font-size: 23px;
+  font-weight: 750;
+  font-stretch: 85%;
+  letter-spacing: -0.01em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .haul-bar-ring,
+  .haul-dock-snap-ring-busy {
+    animation: none;
+  }
+
+  .haul-dock-snap {
+    transition: none;
+  }
+
+  .haul-tile,
+  .haul-tile-valued,
+  .haul-tile-valuing {
+    animation: none;
+  }
+
+  .haul-gem-detail {
+    animation: none;
+  }
+
+  .haul-gem-item {
+    animation: none;
+  }
+
+  .haul-gem-sticker {
+    animation: none;
+  }
+
+  .haul-budget-fill {
+    transition: none;
+  }
+
+  .haul-receipt {
+    animation: none;
+  }
+
+  .haul-stamp {
+    animation: none;
+  }
+}
+
+/* -- Map view (docs/spec-haul-map.md) ------------------------------------- */
+
+.haul-map-view {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.haul-map-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.haul-map-chip {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 999px;
+  background-color: var(--scan-card);
+  color: var(--scan-muted-2);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.haul-map-chip-active {
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  border-color: var(--scan-ink);
+}
+
+.haul-map-canvas-wrap {
+  border-radius: var(--scan-radius);
+  overflow: hidden;
+  border: 1px solid var(--scan-card-border);
+}
+
+.haul-map-canvas {
+  width: 100%;
+  height: 260px;
+  background-color: var(--scan-fill);
+}
+
+.haul-map-status {
+  font-size: 13px;
+  color: var(--scan-muted);
+}
+
+.haul-map-error {
+  color: #B3261E;
+}
+
+.haul-map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.haul-map-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: 10px;
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.haul-map-row-active {
+  border-color: var(--scan-orange);
+}
+
+.haul-map-row-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.haul-map-row-date {
+  color: var(--scan-muted);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+}
+
+.haul-map-row-place {
+  color: var(--scan-muted);
+  font-size: 12px;
+}
+
+.haul-map-panel {
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  background-color: var(--scan-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.haul-map-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.haul-map-panel-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.haul-map-panel-date {
+  color: var(--scan-muted);
+  font-size: 13px;
+}
+
+.haul-map-panel-counts {
+  color: var(--scan-muted-2);
+  font-size: 13px;
+}
+
+.haul-map-buys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.haul-map-buy {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.haul-map-panel-total {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.haul-map-place-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--scan-muted-2);
+}
+
+.haul-map-set-place {
+  align-self: flex-start;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
 }

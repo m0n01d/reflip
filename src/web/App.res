@@ -326,13 +326,16 @@ let queuePhotos = async (
   let _ = await Promise.all(Array.map(files, file => queuePhoto(dispatch, haulId, file)))
 }
 
-let startHaul = async (dispatch: AppState.msg => unit, storeName: string) => {
+let startHaul = async (dispatch: AppState.msg => unit, storeName: string): option<string> => {
   dispatch(AppState.StartHaul)
   switch await Api.postHaul(storeName) {
   | Ok(status) =>
     await WebApi.idbSetString(AppState.currentHaulKey, status.haulId)
     dispatch(AppState.HaulStarted(status))
-  | Error(msg) => dispatch(AppState.HaulStartFailed(msg))
+    Some(status.haulId)
+  | Error(msg) =>
+    dispatch(AppState.HaulStartFailed(msg))
+    None
   }
 }
 
@@ -360,27 +363,109 @@ let restoreQueueFor = async (dispatch: AppState.msg => unit, haulId: string) => 
 
 // On load: is there a haul in progress? IndexedDB survives a reload, so a
 // haul the page never got to close keeps its queue.
-let restoreHaul = async (dispatch: AppState.msg => unit) =>
+let restoreHaul = async (dispatch: AppState.msg => unit): option<string> =>
   switch (await WebApi.idbGetUnknown(AppState.currentHaulKey))->Nullable.toOption {
-  | None => ()
+  | None => None
   | Some(v) =>
     let haulId = await WebApi.unknownToText(v)
     switch await Api.getHaulStatus(haulId) {
     | Ok(status) =>
       dispatch(AppState.HaulStarted(status))
       await restoreQueueFor(dispatch, haulId)
+      Some(haulId)
     | Error(msg) =>
       await WebApi.idbDel(AppState.currentHaulKey)
       dispatch(AppState.HaulStartFailed(msg))
+      None
     }
   }
+
+// The position (docs/spec-haul-map.md "The position"). Asked in parallel
+// with the haul start, never awaited before it — a slow or denied GPS must
+// not hold up the scan shell showing the haul.
+let askPlace = async (dispatch: AppState.msg => unit): option<AppState.placeFix> =>
+  switch WebApi.geolocation->Nullable.toOption {
+  | None =>
+    dispatch(AppState.PlaceUnavailable)
+    None
+  | Some(geo) => {
+      let start = Date.now()
+      let result = await Promise.make((resolve, _reject) =>
+        WebApi.getCurrentPosition(
+          geo,
+          pos => resolve(Ok(pos)),
+          err => resolve(Error(err)),
+          {WebApi.enableHighAccuracy: true, timeout: 15000, maximumAge: 60000},
+        )
+      )
+      switch result {
+      | Error(err) =>
+        dispatch(err.code == 1 ? AppState.PlaceGeoDenied : AppState.PlaceUnavailable)
+        None
+      | Ok(pos) =>
+        let tookMs = Date.now() -. start
+        let fix: AppState.placeFix = {
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          accuracyM: pos.coords.accuracy,
+          tookMs: Some(tookMs),
+        }
+        dispatch(AppState.PlaceFixed(fix))
+        Some(fix)
+      }
+    }
+  }
+
+// Writes the outbox key before the POST, so a reload before the reply
+// lands still has the fix to retry. Sent and Rejected both clear it — a
+// rejection (400/404) cannot succeed on a resend. NotSent keeps it for
+// the next restorePlaces sweep or Try again tap.
+let sendPlace = async (dispatch: AppState.msg => unit, haulId: string, fix: AppState.placeFix) => {
+  let body = AppState.encodePlaceBody(fix)
+  await WebApi.idbSetString(AppState.placeKey(haulId), body)
+  switch await Api.postPlace(haulId, body) {
+  | Sent(place) =>
+    await WebApi.idbDel(AppState.placeKey(haulId))
+    dispatch(AppState.PlaceSent(haulId, place))
+  | Rejected(_) =>
+    await WebApi.idbDel(AppState.placeKey(haulId))
+    dispatch(AppState.PlaceRejected(haulId))
+  | NotSent(_) => dispatch(AppState.PlaceSendFailed(haulId))
+  }
+}
+
+// Sends every queued place|<id> outbox entry left over from a previous
+// session. Only the current haul's own dispatch reaches the view — a
+// stale entry for a haul that is no longer open sends silently, since no
+// PlaceSaved would have anywhere on screen to land.
+let restorePlaces = async (dispatch: AppState.msg => unit, currentHaulId: option<string>) => {
+  let keys = await WebApi.idbKeysUnknown()
+  let keyTexts = await Promise.all(Array.map(keys, WebApi.unknownToText))
+  let haulIds = keyTexts->Array.filterMap(AppState.parsePlaceKey)
+  let _ = await Promise.all(
+    Array.map(haulIds, async haulId =>
+      switch (await WebApi.idbGetUnknown(AppState.placeKey(haulId)))->Nullable.toOption {
+      | None => ()
+      | Some(v) =>
+        let text = await WebApi.unknownToText(v)
+        switch AppState.decodePlaceBody(text) {
+        | None => ()
+        | Some(fix) =>
+          let sendDispatch = Some(haulId) == currentHaulId ? dispatch : (_ => ())
+          await sendPlace(sendDispatch, haulId, fix)
+        }
+      }
+    ),
+  )
+}
 
 // One upload at a time, per the plan. On success the IndexedDB entry is
 // deleted; on failure the photo stays queued and a backoff timer retries
 // it — it is never dropped.
 let uploadOne = async (dispatch: AppState.msg => unit, haulId: string, item: AppState.queueItem) => {
   dispatch(AppState.UploadStarted(item.clientId))
-  switch await Api.postHaulScene(haulId, item.clientId, item.blob) {
+  let onProgress = bytes => dispatch(AppState.UploadProgress(item.clientId, bytes))
+  switch await Api.postHaulScene(haulId, item.clientId, item.blob, ~onProgress) {
   | Ok((sceneId, _duplicate)) =>
     await WebApi.idbDel(AppState.queueKey(haulId, item.clientId))
     dispatch(AppState.HaulUploadOk(item.clientId, sceneId))
@@ -399,6 +484,31 @@ let pollHaul = async (dispatch: AppState.msg => unit, haulId: string) => {
   }
 }
 
+let loadHauls = async (dispatch: AppState.msg => unit): unit => {
+  dispatch(AppState.Map(MapState.HaulsLoading))
+  switch await Api.getHauls() {
+  | Ok(hauls) => dispatch(AppState.Map(MapState.HaulsLoaded(hauls)))
+  | Error(msg) => dispatch(AppState.Map(MapState.HaulsLoadFailed(msg)))
+  }
+}
+
+let submitMapPlace = async (
+  dispatch: AppState.msg => unit,
+  haulId: string,
+  lat: float,
+  lon: float,
+): unit => {
+  let body = MapState.pinPlaceBody(lat, lon)
+  switch await Api.postPlace(haulId, body) {
+  | Sent(_) =>
+    dispatch(AppState.Map(MapState.PlaceSet))
+    await loadHauls(dispatch)
+  | Rejected(status) =>
+    dispatch(AppState.Map(MapState.PlaceSetFailed("the server said " ++ Int.toString(status))))
+  | NotSent(reason) => dispatch(AppState.Map(MapState.PlaceSetFailed(reason)))
+  }
+}
+
 let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
   switch await Api.postHaulDone(haulId) {
   | Ok(status) => dispatch(AppState.DoneSent(status))
@@ -410,53 +520,337 @@ let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
 // its box drawn on it (PhotoView, reused from the scene view) — a tap on
 // the sold link must not also toggle the card, so that link stops the
 // click from bubbling up to the card's own onClick.
+// The walk ticket's elapsed-time clock (decision 6): a leaf component with
+// its own 1s interval, so the tick lives here and not in a model field —
+// a model tick would add one rewind entry every second. `startedAt` is
+// the haul's ISO 8601 start time from the server; HaulLayout.clockText
+// does the "m:ss, or h:mm:ss after an hour" text formatting.
+module HaulClock = {
+  @react.component
+  let make = (~startedAt: string) => {
+    let startMs = Date.getTime(Date.fromString(startedAt))
+    let (nowMs, setNowMs) = React.useState(() => Date.now())
+    React.useEffect(() => {
+      let id = WebApi.setInterval(() => setNowMs(_ => Date.now()), 1000)
+      Some(() => WebApi.clearInterval(id))
+    }, [])
+    let elapsedSeconds = Float.toInt(Math.max(0.0, (nowMs -. startMs) /. 1000.0))
+    <span className="haul-clock"> {React.string(HaulLayout.clockText(elapsedSeconds))} </span>
+  }
+}
+
+// One gem in the Haul gems list: a collapsed row (a 44x44 photo thumbnail
+// with an orange rank sticker, name, where, price and confidence) that
+// expands in place into the detail — a 358x184 crop of the gem's own box
+// plus number stickers for any OTHER gems sharing the same photo, size,
+// price, confidence dots, where, and the eBay range-bar block or "No eBay
+// stats". Restyled from docs/design/haul-ui/Main.dc.html L207-298 (step
+// 3 of the Haul UI restyle brief). `rank` is the gem's 1-based position
+// in `allGems` (decision 4 — the API already sorts best-first), and
+// `allGems` is `status.gems` itself, passed down so this card can find
+// its own photo's OTHER gems for the pin stickers without HaulLayout
+// needing to know about ranking.
 module GemCard = {
   @react.component
-  let make = (~gem: Types.haulGem, ~isOpen: bool, ~onToggle: string => unit) =>
-    <li className="item" onClick={_ => onToggle(gem.findId)}>
-      <div className="item-top">
-        <CropView
-          box={gem.box}
-          photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-          imageWidth={gem.imageWidth}
-          imageHeight={gem.imageHeight}
-        />
-        <div className="item-info">
-          <div className="item-name">
-            {React.string(gem.name)}
-            {gem.size == "" ? React.null : React.string(" (" ++ gem.size ++ ")")}
-          </div>
-          <div className="item-range">
-            {React.string(fmtUsd(gem.estimateLowUsd) ++ " – " ++ fmtUsd(gem.estimateHighUsd))}
-          </div>
+  let make = (
+    ~gem: Types.haulGem,
+    ~rank: int,
+    ~allGems: array<Types.haulGem>,
+    ~isOpen: bool,
+    ~onToggle: string => unit,
+  ) => {
+    let label =
+      "Gem " ++
+      Int.toString(rank) ++
+      ": " ++
+      gem.name ++
+      ", " ++
+      ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd) ++
+      ", " ++
+      ScanState.confidenceWord(gem.confidence)
+    <div className={rank == 1 ? "haul-gem-item haul-gem-item-first" : "haul-gem-item"}>
+      <button
+        type_="button"
+        ariaLabel={label}
+        ariaExpanded={isOpen}
+        className="haul-gem-row"
+        onClick={_ => onToggle(gem.findId)}>
+        <span className="haul-gem-thumb-wrap">
+          <span className="haul-gem-thumb">
+            {switch (gem.box, gem.imageWidth, gem.imageHeight) {
+            | (Some(box), Some(imageWidth), Some(imageHeight)) =>
+              let t = HaulLayout.thumbOf(box, ~imageWidth, ~imageHeight)
+              <img
+                className="haul-gem-thumb-img"
+                src={Api.scenePhotoUrl(gem.sceneId)}
+                alt=""
+                style={{
+                  JsxDOMStyle.left: HaulLayout.pxStr(t.imgLeftPx),
+                  top: HaulLayout.pxStr(t.imgTopPx),
+                  width: HaulLayout.pxStr(t.imgWidthPx),
+                }}
+              />
+            | _ => React.null
+            }}
+          </span>
+          <span className="haul-gem-sticker"> {React.string(Int.toString(rank))} </span>
+        </span>
+        <span className="haul-gem-info">
+          <span className="haul-gem-name"> {React.string(gem.name)} </span>
           {switch gem.where {
-          | Some(w) => <div className="item-basis"> {React.string(w)} </div>
+          | Some(w) => <span className="haul-gem-where"> {React.string(w)} </span>
           | None => React.null
           }}
-          <div className="item-confidence">
-            {React.string("confidence " ++ fmtPct(gem.confidence))}
-          </div>
-        </div>
-      </div>
-      <EbayBlock ebay={gem.ebay} />
-      <a
-        className="sold-link"
-        href={gem.soldSearchUrl}
-        target="_blank"
-        rel="noreferrer"
-        onClick={ReactEvent.Mouse.stopPropagation}>
-        {React.string("Sold listings")}
-      </a>
+        </span>
+        <span className="haul-gem-price-col">
+          <span className="haul-gem-price">
+            {React.string(ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd))}
+          </span>
+          <span className="haul-gem-conf">
+            {React.string(ScanState.confidenceWord(gem.confidence))}
+          </span>
+        </span>
+      </button>
       {isOpen
-        ? <PhotoView
-            photoUrl={Api.scenePhotoUrl(gem.sceneId)}
-            imageWidth={gem.imageWidth}
-            imageHeight={gem.imageHeight}
-            selectedBox={gem.box}
-            onPhotoTap={_ => ()}
-          />
+        ? {
+            let filled = Float.toInt(Math.round(gem.confidence *. 5.0))
+            <div className="haul-gem-detail">
+              <div className="scan-sheet-crop">
+                {switch (gem.box, gem.imageWidth, gem.imageHeight) {
+                | (Some(box), Some(imageWidth), Some(imageHeight)) =>
+                  let crop = HaulLayout.cropOf(box, ~imageWidth, ~imageHeight)
+                  let others =
+                    allGems
+                    ->Array.mapWithIndex((g, i) => (i + 1, g))
+                    ->Array.filter(((r, g)) => r != rank && g.sceneId == gem.sceneId)
+                    ->Array.filterMap(((r, g)) =>
+                      switch g.box {
+                      | Some(b) => Some((r, b))
+                      | None => None
+                      }
+                    )
+                  let pins = HaulLayout.pinsOn(~crop, ~others)
+                  <>
+                    <img
+                      className="scan-sheet-crop-img"
+                      src={Api.scenePhotoUrl(gem.sceneId)}
+                      alt={"Close-up of " ++ Int.toString(rank)}
+                      style={{
+                        JsxDOMStyle.left: HaulLayout.pxStr(crop.imgLeftPx),
+                        top: HaulLayout.pxStr(crop.imgTopPx),
+                        width: HaulLayout.pxStr(crop.imgWidthPx),
+                      }}
+                    />
+                    <span
+                      className="scan-sheet-crop-box"
+                      style={{
+                        JsxDOMStyle.left: HaulLayout.pxStr(crop.boxLeftPx),
+                        top: HaulLayout.pxStr(crop.boxTopPx),
+                        width: HaulLayout.pxStr(crop.boxWidthPx),
+                        height: HaulLayout.pxStr(crop.boxHeightPx),
+                      }}
+                    />
+                    {pins
+                    ->Array.map(p =>
+                      <span
+                        key={p.num}
+                        className="haul-crop-pin"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(p.leftPx),
+                          top: HaulLayout.pxStr(p.topPx),
+                          transform: "rotate(" ++ Int.toString(p.rotateDeg) ++ "deg)",
+                        }}>
+                        {React.string(p.num)}
+                      </span>
+                    )
+                    ->React.array}
+                  </>
+                | _ => React.null
+                }}
+              </div>
+              {gem.size == ""
+                ? React.null
+                : <div className="haul-gem-size"> {React.string(gem.size)} </div>}
+              <div className="scan-sheet-price-row">
+                <span className="scan-sheet-price">
+                  {React.string(ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd))}
+                </span>
+                <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
+              </div>
+              <div className="scan-sheet-conf-row">
+                <span className="scan-sheet-dots">
+                  {[0, 1, 2, 3, 4]
+                  ->Array.map(i =>
+                    <span
+                      key={Int.toString(i)}
+                      className={"scan-sheet-dot" ++ (i < filled ? " scan-sheet-dot-filled" : "")}
+                    />
+                  )
+                  ->React.array}
+                </span>
+                <span className="scan-sheet-conf-word">
+                  {React.string(ScanState.confidenceWord(gem.confidence))}
+                </span>
+                <span className="scan-sheet-conf-num">
+                  {React.string(Float.toFixed(gem.confidence, ~digits=2))}
+                </span>
+              </div>
+              {switch gem.where {
+              | Some(w) =>
+                <div className="haul-gem-where-row">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M12 21s-6.5-5.6-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z" />
+                    <circle cx="12" cy="10.5" r="2.3" />
+                  </svg>
+                  <span> {React.string(w)} </span>
+                </div>
+              | None => React.null
+              }}
+              <div className="scan-ebay">
+                <div className="scan-ebay-top">
+                  <span className="scan-ebay-label"> {React.string("eBay")} </span>
+                  <span className="scan-ebay-flag">
+                    {React.string(
+                      gem.ebay->Option.isSome
+                        ? "· active asking, not sold"
+                        : "· no stats",
+                    )}
+                  </span>
+                </div>
+                {switch gem.ebay {
+                | Some(stats) =>
+                  let labMin = fmtUsd(stats.minUsd)
+                  let labMed = fmtUsd(stats.medianUsd)
+                  let labMax = fmtUsd(stats.maxUsd)
+                  let bandText =
+                    "Claude’s " ++ ScanState.moneyRange(gem.estimateLowUsd, gem.estimateHighUsd)
+                  let bar = HaulLayout.barOf(
+                    ~ebay=stats,
+                    ~lowUsd=gem.estimateLowUsd,
+                    ~highUsd=gem.estimateHighUsd,
+                    ~labMin,
+                    ~labMed,
+                    ~labMax,
+                    ~bandText,
+                  )
+                  let barAriaLabel =
+                    "eBay asking prices " ++
+                    labMin ++
+                    " to " ++
+                    labMax ++
+                    ", median " ++
+                    labMed ++
+                    ". " ++
+                    bandText ++
+                    "."
+                  <>
+                    <div className="haul-ebay-stats">
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("listings")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(Int.toString(stats.count))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("range")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(fmtUsd(stats.minUsd) ++ "–" ++ fmtUsd(stats.maxUsd))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="haul-ebay-stat-label"> {React.string("median")} </div>
+                        <div className="haul-ebay-stat-value">
+                          {React.string(fmtUsd(stats.medianUsd))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="haul-ebay-bar" role="img" ariaLabel={barAriaLabel}>
+                      <span
+                        className="haul-ebay-bar-label"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMinLeftPx), top: "0px"}}>
+                        {React.string(labMin)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-label haul-ebay-bar-label-med"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMedLeftPx), top: "0px"}}>
+                        {React.string(labMed)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-label"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.labMaxLeftPx), top: "0px"}}>
+                        {React.string(labMax)}
+                      </span>
+                      <span
+                        className="haul-ebay-bar-line"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(bar.lineLeftPx),
+                          width: HaulLayout.pxStr(bar.lineWidthPx),
+                        }}
+                      />
+                      <span
+                        className="haul-ebay-bar-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.tickMinLeftPx)}}
+                      />
+                      <span
+                        className="haul-ebay-bar-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.tickMaxLeftPx)}}
+                      />
+                      <span
+                        className="haul-ebay-bar-med-tick"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.medLeftPx)}}
+                      />
+                      <span className="haul-ebay-bar-track-bg" />
+                      <span
+                        className="haul-ebay-bar-band"
+                        style={{
+                          JsxDOMStyle.left: HaulLayout.pxStr(bar.bandLeftPx),
+                          width: HaulLayout.pxStr(bar.bandWidthPx),
+                        }}
+                      />
+                      <span
+                        className="haul-ebay-bar-band-text"
+                        style={{JsxDOMStyle.left: HaulLayout.pxStr(bar.bandTextLeftPx)}}>
+                        {React.string(bandText)}
+                      </span>
+                    </div>
+                  </>
+                | None => <div className="scan-ebay-title"> {React.string("No eBay stats")} </div>
+                }}
+                <a
+                  className="scan-ebay-sold-btn"
+                  href={gem.soldSearchUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={ReactEvent.Mouse.stopPropagation}>
+                  {React.string("Check sold prices on eBay")}
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    ariaHidden={true}>
+                    <path d="M7 17L17 7M9 7h8v8" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          }
         : React.null}
-    </li>
+    </div>
+  }
 }
 
 module HaulView = {
@@ -470,62 +864,390 @@ module HaulView = {
     ~onDone: ReactEvent.Mouse.t => unit,
     ~onNewHaul: ReactEvent.Mouse.t => unit,
     ~onToggleGem: string => unit,
+    ~onPlaceTryAgain: unit => unit,
   ) => {
     let onPhone = Array.length(model.queue)
-    <div className="haul-view">
-      <h2> {React.string(status.name->Option.getOr("Haul"))} </h2>
-      <div className="counts">
-        <div className="count">
-          {React.string("on phone " ++ Int.toString(onPhone))}
-        </div>
-        <div className="count">
-          {React.string("uploaded " ++ Int.toString(AppState.uploadedShown(model, status.counts)))}
-        </div>
-        <div className="count">
-          {React.string("valued " ++ Int.toString(status.counts.valued))}
-        </div>
-        <div className="count">
-          {React.string("failed " ++ Int.toString(status.counts.failed))}
-        </div>
-      </div>
-      <div className="cost-line">
-        {React.string(fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd) ++ " budget")}
-      </div>
-      {switch status.stopReason {
-      | Some(reason) => <div className="stop-reason"> {React.string(reason)} </div>
-      | None => React.null
-      }}
-      {switch model.haulError {
-      | Some(msg) => <div className="haul-error"> {React.string(msg)} </div>
-      | None => React.null
-      }}
+    let stopped = status.stopReason->Option.isSome
+    let isWalk = switch phase {
+    | Active(_) => true
+    | _ => false
+    }
+    let receiptShown = switch phase {
+    | Finished(_) => status.emailedAt->Option.isSome
+    | _ => false
+    }
+    let walkingOrFinishing = !receiptShown
+    let tally = HaulLayout.tallyOf(status.counts, onPhone, stopped)
+    let legend = HaulLayout.legendOf(tally)
+    let gemCount = Array.length(status.gems)
+    let (sumLo, sumHi) = status.gems->Array.reduce((0.0, 0.0), ((lo, hi), g) => (
+      lo +. g.estimateLowUsd,
+      hi +. g.estimateHighUsd,
+    ))
+    let totalPhotos =
+      status.counts.queued + status.counts.running + status.counts.valued + status.counts.failed + onPhone
+    let storeName = status.name->Option.getOr("")->String.trim
+    let placeLineResult = AppState.placeLine(model.place, status.place)
+    let isOffline = model.queue->Array.some(item => item.status == AppState.WaitingRetry)
+    let gemsTitle = isWalk && !stopped ? "Gems so far" : "Gems"
+    // Tally tiles: build a run of one-tag-per-photo boxes without Belt.Array.make,
+    // matching the recursive style already used by HaulLayout.notchPositions.
+    let repeat = (n: int, tag: string): array<string> => {
+      let rec go = (k, acc) => k <= 0 ? acc : go(k - 1, Array.concat(acc, [tag]))
+      go(n, [])
+    }
+    let tiles =
+      repeat(tally.valued, "valued")
+      ->Array.concat(repeat(tally.failed, "failed"))
+      ->Array.concat(repeat(tally.valuing, "valuing"))
+      ->Array.concat(repeat(tally.notValued, "notvalued"))
+      ->Array.concat(repeat(tally.onPhone, "phone"))
+    // The receipt's rows (decision 9), built functionally like `tiles` above:
+    // an empty array for a row that decision 9 says to leave out, concatenated
+    // in the canvas's own order.
+    let storeRow = storeName == "" ? [] : [("Store", storeName)]
+    let finishedRow = switch status.doneAt {
+    | Some(doneAt) => [("Finished", HaulLayout.timeOf(doneAt))]
+    | None => []
+    }
+    let failedRow = status.counts.failed > 0 ? [("Failed", Int.toString(status.counts.failed))] : []
+    let stoppedRow = switch status.stopReason {
+    | Some(reason) => [("Stopped", reason)]
+    | None => []
+    }
+    let digestRow = switch status.emailedAt {
+    | Some(emailedAt) => [("Digest", "sent · " ++ HaulLayout.timeOf(emailedAt))]
+    | None => []
+    }
+    let receiptRows: array<(string, string)> =
+      storeRow
+      ->Array.concat([("Started", HaulLayout.timeOf(status.startedAt))])
+      ->Array.concat(finishedRow)
+      ->Array.concat([("Photos", Int.toString(status.counts.queued + status.counts.running + status.counts.valued + status.counts.failed))])
+      ->Array.concat(failedRow)
+      ->Array.concat([("Gems", Int.toString(gemCount))])
+      ->Array.concat([("Gems worth", gemCount > 0 ? ScanState.moneyRange(sumLo, sumHi) : "none")])
+      ->Array.concat([("Claude cost", fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd))])
+      ->Array.concat(stoppedRow)
+      ->Array.concat(digestRow)
+    <div className="scan-shell">
+      {receiptShown
+        ? React.null
+        : <div className="scan-card-shadow">
+        <section ariaLabel="Haul status" className="scan-card">
+          {switch status.stopReason {
+          | Some(reason) =>
+            <div role="alert" className="haul-stop-banner">
+              <span ariaHidden={true} className="haul-stop-badge"> {React.string("!")} </span>
+              <div>
+                <div className="haul-stop-title"> {React.string("Haul stopped")} </div>
+                <div className="haul-stop-reason"> {React.string(reason)} </div>
+                <div className="haul-stop-note">
+                  {React.string("Photos you add now are kept, but not valued.")}
+                </div>
+              </div>
+            </div>
+          | None => React.null
+          }}
+          <div className="scan-card-top-row">
+            <span className="haul-store-name">
+              {React.string(storeName == "" ? "Haul" : storeName)}
+            </span>
+            <HaulClock startedAt={status.startedAt} />
+          </div>
+          {switch placeLineResult {
+          | None => React.null
+          | Some({text, tryAgain}) =>
+            <div className="haul-place-line">
+              <span> {React.string(text)} </span>
+              {tryAgain
+                ? <button
+                    type_="button" className="haul-place-retry" onClick={_ => onPlaceTryAgain()}>
+                    {React.string("Try again")}
+                  </button>
+                : React.null}
+            </div>
+          }}
+          <h1 className="scan-headline">
+            {React.string(
+              gemCount > 0
+                ? Int.toString(gemCount) ++
+                  (gemCount == 1 ? " gem" : " gems") ++
+                  (stopped ? "" : " so far")
+                : "No gems yet",
+            )}
+          </h1>
+          <p className="scan-sub">
+            {React.string(
+              gemCount > 0
+                ? ScanState.plural(totalPhotos, "photo", "photos") ++
+                  " · gems worth " ++
+                  ScanState.moneyRange(sumLo, sumHi)
+                : "Gems show up here as each photo is valued.",
+            )}
+          </p>
+          <div className="haul-tally">
+            <div role="img" ariaLabel={legend} className="haul-tiles">
+              {tiles
+              ->Array.mapWithIndex((state, i) =>
+                <span key={Int.toString(i)} className={"haul-tile haul-tile-" ++ state}>
+                  {state == "failed"
+                    ? <svg
+                        width="8"
+                        height="8"
+                        viewBox="0 0 8 8"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.4"
+                        strokeLinecap="round"
+                        ariaHidden={true}
+                        className="haul-tile-cross">
+                        <path d="M2 2l4 4M6 2L2 6" />
+                      </svg>
+                    : React.null}
+                </span>
+              )
+              ->React.array}
+            </div>
+            <div className="haul-legend"> {React.string(legend)} </div>
+            {isOffline
+              ? <div role="status" className="haul-offline">
+                  <span ariaHidden={true} className="haul-offline-badge"> {React.string("!")} </span>
+                  <span className="haul-offline-text">
+                    {React.string(HaulLayout.offlineText(onPhone))}
+                  </span>
+                </div>
+              : React.null}
+            {switch model.queue->Array.find(item => item.status == AppState.SendingNow) {
+            | None => React.null
+            | Some(item) =>
+              let pct = HaulLayout.uploadPct(item.uploadedBytes, WebApi.blobSize(item.blob))
+              <div className="haul-upload-row">
+                <div className="haul-upload-top">
+                  <span> {React.string("uploading photo")} </span>
+                  <span className="haul-upload-value"> {React.string(fmtPct(pct))} </span>
+                </div>
+                <div
+                  role="img"
+                  ariaLabel={"Uploading photo, " ++ fmtPct(pct)}
+                  className="haul-upload-track">
+                  <div className="haul-upload-fill" style={{JsxDOMStyle.width: fmtPct(pct)}} />
+                </div>
+              </div>
+            }}
+            <div className="haul-budget-row">
+              <div className="haul-budget-top">
+                <span> {React.string("budget")} </span>
+                <span className="haul-budget-value">
+                  {React.string(fmtUsd(status.costUsd) ++ " of " ++ fmtUsd(status.maxUsd))}
+                </span>
+              </div>
+              <div
+                role="img"
+                ariaLabel={"Claude cost " ++
+                fmtUsd(status.costUsd) ++
+                " of the " ++
+                fmtUsd(status.maxUsd) ++
+                " budget"}
+                className="haul-budget-track">
+                <div
+                  className="haul-budget-fill"
+                  style={{
+                    JsxDOMStyle.width: fmtPct(HaulLayout.budgetFillPct(status.costUsd, status.maxUsd)),
+                  }}
+                />
+                {HaulLayout.notchPositions(
+                  ~costUsd=status.costUsd,
+                  ~maxUsd=status.maxUsd,
+                  ~valued=tally.valued,
+                )
+                ->Array.mapWithIndex((p, i) =>
+                  <span
+                    key={Int.toString(i)}
+                    className="haul-budget-notch"
+                    style={{JsxDOMStyle.left: fmtPct(p)}}
+                  />
+                )
+                ->React.array}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>}
+      {isWalk
+        ? <div className="haul-tip">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              ariaHidden={true}>
+              <circle cx="12" cy="12" r="8.5" />
+              <circle cx="12" cy="12" r="5" />
+            </svg>
+            <span> {React.string("Put a quarter next to small items to show their size.")} </span>
+          </div>
+        : React.null}
       {switch phase {
       | Finished(_) =>
-        <>
-          <div className="status">
-            {React.string(status.emailNote->Option.getOr("done — waiting for the digest"))}
-          </div>
-          {status.emailedAt->Option.isSome
-            ? <button className="take-photo" onClick={onNewHaul}>
-                {React.string("Start a new haul")}
-              </button>
-            : React.null}
-        </>
-      | Finishing(_) =>
-        <div className="status"> {React.string("finishing — uploading what's left")} </div>
+        switch status.emailedAt {
+        | Some(emailedAt) =>
+          <section ariaLabel="Haul receipt" className="haul-receipt">
+            <div className="haul-receipt-label"> {React.string("HAUL RECEIPT")} </div>
+            <h1 className="haul-receipt-hero">
+              {React.string(
+                gemCount > 0
+                  ? Int.toString(gemCount) ++ (gemCount == 1 ? " gem" : " gems")
+                  : "No gems this time",
+              )}
+            </h1>
+            <p className="haul-receipt-sub">
+              {React.string(status.emailNote->Option.getOr("The digest is in your inbox."))}
+            </p>
+            <div className="haul-receipt-rows">
+              {receiptRows
+              ->Array.mapWithIndex((row, i) => {
+                let (k, v) = row
+                <div key={Int.toString(i)} className="haul-receipt-row">
+                  <span className="haul-receipt-row-k"> {React.string(k)} </span>
+                  <span ariaHidden={true} className="haul-receipt-row-dots" />
+                  <span className="haul-receipt-row-v"> {React.string(v)} </span>
+                </div>
+              })
+              ->React.array}
+            </div>
+            <div
+              role="img"
+              ariaLabel={"Stamp: hauled, " ++ HaulLayout.stampDateOf(emailedAt)}
+              className="haul-stamp">
+              <div className="haul-stamp-inner">
+                <div className="haul-stamp-word"> {React.string("HAULED")} </div>
+                <div className="haul-stamp-date">
+                  {React.string(HaulLayout.stampDateOf(emailedAt))}
+                </div>
+              </div>
+            </div>
+          </section>
+        | None => React.null
+        }
+      | Finishing(_) => React.null
       | _ =>
-        <div className="haul-buttons">
-          <label className="take-photo">
-            <input
-              className="visually-hidden"
-              type_="file"
-              accept="image/*"
-              capture=#environment
-              onChange={onTakePhoto}
-            />
-            {React.string("Take photo")}
-          </label>
-          <label className="take-photo">
+        switch model.haulError {
+        // The offline notice already says why an upload is waiting.
+        | Some(msg) if !isOffline => <div className="haul-error"> {React.string(msg)} </div>
+        | _ => React.null
+        }
+      }}
+      {walkingOrFinishing && Array.length(status.failed) > 0
+        ? <section ariaLabel="Failed photos" className="haul-failed">
+            <div className="haul-failed-head">
+              <span ariaHidden={true} className="haul-failed-icon">
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 8 8"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinecap="round"
+                  ariaHidden={true}>
+                  <path d="M2 2l4 4M6 2L2 6" />
+                </svg>
+              </span>
+              <h2 className="haul-failed-title">
+                {React.string(
+                  ScanState.plural(Array.length(status.failed), "photo", "photos") ++ " failed",
+                )}
+              </h2>
+            </div>
+            {status.failed
+            ->Array.map(f => <div key={f.sceneId} className="haul-failed-row"> {React.string(f.error)} </div>)
+            ->React.array}
+          </section>
+        : React.null}
+      {walkingOrFinishing && gemCount == 0
+        ? <div className="scan-empty">
+            <div className="scan-empty-title"> {React.string("Gems land here")} </div>
+            <div className="scan-empty-sub">
+              {React.string("Anything with a high estimate of $20 or more.")}
+            </div>
+          </div>
+        : React.null}
+      {gemCount > 0
+        ? <section ariaLabel={gemsTitle} className="scan-gems">
+            <div className="scan-section-head">
+              <h2 className="scan-section-title"> {React.string(gemsTitle)} </h2>
+              <span className="scan-section-count">
+                {React.string(Int.toString(gemCount) ++ " · " ++ ScanState.moneyRange(sumLo, sumHi))}
+              </span>
+            </div>
+            <div className="scan-section-sub"> {React.string("high estimate $20 or more")} </div>
+            <div className="scan-rows-card">
+              {status.gems
+              ->Array.mapWithIndex((gem, i) =>
+                <GemCard
+                  key={gem.findId}
+                  gem
+                  rank={i + 1}
+                  allGems=status.gems
+                  isOpen={model.openGem == Some(gem.findId)}
+                  onToggle=onToggleGem
+                />
+              )
+              ->React.array}
+            </div>
+          </section>
+        : React.null}
+      {status.otherCount > 0
+        ? <div className="haul-others">
+            {React.string(
+              status.otherCount == 1
+                ? "1 other thing seen, not a gem"
+                : Int.toString(status.otherCount) ++ " other things seen, not gems",
+            )}
+          </div>
+        : React.null}
+      {switch phase {
+      | Finished(_) if status.emailedAt->Option.isSome =>
+        <button type_="button" className="haul-new-haul" onClick={onNewHaul}>
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            ariaHidden={true}>
+            <path d="M5 9h14l-1.2 10.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z" />
+            <path d="M9 9V7a3 3 0 0 1 6 0v2" />
+          </svg>
+          <span> {React.string("Start a new haul")} </span>
+        </button>
+      | _ => React.null
+      }}
+      {walkingOrFinishing ? <div ariaHidden={true} className="haul-walk-spacer" /> : React.null}
+      {switch phase {
+      | Finished(_) if status.emailedAt->Option.isSome => React.null
+      | Finishing(_) | Finished(_) =>
+        <div role="status" className={"haul-bar" ++ (model.doneAttempts > 0 ? " haul-bar-fail" : "")}>
+          <span ariaHidden={true} className="haul-bar-badge">
+            <span ariaHidden={true} className="haul-bar-ring" />
+          </span>
+          <span className="haul-bar-text">
+            {React.string(
+              model.doneAttempts > 0
+                ? "Can’t reach reflip to finish. It tries again on its own."
+                : HaulLayout.finishingText(~onPhone, ~valuing=tally.valuing),
+            )}
+          </span>
+        </div>
+      | _ =>
+        <div role="group" ariaLabel="Haul controls" className="haul-dock">
+          <label className="haul-dock-add">
             <input
               className="visually-hidden"
               type_="file"
@@ -533,48 +1255,60 @@ module HaulView = {
               multiple=true
               onChange={onAddPhotos}
             />
-            {React.string("Add photos")}
+            <span ariaHidden={true} className="haul-dock-add-icon">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                ariaHidden={true}>
+                <path d="M7 3.5h11.5A2.5 2.5 0 0 1 21 6v11" />
+                <rect x="3" y="7" width="14" height="13.5" rx="2" />
+                <path d="M3 17.5l4-4 3.5 3.5 2-2 4.5 4.5" />
+                <circle cx="12.5" cy="11" r="1.3" />
+              </svg>
+            </span>
+            <span className="haul-dock-add-label"> {React.string("Add photos")} </span>
           </label>
-          <button className="take-photo" onClick={onDone}>
+          <label ariaLabel="Snap a photo" className="haul-dock-snap">
+            <input
+              className="visually-hidden"
+              type_="file"
+              accept="image/*"
+              capture=#environment
+              onChange={onTakePhoto}
+            />
+            <span
+              ariaHidden={true}
+              className={"haul-dock-snap-ring" ++ (
+                tally.onPhone + tally.valuing > 0 ? " haul-dock-snap-ring-busy" : ""
+              )}
+            />
+            <span className="haul-dock-snap-inner">
+              <svg
+                width="26"
+                height="26"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.9"
+                strokeLinejoin="round"
+                ariaHidden={true}>
+                <path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z" />
+                <circle cx="12" cy="13" r="3.6" />
+              </svg>
+              <span className="haul-dock-snap-label"> {React.string("Snap")} </span>
+            </span>
+          </label>
+          <button type_="button" className="haul-dock-done" onClick={onDone}>
             {React.string("Done")}
           </button>
         </div>
       }}
-      {switch phase {
-      | Finished(_) | Finishing(_) => React.null
-      | _ =>
-        <div className="hint">
-          {React.string("Put a quarter next to small items to show their size.")}
-        </div>
-      }}
-      {Array.length(status.gems) > 0
-        ? <ul className="items">
-            {status.gems
-            ->Array.map(gem =>
-              <GemCard
-                key={gem.findId}
-                gem
-                isOpen={model.openGem == Some(gem.findId)}
-                onToggle=onToggleGem
-              />
-            )
-            ->React.array}
-          </ul>
-        : React.null}
-      {status.otherCount > 0
-        ? <div className="status">
-            {React.string(Int.toString(status.otherCount) ++ " other items seen, not gems")}
-          </div>
-        : React.null}
-      {Array.length(status.failed) > 0
-        ? <ul className="items">
-            {status.failed
-            ->Array.map(f =>
-              <li className="item" key={f.sceneId}> {React.string(f.error)} </li>
-            )
-            ->React.array}
-          </ul>
-        : React.null}
     </div>
   }
 }
@@ -585,9 +1319,16 @@ let make = () => {
   let model = rewind.model
   let dispatch = rewind.dispatch
 
-  // -- mount: restore a haul in progress from IndexedDB ---------------------
+  // -- mount: restore a haul in progress from IndexedDB, then send any
+  // place outbox entries left from a previous session. restoreHaul returns
+  // the restored haul id directly — rewind.live in this closure is fixed to
+  // the first render's value (React.useEffect0 only ever runs this closure
+  // once), so it would never reflect the HaulStarted dispatched above.
   React.useEffect0(() => {
-    restoreHaul(dispatch)->Promise.ignore
+    (async () => {
+      let currentHaulId = await restoreHaul(dispatch)
+      await restorePlaces(dispatch, currentHaulId)
+    })()->Promise.ignore
     None
   })
 
@@ -609,14 +1350,36 @@ let make = () => {
   }, (rewind.live.queue, rewind.live.haul))
 
   // -- Done: once the local queue is drained, tell the brain ----------------
+  // Depends only on (readyToFinish, finishingHaulId), not on every queue/haul
+  // change, so a status poll during Finishing does not re-fire this and send
+  // POST done again. Reads rewind.live, never rewind.model.
+  let isFinishing = switch rewind.live.haul {
+  | Finishing(_) => true
+  | _ => false
+  }
+  let finishingHaulId =
+    AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
+  let readyToFinish = isFinishing && Array.length(rewind.live.queue) == 0
   React.useEffect2(() => {
-    switch rewind.live.haul {
-    | Finishing(status) if Array.length(rewind.live.queue) == 0 =>
-      finishHaul(dispatch, status.haulId)->Promise.ignore
-    | _ => ()
+    if readyToFinish {
+      finishHaul(dispatch, finishingHaulId)->Promise.ignore
     }
     None
-  }, (rewind.live.queue, rewind.live.haul))
+  }, (readyToFinish, finishingHaulId))
+
+  // -- Done retry (decision 10): a failed Done while Finishing tries again,
+  // backing off per retryDelayMs. Derived booleans (isFinishing/haulId), so
+  // this does not restart the countdown on every unrelated status poll.
+  // Reads rewind.live, never rewind.model.
+  React.useEffect3(() => {
+    if isFinishing && rewind.live.doneAttempts > 0 && finishingHaulId != "" {
+      let delay = AppState.retryDelayMs(rewind.live.doneAttempts)
+      let id = WebApi.setTimeout(() => finishHaul(dispatch, finishingHaulId)->Promise.ignore, delay)
+      Some(() => WebApi.clearTimeout(id))
+    } else {
+      None
+    }
+  }, (isFinishing, rewind.live.doneAttempts, finishingHaulId))
 
   // -- poll the brain while the haul is open or not yet emailed -------------
   let pollHaulId = AppState.haulStatusOf(rewind.live.haul)->Option.map(s => s.haulId)->Option.getOr("")
@@ -632,6 +1395,46 @@ let make = () => {
       None
     }
   }, (pollHaulId, pollActive))
+
+  // -- Map view (docs/spec-haul-map.md): load the haul list each time the
+  // Map tab opens. Keyed on model.activeTab, so a tab switch fires it and
+  // an unrelated re-render while already on the Map tab does not re-fetch.
+  React.useEffect1(() => {
+    if model.activeTab == AppState.MapTab {
+      loadHauls(dispatch)->Promise.ignore
+    }
+    None
+  }, [model.activeTab])
+
+  // -- Map view: send a pin tap once MapState.update has moved setPlace to
+  // Submitting. Reads rewind.live, not rewind.model, per the rewind rule —
+  // a paused view must not fire a live network call against a haul that is
+  // no longer live.
+  React.useEffect1(() => {
+    switch rewind.live.map.setPlace {
+    | Submitting(haulId, lat, lon) => submitMapPlace(dispatch, haulId, lat, lon)->Promise.ignore
+    | Off | Selecting(_) => ()
+    }
+    None
+  }, [rewind.live.map.setPlace])
+
+  // -- the #map hash (docs/spec-haul-map.md "The page"): read once on
+  // mount, so a link straight to #map opens on the Map tab.
+  React.useEffect0(() => {
+    let hash = WebApi.locationHash(WebApi.location(WebApi.windowGlobal))
+    switch AppState.tabOfHash(hash) {
+    | Some(tab) => dispatch(AppState.SetActiveTab(tab))
+    | None => ()
+    }
+    None
+  })
+
+  // -- the #map hash: write it back on every tab switch, so the Map tab
+  // is bookmarkable and survives a reload.
+  React.useEffect1(() => {
+    WebApi.setLocationHash(WebApi.location(WebApi.windowGlobal), AppState.hashOfTab(model.activeTab))
+    None
+  }, [model.activeTab])
 
   // -- the new streaming scan flow: refs so Stop/New scan's edge effects
   // below can reach the live ScanApi.handle and revoke the current photo's
@@ -715,8 +1518,37 @@ let make = () => {
   let onStoreNameChange = (event: ReactEvent.Form.t) =>
     dispatch(AppState.SetStoreName(WebApi.targetValue(WebApi.eventTarget(event))))
 
-  let onStartHaul = (_event: ReactEvent.Mouse.t) =>
-    startHaul(dispatch, String.trim(model.storeName))->Promise.ignore
+  // The position ask starts alongside the haul start, not after it — a
+  // slow or denied GPS must never hold up the scan shell. Each ask is
+  // paired with its own start: if the start fails, the fix (if any) is
+  // dropped with no extra state, since HaulStartFailed already routes the
+  // view away from anywhere a place line would render.
+  let onStartHaul = (_event: ReactEvent.Mouse.t) => {
+    let started = startHaul(dispatch, String.trim(model.storeName))
+    let asked = askPlace(dispatch)
+    (async () => {
+      let haulId = await started
+      let fix = await asked
+      switch (haulId, fix) {
+      | (Some(id), Some(f)) => await sendPlace(dispatch, id, f)
+      | _ => ()
+      }
+    })()->Promise.ignore
+  }
+
+  // Reads rewind.live, never rewind.model, per the rewind rule (this
+  // repo's CLAUDE.md "Time-travel debugger (rewind)") — a past model must
+  // not send a fix against a haul that is no longer live.
+  let onPlaceTryAgain = (): unit => {
+    dispatch(AppState.PlaceAskAgain)
+    (async () => {
+      let fix = await askPlace(dispatch)
+      switch (fix, AppState.haulStatusOf(rewind.live.haul)) {
+      | (Some(f), Some(status)) => await sendPlace(dispatch, status.haulId, f)
+      | _ => ()
+      }
+    })()->Promise.ignore
+  }
 
   let onToggleGem = (findId: string) => dispatch(AppState.ToggleGem(findId))
 
@@ -758,7 +1590,14 @@ let make = () => {
   }
 
   <div className="page">
-    {isScanMode ? React.null : <h1> {React.string("reflip")} </h1>}
+    {isScanMode
+      ? React.null
+      : <header className="scan-header">
+          <div className="scan-header-logo">
+            <span ariaHidden={true} className="scan-header-dot" />
+            <span className="scan-header-word"> {React.string("reflip")} </span>
+          </div>
+        </header>}
     {switch model.haul {
     | NoHaul =>
       <ScanShell model dispatch onScanFileChange onStoreNameChange onStartHaul />
@@ -773,6 +1612,7 @@ let make = () => {
         onDone
         onNewHaul
         onToggleGem
+        onPlaceTryAgain
       />
     }}
   </div>
