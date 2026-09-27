@@ -16,6 +16,9 @@ own docs. `table.jpg` is a small generated image, not a real photo.
 Per `docs/spec-scale-ref.md`, `claude-scene.json` has `quarterSeen: true`
 at the top level, and each fixture's items mix a `size` value, an empty
 `size`, and a missing `size` key, so a decode exercises all three cases.
+Per `docs/spec-profit.md`, each fixture's three items also carry, in
+order, `shipClass` `large`, `medium` and `small`, with `tagPriceUsd`
+`null`, `12` and `2.5`.
 
 `table.jpg` is 64x48 pixels. Each item in `claude-scene.json` has a `box`
 in pixels of that image, so fixture mode shows boxes when you send

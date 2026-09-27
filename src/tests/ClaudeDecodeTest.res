@@ -21,6 +21,21 @@ let run = () => {
         "scene fixture's board game lot has no size key, decoded as an empty string",
         Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
       )
+      TestKit.check(
+        "scene fixture's bowl set is large with no tag",
+        Array.get(decoded.items, 0)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Large, None)),
+      )
+      TestKit.check(
+        "scene fixture's skillet is medium with a $12 tag",
+        Array.get(decoded.items, 1)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Medium, Some(12.0))),
+      )
+      TestKit.check(
+        "scene fixture's board game lot is small with a $2.50 tag",
+        Array.get(decoded.items, 2)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Small, Some(2.5))),
+      )
     }
   | Error(_) => TestKit.check("fixture decodes", false)
   }
@@ -85,6 +100,35 @@ let run = () => {
         "haul fixture items each carry a raw box",
         Array.every(decoded.items, i => i.box->Option.isSome),
       )
+      TestKit.check(
+        "haul fixture's lamp is large with no tag",
+        Array.get(decoded.items, 0)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Large, None)),
+      )
+      TestKit.check(
+        "haul fixture's skillet is medium with a $12 tag",
+        Array.get(decoded.items, 1)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Medium, Some(12.0))),
+      )
+      TestKit.check(
+        "haul fixture's brooch is small with a $2.50 tag",
+        Array.get(decoded.items, 2)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Small, Some(2.5))),
+      )
+      switch Array.get(decoded.items, 2) {
+      | Some(brooch) =>
+        let estimate = Profit.estimate(
+          ~lowUsd=brooch.estimateLowUsd,
+          ~highUsd=brooch.estimateHighUsd,
+          ~shipClass=brooch.shipClass,
+          ~tagPriceUsd=brooch.tagPriceUsd,
+        )
+        TestKit.check(
+          "haul fixture's brooch estimate, at its tag, is a loss",
+          Profit.isLoss(estimate),
+        )
+      | None => TestKit.check("haul fixture's brooch is present to price", false)
+      }
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)
   }
