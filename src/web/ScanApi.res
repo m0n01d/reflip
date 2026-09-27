@@ -26,6 +26,14 @@ type handle = {
 // heartbeat never shows up as an event.
 let heartbeatTimeoutMs = 30_000
 let watchdogIntervalMs = 5_000
+// The first request's own watchdog (consumeXhr) needs a much longer fuse
+// than heartbeatTimeoutMs above: on a slow cell connection, sending a few
+// hundred KB can genuinely take a minute or more, and no response bytes
+// arrive at all until the whole photo is received server-side — that is
+// normal progress, not a dead connection. 30s killed a perfectly good
+// slow upload before it could finish (bug found 2026-09-27 testing on
+// real weak-signal cellular).
+let firstRequestTimeoutMs = 120_000
 let backoffScheduleMs = [1000, 2000, 5000, 10000]
 
 // Bug B/C (288738f review): whether the attempt loop may keep going. Only
@@ -194,16 +202,21 @@ let run = (~model: Shared.model, ~blob: WebApi.blob, ~dispatch: ScanState.msg =>
         }
       }
       let watchdog = WebApi.setInterval(() => {
-        if WebApi.now() -. lastByteAt.contents > Int.toFloat(heartbeatTimeoutMs) {
+        if WebApi.now() -. lastByteAt.contents > Int.toFloat(firstRequestTimeoutMs) {
           WebApi.xhrAbort(req)
         }
       }, watchdogIntervalMs)
       let stopWatching = () => WebApi.clearInterval(watchdog)
       WebApi.xhrOpen(req, "POST", url)
       WebApi.xhrSetRequestHeader(req, "Content-Type", "image/jpeg")
-      WebApi.onUploadProgress(WebApi.xhrUploadOf(req), evt =>
+      WebApi.onUploadProgress(WebApi.xhrUploadOf(req), evt => {
+        // Bytes still going out count as life too — this alone was the
+        // bug: without it, lastByteAt never moved during a slow upload
+        // (only a response byte did), so the watchdog above judged a
+        // fine, slow send as a dead connection and killed it.
+        lastByteAt := WebApi.now()
         dispatch(ScanState.UploadProgress(evt.lengthComputable ? Float.toInt(evt.loaded) : 0))
-      )
+      })
       WebApi.onXhrProgress(req, () => {
         let status = WebApi.xhrStatus(req)
         if status >= 200 && status < 300 {
