@@ -128,6 +128,14 @@ let make = (
   let lastLine = Array.get(lines, Array.length(lines) - 1)
   let marks = ScanState.trackMarks(model)
   let elapsed = ScanState.elapsedMs(model)
+  // While the photo itself is still going out, the track shows real
+  // upload progress (bytes sent of the photo's own size) instead of
+  // elapsed-time-of-3:00, which is near-meaningless in the first second
+  // of a scan. docs/spec-upload-progress.md.
+  let trackPct = switch model.phase {
+  | ScanState.Sending => pctOf(Int.toFloat(model.uploadedBytes), Int.toFloat(model.uploadBytes))
+  | _ => pctOf(elapsed, limitMs)
+  }
   let summary = ScanState.gemsSummary(model)
   let unpriced = visible->Array.filter(s => s.item->Option.isNone)
   let alsoItems = Array.concat(ScanState.others(model), unpriced)
@@ -220,14 +228,12 @@ let make = (
             <p className="scan-sub"> {React.string(ScanState.sub(model))} </p>
             <div className="scan-track">
               <div className="scan-track-bg">
-                <div
-                  className="scan-track-fill" style={{JsxDOMStyle.width: pctOf(elapsed, limitMs)}}
-                />
+                <div className="scan-track-fill" style={{JsxDOMStyle.width: trackPct}} />
               </div>
               <div className="scan-track-usual-tick" />
               <div className="scan-track-usual-label"> {React.string("usual 0:47")} </div>
               <div className="scan-track-limit-label"> {React.string("3:00 limit")} </div>
-              <div className="scan-track-thumb" style={{JsxDOMStyle.left: pctOf(elapsed, limitMs)}} />
+              <div className="scan-track-thumb" style={{JsxDOMStyle.left: trackPct}} />
               {marks
               ->Array.mapWithIndex((mark, i) => {
                 let (cls, ms) = switch mark {

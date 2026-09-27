@@ -539,6 +539,9 @@ let run = () => {
     let measured = ScanState.update(picked, RttMeasured(166000.0))
     TestKit.check("RttMeasured sets model.rttMs", measured.rttMs == Some(166000.0))
 
+    let uploading = ScanState.update(picked, UploadProgress(37))
+    TestKit.check("UploadProgress sets model.uploadedBytes", uploading.uploadedBytes == 37)
+
     TestKit.check(
       "isTerminalMsg true for SendFailed",
       ScanState.isTerminalMsg(SendFailed("x")) == true,
