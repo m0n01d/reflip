@@ -119,11 +119,16 @@ let handleRtt = (
 
 // -- Haul mode routes (docs/spec-haul-mode.md "The routes") -----------------
 
-type haulRoute = CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string) | SetPlace(string)
+type haulRoute = ListHauls | CreateHaul | AddScene(string) | GetHaul(string) | MarkDone(string) | ScenePhoto(string) | SetPlace(string)
 
 let parseHaulPath = (method: string, pathname: string): option<haulRoute> => {
   let parts = pathname->String.split("/")->Array.filter(s => s != "")
   switch (method, Array.length(parts)) {
+  | ("GET", 2) => {
+      let a = Array.getUnsafe(parts, 0)
+      let b = Array.getUnsafe(parts, 1)
+      a == "api" && b == "hauls" ? Some(ListHauls) : None
+    }
   | ("POST", 2) =>
     let a = Array.getUnsafe(parts, 0)
     let b = Array.getUnsafe(parts, 1)
@@ -357,6 +362,11 @@ let handleGetHaul = (
   haulId: string,
   res: Node.HttpServer.response,
 ): unit => haulStatusResponse(config, store, haulId, 200, res)
+
+// GET /api/hauls: no logging of the rows -- place stays out of every log,
+// same rule as handleSetPlace.
+let handleListHauls = (config: Config.t, store: Store.t, res: Node.HttpServer.response): unit =>
+  jsonResponse(res, 200, Types.encodeHaulList(HaulList.fromStore(store, config)))
 
 // The stored photo of a scene (docs/spec-haul-mode.md "The routes"). The id
 // gets the same 1-to-64-of-[A-Za-z0-9-] check as a client id, then the path
@@ -646,6 +656,7 @@ let route = async (
   let url = Node.Url.make(Node.HttpServer.url(req), "http://127.0.0.1")
   let pathname = Node.Url.pathname(url)
   switch parseHaulPath(method, pathname) {
+  | Some(ListHauls) => handleListHauls(config, store, res)
   | Some(CreateHaul) => await handleCreateHaul(config, store, req, res)
   | Some(AddScene(haulId)) => await handleAddScene(config, store, worker, haulId, req, res)
   | Some(GetHaul(haulId)) => handleGetHaul(config, store, haulId, res)

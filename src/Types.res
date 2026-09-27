@@ -135,6 +135,27 @@ type haulStatus = {
   place: option<place>,
 }
 
+type haulBuy = {
+  name: string,
+  paidUsd: float,
+  // The finds table has no paidOn column yet. Budget MVP step 2 adds it,
+  // with manualBuys. Until then, every buy's paidOn is None.
+  paidOn: option<string>,
+  soldUsd: option<float>,
+  soldOn: option<string>,
+}
+
+type haulListRow = {
+  haulId: string,
+  name: option<string>,
+  startedAt: string,
+  place: option<place>,
+  photoCount: int,
+  gemCount: int,
+  paidUsd: float,
+  buys: array<haulBuy>,
+}
+
 type sceneReply = {
   sceneId: string,
   model: string,
@@ -346,3 +367,38 @@ let encodeHaulStatus = (s: haulStatus): JSON.t =>
       },
     ),
   ])
+
+let encodeHaulBuy = (b: haulBuy): JSON.t =>
+  Json.obj([
+    ("name", Json.str(b.name)),
+    ("paidUsd", Json.num(b.paidUsd)),
+    ("paidOn", encodeOptString(b.paidOn)),
+    (
+      "soldUsd",
+      switch b.soldUsd {
+      | Some(v) => Json.num(v)
+      | None => JSON.Encode.null
+      },
+    ),
+    ("soldOn", encodeOptString(b.soldOn)),
+  ])
+
+let encodeHaulListRow = (r: haulListRow): JSON.t =>
+  Json.obj([
+    ("haulId", Json.str(r.haulId)),
+    ("name", encodeOptString(r.name)),
+    ("startedAt", Json.str(r.startedAt)),
+    (
+      "place",
+      switch r.place {
+      | Some(p) => encodePlace(p)
+      | None => JSON.Encode.null
+      },
+    ),
+    ("photoCount", Json.num(Int.toFloat(r.photoCount))),
+    ("gemCount", Json.num(Int.toFloat(r.gemCount))),
+    ("paidUsd", Json.num(r.paidUsd)),
+    ("buys", Json.arr(Array.map(r.buys, encodeHaulBuy))),
+  ])
+
+let encodeHaulList = (rows: array<haulListRow>): JSON.t => Json.arr(Array.map(rows, encodeHaulListRow))

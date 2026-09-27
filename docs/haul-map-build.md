@@ -475,6 +475,55 @@ A reviewer read the diff to `7d47a4d`. The brain half is sound. Do these, then r
       saved.
 
 
+## Step 3: GET /api/hauls and HaulList
+
+Plan, per `docs/spec-haul-map.md` "Shape" and MVP step 3:
+
+- [x] S1. `Types.res`: `haulBuy`, `haulListRow` types and `encodeHaulList`, next to `haulStatus`.
+      `npx rescript build` compiles clean.
+- [x] S2. `Shared.res`: `decodeHaulList`, field for field against the encoder.
+      `npx rescript build` compiles clean.
+- [x] S3. `Store.res`: `listHauls`, `photoCountsOf`, `findsAll` queries.
+- [x] S4. `HaulList.res`: pure `build` and a thin `fromStore`.
+- [x] S5. `Server.res`: `ListHauls` route, `GET /api/hauls` returns 200 with the array.
+- [x] S6. `HaulListTest.res`, registered in `AllTests.res`. `npm test` ends with
+      "all tests passed".
+
+### Log
+
+S1 and S2 went clean, no failed attempts. A TURN-COUNTER note arrived at
+turn 60, right after S2's build check, before any S3 edit. A fresh agent
+did S3 through S6 next, with no failed attempts. `npm test` ends with
+"all tests passed", with 20 new checks in `HaulListTest.res`.
+
+A review found three tests that could not fail. Commit `e51e269` fixes
+them. Each fixed test fails when `HaulList.res` drops its sort or its
+haul filter. On `e51e269`, `npm test` passed 1042 checks.
+`scripts/haul-smoke.mjs` and `scripts/place-check.mjs` passed on the same
+source. A live call on a fixture brain gave `photoCount` 2 and `gemCount`
+4 for a haul with two photos. The server log had no coordinates.
+
+### What S3-S6 built
+
+- `Store.listHauls` reads every haul. It sorts by `startedAt`, then by
+  `rowid`, both newest first.
+- `Store.photoCountsOf` counts the scenes of each haul. It returns a
+  dict from `haulId` to that count.
+- `Store.findsAll` reads every find across every haul. Each find carries
+  its `haulId`, oldest first.
+- `HaulList.build` turns those rows into the reply shape. It sorts the
+  hauls by `startedAt` itself, with a stable sort, so the SQL order
+  still breaks a tie.
+- `HaulList.build` counts a find as a gem when its high estimate is at
+  or above the gem minimum.
+- `HaulList.build` turns each paid find into a buy. A find with no paid
+  amount is not a buy.
+- `HaulList.fromStore` calls the three `Store` queries above and passes
+  their result to `build`.
+- `Server.handleListHauls` calls `HaulList.fromStore` and sends the
+  result as JSON. It logs nothing about the rows.
+- `GET /api/hauls` now parses to the new `ListHauls` route.
+
 ## Status on 2026-09-26
 
 MVP step 1 is done. PR m0n01d/reflip#28 holds it. `npm test`, `scripts/haul-smoke.mjs` and `scripts/place-check.mjs` passed on `469d17e`.
@@ -488,4 +537,4 @@ MVP step 2, the phone test, waits for Dwight:
 5. Add the page to the Home Screen. Do step 4 again from the Home Screen icon.
 6. Write the results in `docs/spec-haul-map.md`, MVP step 2. If the results show a need, change the timeout (15 s now, in `App.askPlace`).
 
-Step 3 (`GET /api/hauls` and `HaulList.res`) can go on during the wait. Step 4, the Map view, waits for the results in the spec.
+Step 3 (`GET /api/hauls` and `HaulList.res`) is done on branch `claude/haul-map-list`, stacked on PR m0n01d/reflip#28. See "Step 3" above. Step 4, the Map view, waits for the results in the spec.
