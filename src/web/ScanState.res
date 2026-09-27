@@ -519,6 +519,15 @@ let headline = (m: model): string =>
     }
   }
 
+// The reason text SendFailed/ErrorEvent recorded, if any — so "could not
+// finish" is never a dead end: the real cause (a network error, a bad
+// status, a timeout) shows right on the card instead of hiding in a model
+// field nothing renders. See docs/spec-upload-progress.md's follow-up:
+// this is exactly what real cellular testing needed to diagnose an
+// instant failure remotely.
+let lastErrorReason = (m: model): option<string> =>
+  Array.get(m.errors, Array.length(m.errors) - 1)->Option.map(((_t, msg)) => msg)
+
 let sub = (m: model): string =>
   connectionState(m) == Reconnecting
     ? "Connection dropped. Catching up…"
@@ -533,7 +542,9 @@ let sub = (m: model): string =>
       let n = Array.length(visibleStickers(m))
       n > 0 ? "Kept the " ++ plural(n, "item", "items") ++ " found so far." : "Nothing had landed yet."
     }
-  | Ended(ScanEvent.EndStatus.Failed) => "Something went wrong. Kept what it found."
+  | Ended(ScanEvent.EndStatus.Failed) =>
+    "Something went wrong" ++
+    lastErrorReason(m)->Option.mapOr("", r => " (" ++ r ++ ")") ++ ". Kept what it found."
   | Live =>
     if m.stopRequested {
       "Finishing up the items already found."

@@ -296,6 +296,10 @@ let runSendFailed = () => {
     },
   )
   TestKit.check("stickers already found are kept, not cleared", Array.length(m1.stickers) == Array.length(m0.stickers))
+  TestKit.check(
+    "sub shows the actual reason, not just \"something went wrong\"",
+    ScanState.sub(m1) == "Something went wrong (the server said 503). Kept what it found.",
+  )
   let mDropped = {...ScanState.initialModel, phase: Live, reconnecting: true}
   let mDroppedFailed = ScanState.update(mDropped, SendFailed("lost it"))
   TestKit.check("SendFailed clears reconnecting even if a reconnect was in flight", mDroppedFailed.reconnecting == false)
