@@ -301,6 +301,12 @@ let buildSceneReply = async (
       soldSearchUrl: EbayClient.soldSearchUrl(item.query),
       size: item.size,
       box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=boxModel),
+      profit: Profit.estimate(
+        ~lowUsd=item.estimateLowUsd,
+        ~highUsd=item.estimateHighUsd,
+        ~shipClass=item.shipClass,
+        ~tagPriceUsd=item.tagPriceUsd,
+      ),
     }
   })
   let cost = {

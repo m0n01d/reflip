@@ -677,6 +677,12 @@ module GemCard = {
                 </span>
                 <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
               </div>
+              <ProfitLine
+                key={gem.findId}
+                profit={gem.profit}
+                lowUsd={gem.estimateLowUsd}
+                highUsd={gem.estimateHighUsd}
+              />
               <div className="scan-sheet-conf-row">
                 <span className="scan-sheet-dots">
                   {[0, 1, 2, 3, 4]

@@ -6,6 +6,7 @@ let run = () => {
 
   let weird: Digest.gem = {
     name: "Weird <b>& Thing",
+    profit: None,
     where: Some("top shelf"),
     estimateLowUsd: 20.0,
     estimateHighUsd: 30.0,
@@ -18,6 +19,7 @@ let run = () => {
   }
   let lamp: Digest.gem = {
     name: "Old Lamp",
+    profit: None,
     where: Some("back shelf"),
     estimateLowUsd: 25.0,
     estimateHighUsd: 40.0,
@@ -30,6 +32,7 @@ let run = () => {
   }
   let radio: Digest.gem = {
     name: "Vintage Radio",
+    profit: None,
     where: None,
     estimateLowUsd: 35.0,
     estimateHighUsd: 85.0,
@@ -154,6 +157,7 @@ let run = () => {
   // of).
   let g1: Digest.gem = {
     name: "Gem A1",
+    profit: None,
     where: None,
     estimateLowUsd: 100.0,
     estimateHighUsd: 150.0,
@@ -166,6 +170,7 @@ let run = () => {
   }
   let g2: Digest.gem = {
     name: "Gem A2",
+    profit: None,
     where: None,
     estimateLowUsd: 90.0,
     estimateHighUsd: 120.0,
@@ -178,6 +183,7 @@ let run = () => {
   }
   let g3: Digest.gem = {
     name: "Gem A3",
+    profit: None,
     where: None,
     estimateLowUsd: 80.0,
     estimateHighUsd: 110.0,
@@ -190,6 +196,7 @@ let run = () => {
   }
   let g4: Digest.gem = {
     name: "Gem A4",
+    profit: None,
     where: None,
     estimateLowUsd: 70.0,
     estimateHighUsd: 95.0,
@@ -202,6 +209,7 @@ let run = () => {
   }
   let g5: Digest.gem = {
     name: "Gem A5",
+    profit: None,
     where: None,
     estimateLowUsd: 60.0,
     estimateHighUsd: 85.0,
@@ -216,6 +224,7 @@ let run = () => {
   // Digest.gemHtml shows "no box" and adds no image for it.
   let g6: Digest.gem = {
     name: "Gem A6",
+    profit: None,
     where: None,
     estimateLowUsd: 50.0,
     estimateHighUsd: 75.0,
@@ -352,4 +361,111 @@ let run = () => {
   )
   TestKit.check("the text body names every gem", String.includes(grouped.text, "Gem A6"))
   TestKit.check("the text body never mentions cid: (no image lines)", !String.includes(grouped.text, "cid:"))
+
+  // -- profit line in the gem card ---------------------------------------
+
+  TestKit.section("Digest.gemHtml and gemText show the profit line")
+
+  // Case 1 numbers from docs/spec-profit.md (see ProfitTest.res): $20 to
+  // $30, medium, no tag.
+  let netOnly: Digest.gem = {
+    name: "Net Only Gem",
+    where: None,
+    estimateLowUsd: 20.0,
+    estimateHighUsd: 30.0,
+    confidence: 0.5,
+    soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=net+only+gem&LH_Sold=1",
+    sceneId: "scene-net",
+    ebayMedianUsd: None,
+    size: "",
+    crop: None,
+    profit: Some(
+      Profit.estimate(~lowUsd=20.0, ~highUsd=30.0, ~shipClass=Profit.Medium, ~tagPriceUsd=None),
+    ),
+  }
+  TestKit.check(
+    "a gem with case 1 numbers shows \"Net $5 to $14\" in the html",
+    String.includes(Digest.gemHtml(netOnly), "Net $5 to $14"),
+  )
+  TestKit.check(
+    "a gem with case 1 numbers shows \"Net $5 to $14\" in the text",
+    String.includes(Digest.gemText(netOnly), "Net $5 to $14"),
+  )
+  TestKit.check(
+    "a net-only (non-loss) gem's html line is not red",
+    !String.includes(Digest.gemHtml(netOnly), "color:#cc0000"),
+  )
+
+  // Same case 1 range, with a $4 tag price.
+  let withTag: Digest.gem = {
+    name: "Tagged Gem",
+    where: None,
+    estimateLowUsd: 20.0,
+    estimateHighUsd: 30.0,
+    confidence: 0.5,
+    soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=tagged+gem&LH_Sold=1",
+    sceneId: "scene-tag",
+    ebayMedianUsd: None,
+    size: "",
+    crop: None,
+    profit: Some(
+      Profit.estimate(
+        ~lowUsd=20.0,
+        ~highUsd=30.0,
+        ~shipClass=Profit.Medium,
+        ~tagPriceUsd=Some(4.0),
+      ),
+    ),
+  }
+  TestKit.check(
+    "a gem with a $4 tag shows \"Profit $1 to $10 at the $4 tag\" in the html",
+    String.includes(Digest.gemHtml(withTag), "Profit $1 to $10 at the $4 tag"),
+  )
+  TestKit.check(
+    "a gem with a $4 tag shows \"Profit $1 to $10 at the $4 tag\" in the text",
+    String.includes(Digest.gemText(withTag), "Profit $1 to $10 at the $4 tag"),
+  )
+
+  // No profit estimate at all: neither line appears, and nothing crashes.
+  let noProfit: Digest.gem = {
+    name: "No Profit Gem",
+    where: None,
+    estimateLowUsd: 5.0,
+    estimateHighUsd: 9.0,
+    confidence: 0.5,
+    soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=no+profit+gem&LH_Sold=1",
+    sceneId: "scene-noprofit",
+    ebayMedianUsd: None,
+    size: "",
+    crop: None,
+    profit: None,
+  }
+  TestKit.check(
+    "a gem with no profit estimate shows no Net or Profit line in the html",
+    !String.includes(Digest.gemHtml(noProfit), "Net $") &&
+      !String.includes(Digest.gemHtml(noProfit), "Profit $"),
+  )
+
+  // A loss (case 2: $8, small, low = high) shows in the html with the red
+  // inline style.
+  let lossGem: Digest.gem = {
+    name: "Loss Gem",
+    where: None,
+    estimateLowUsd: 8.0,
+    estimateHighUsd: 8.0,
+    confidence: 0.5,
+    soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=loss+gem&LH_Sold=1",
+    sceneId: "scene-loss",
+    ebayMedianUsd: None,
+    size: "",
+    crop: None,
+    profit: Some(
+      Profit.estimate(~lowUsd=8.0, ~highUsd=8.0, ~shipClass=Profit.Small, ~tagPriceUsd=None),
+    ),
+  }
+  TestKit.check(
+    "a loss shows in the html with the red inline style and Net -$1",
+    String.includes(Digest.gemHtml(lossGem), "color:#cc0000") &&
+      String.includes(Digest.gemHtml(lossGem), "Net -$1"),
+  )
 }

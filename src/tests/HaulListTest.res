@@ -36,6 +36,10 @@ let baseFind: Store.find = {
   createdAt: "2026-09-24T10:01:00.000Z",
   size: "1x",
   box: None,
+  shipClass: None,
+  feeEstUsd: None,
+  postageEstUsd: None,
+  tagPriceUsd: None,
 }
 
 let basePlace: Types.place = {
@@ -344,6 +348,10 @@ let run = () => {
       createdAt: "2026-09-20T00:03:00.000Z",
       size: "1x",
       box: None,
+      shipClass: None,
+      feeEstUsd: None,
+      postageEstUsd: None,
+      tagPriceUsd: None,
     },
   )
 

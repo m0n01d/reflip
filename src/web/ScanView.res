@@ -569,6 +569,12 @@ let make = (
                     </span>
                     <span className="scan-sheet-price-label"> {React.string("Claude’s estimate")} </span>
                   </div>
+                  <ProfitLine
+                    key={Int.toString(sticker.number)}
+                    profit={item.profit}
+                    lowUsd={item.estimateLowUsd}
+                    highUsd={item.estimateHighUsd}
+                  />
                   <div className="scan-sheet-conf-row">
                     <span className="scan-sheet-dots">
                       {[0, 1, 2, 3, 4]

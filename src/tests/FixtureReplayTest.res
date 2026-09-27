@@ -144,6 +144,8 @@ let run = async () => {
     where: None,
     size: "",
     box: None,
+    shipClass: Profit.Medium,
+    tagPriceUsd: None,
   }
   let (stats, note) = await EbayClient.statsFor(config, 99, missingItem)
   TestKit.check("missing ebay-search-99.json gives ebay null", stats == None)

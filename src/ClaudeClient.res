@@ -86,6 +86,11 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
     // Left raw here — Box.decode does the geometric validation, clamp, and
     // rescale once the sent photo's size and the model's tier are known.
     let box = Json.arrayField(json, "box")->Option.map(arr => Array.filterMap(arr, JSON.Decode.float))
+    let shipClass =
+      Json.stringField(json, "shipClass")
+      ->Option.flatMap(Profit.fromString)
+      ->Option.getOr(Profit.defaultClass)
+    let tagPriceUsd = Json.floatField(json, "tagPriceUsd")
     Ok({
       Types.name,
       maker,
@@ -98,6 +103,8 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
       where: Json.stringField(json, "where"),
       size: Json.stringField(json, "size")->Option.getOr(""),
       box,
+      shipClass,
+      tagPriceUsd,
     })
   | _ => Error("item missing a required field")
   }

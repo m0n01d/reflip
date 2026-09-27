@@ -129,6 +129,7 @@ let digestGemsOf = (
             width,
             height,
           }),
+          profit: Some(Store.profitOf(f)),
         }
       })
   (gems, images)

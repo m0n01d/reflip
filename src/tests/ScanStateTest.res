@@ -24,6 +24,12 @@ let testItem = (
   soldSearchUrl: "",
   size: "",
   box: None,
+  profit: Profit.estimate(
+    ~lowUsd=estimateLowUsd,
+    ~highUsd=estimateHighUsd,
+    ~shipClass=Profit.Medium,
+    ~tagPriceUsd=None,
+  ),
 }
 
 // -- The real fixture transcript -------------------------------------------

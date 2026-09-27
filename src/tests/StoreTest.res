@@ -272,6 +272,10 @@ let run = () => {
     createdAt: "2026-09-24T09:10:00.000Z",
     size: "10 in skillet",
     box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+    shipClass: Some(Profit.Medium),
+    feeEstUsd: Some(4.05),
+    postageEstUsd: Some(11.57),
+    tagPriceUsd: Some(15.0),
   }
   Store.insertFind(db, find)
 
@@ -368,6 +372,10 @@ let run = () => {
       createdAt: "2026-09-24T12:00:02.000Z",
       size: "10 in",
       box: Some({Types.x1: 2, y1: 4, x2: 20, y2: 30}),
+      shipClass: None,
+      feeEstUsd: None,
+      postageEstUsd: None,
+      tagPriceUsd: None,
     },
   )
 

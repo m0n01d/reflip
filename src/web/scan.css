@@ -24,6 +24,9 @@
   --scan-link: #2B55C8;
   --scan-mode-track: #E6DECD;
   --scan-dotted: #B9AE98;
+  /* Warm red for a loss line. 6.38:1 against --scan-card (#FFFCF5) —
+     WCAG 2.1 contrast formula, computed 2026-09-27. */
+  --scan-loss: #B3261E;
   --scan-font-display: 'Bricolage Grotesque Variable', ui-sans-serif, system-ui, sans-serif;
   --scan-font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
@@ -1325,6 +1328,55 @@ body:has(.scan-shell) {
 .scan-sheet-not-priced {
   margin-top: 12px;
   font-size: 16px;
+  color: var(--scan-muted);
+}
+
+/* -- Profit line (docs/spec-profit.md "For the haul redesign") ------------------- */
+/* Shared by the scan item sheet (ScanView.res) and the open haul gem card
+   (App.res GemCard) — both render <ProfitLine>, so one set of rules covers
+   both places. */
+
+.profit {
+  margin-top: 6px;
+}
+
+.profit summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-size: 14px;
+  color: var(--scan-muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.profit summary::-webkit-details-marker {
+  display: none;
+}
+
+.profit summary::after {
+  content: "";
+  flex-shrink: 0;
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform .2s ease;
+}
+
+.profit[open] summary::after {
+  transform: rotate(45deg);
+}
+
+.profit-loss summary {
+  color: var(--scan-loss);
+}
+
+.profit-parts {
+  margin: 0 0 4px;
+  font-size: 12px;
   color: var(--scan-muted);
 }
 

@@ -21,6 +21,12 @@ type claudeItem = {
   // once the sent photo's size and the model's tier are known. Scene mode
   // only: the haul prompt asks for no box, so it is None there.
   box: option<array<float>>,
+  // The shipping size class. An unknown or missing value falls back to
+  // Medium.
+  shipClass: Profit.shipClass,
+  // The price on a price tag in the photo, in dollars. It is None when no
+  // single-item price is visible.
+  tagPriceUsd: option<float>,
 }
 
 // A box in pixels of the photo the page sent (see Box.decode).
@@ -62,6 +68,9 @@ type replyItem = {
   soldSearchUrl: string,
   size: string,
   box: option<box>,
+  // The fee, the postage, and the net at low, mid, and high. Left out on an
+  // old cached reply, so it is an optional field.
+  profit?: Profit.estimate,
 }
 
 type usage = {
@@ -103,6 +112,9 @@ type haulGem = {
   imageWidth: option<int>,
   imageHeight: option<int>,
   size: string,
+  // The fee, the postage, and the net at low, mid, and high. Left out on an
+  // old cached reply, so it is an optional field.
+  profit?: Profit.estimate,
 }
 
 type failedPhoto = {
@@ -218,6 +230,23 @@ let encodePlace = (p: place): JSON.t =>
     ("at", Json.str(p.at)),
   ])
 
+let encodeProfit = (p: Profit.estimate): JSON.t =>
+  Json.obj([
+    ("shipClass", Json.str(Profit.toString(p.shipClass))),
+    ("postageUsd", Json.num(p.postageUsd)),
+    ("feeMidUsd", Json.num(p.feeMidUsd)),
+    ("netLowUsd", Json.num(p.netLowUsd)),
+    ("netMidUsd", Json.num(p.netMidUsd)),
+    ("netHighUsd", Json.num(p.netHighUsd)),
+    (
+      "tagPriceUsd",
+      switch p.tagPriceUsd {
+      | Some(t) => Json.num(t)
+      | None => JSON.Encode.null
+      },
+    ),
+  ])
+
 let encodeReplyItem = (it: replyItem): JSON.t =>
   Json.obj([
     ("name", Json.str(it.name)),
@@ -240,6 +269,13 @@ let encodeReplyItem = (it: replyItem): JSON.t =>
       "box",
       switch it.box {
       | Some(b) => encodeBox(b)
+      | None => JSON.Encode.null
+      },
+    ),
+    (
+      "profit",
+      switch it.profit {
+      | Some(p) => encodeProfit(p)
       | None => JSON.Encode.null
       },
     ),
@@ -330,6 +366,13 @@ let encodeHaulGem = (g: haulGem): JSON.t =>
       },
     ),
     ("size", Json.str(g.size)),
+    (
+      "profit",
+      switch g.profit {
+      | Some(p) => encodeProfit(p)
+      | None => JSON.Encode.null
+      },
+    ),
   ])
 
 let encodeFailedPhoto = (f: failedPhoto): JSON.t =>

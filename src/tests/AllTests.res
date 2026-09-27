@@ -3,6 +3,7 @@
 
 StatsTest.run()
 PricingTest.run()
+ProfitTest.run()
 ImageSizeTest.run()
 JpegSizeTest.run()
 BoxTest.run()

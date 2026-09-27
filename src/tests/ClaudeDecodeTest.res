@@ -21,6 +21,21 @@ let run = () => {
         "scene fixture's board game lot has no size key, decoded as an empty string",
         Array.get(decoded.items, 2)->Option.map(i => i.size) == Some(""),
       )
+      TestKit.check(
+        "scene fixture's bowl set is large with no tag",
+        Array.get(decoded.items, 0)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Large, None)),
+      )
+      TestKit.check(
+        "scene fixture's skillet is medium with a $12 tag",
+        Array.get(decoded.items, 1)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Medium, Some(12.0))),
+      )
+      TestKit.check(
+        "scene fixture's board game lot is large with a $2.50 tag",
+        Array.get(decoded.items, 2)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Large, Some(2.5))),
+      )
     }
   | Error(_) => TestKit.check("fixture decodes", false)
   }
@@ -85,6 +100,35 @@ let run = () => {
         "haul fixture items each carry a raw box",
         Array.every(decoded.items, i => i.box->Option.isSome),
       )
+      TestKit.check(
+        "haul fixture's lamp is large with no tag",
+        Array.get(decoded.items, 0)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Large, None)),
+      )
+      TestKit.check(
+        "haul fixture's skillet is medium with a $12 tag",
+        Array.get(decoded.items, 1)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Medium, Some(12.0))),
+      )
+      TestKit.check(
+        "haul fixture's brooch is small with a $2.50 tag",
+        Array.get(decoded.items, 2)->Option.map(i => (i.shipClass, i.tagPriceUsd)) ==
+          Some((Profit.Small, Some(2.5))),
+      )
+      switch Array.get(decoded.items, 2) {
+      | Some(brooch) =>
+        let estimate = Profit.estimate(
+          ~lowUsd=brooch.estimateLowUsd,
+          ~highUsd=brooch.estimateHighUsd,
+          ~shipClass=brooch.shipClass,
+          ~tagPriceUsd=brooch.tagPriceUsd,
+        )
+        TestKit.check(
+          "haul fixture's brooch estimate, at its tag, is a loss",
+          Profit.isLoss(estimate),
+        )
+      | None => TestKit.check("haul fixture's brooch is present to price", false)
+      }
     }
   | Error(_) => TestKit.check("haul fixture decodes", false)
   }
@@ -118,8 +162,58 @@ let run = () => {
         Array.get(decoded.items, 0)->Option.map(i => i.size) == Some(""),
       )
       TestKit.check("a missing top-level quarterSeen decodes as false", decoded.quarterSeen == false)
+      TestKit.check(
+        "a missing shipClass falls back to Medium",
+        Array.get(decoded.items, 0)->Option.map(i => i.shipClass) == Some(Profit.Medium),
+      )
+      TestKit.check(
+        "a missing tagPriceUsd decodes to None",
+        Array.get(decoded.items, 0)->Option.flatMap(i => i.tagPriceUsd) == None,
+      )
     }
   | Error(_) => TestKit.check("a reply with no scale-ref fields still decodes", false)
+  }
+
+  // shipClass and tagPriceUsd decode (docs/spec-profit.md, Shape): a known
+  // class decodes to its variant, an unknown class falls back to Medium, a
+  // number decodes to Some, and an explicit null decodes to None.
+  let shipClassAndTag = Json.obj([
+    (
+      "content",
+      Json.arr([
+        Json.obj([
+          ("type", Json.str("text")),
+          (
+            "text",
+            Json.str(
+              "{\"items\": [{\"name\": \"Tagged item\", \"maker\": \"\", \"query\": \"tagged item\", \"estimateLowUsd\": 1, \"estimateHighUsd\": 2, \"basis\": \"guess\", \"confidence\": 0.1, \"sources\": [], \"shipClass\": \"large\", \"tagPriceUsd\": 4}, {\"name\": \"Bogus class item\", \"maker\": \"\", \"query\": \"bogus class item\", \"estimateLowUsd\": 1, \"estimateHighUsd\": 2, \"basis\": \"guess\", \"confidence\": 0.1, \"sources\": [], \"shipClass\": \"bogus\", \"tagPriceUsd\": null}]}",
+            ),
+          ),
+        ]),
+      ]),
+    ),
+    ("usage", Json.obj([("input_tokens", Json.num(1.0)), ("output_tokens", Json.num(1.0))])),
+  ])
+  switch ClaudeClient.decodeResponse(shipClassAndTag) {
+  | Ok(decoded) => {
+      TestKit.check(
+        "shipClass \"large\" decodes to Large",
+        Array.get(decoded.items, 0)->Option.map(i => i.shipClass) == Some(Profit.Large),
+      )
+      TestKit.check(
+        "tagPriceUsd 4 decodes to Some(4.)",
+        Array.get(decoded.items, 0)->Option.flatMap(i => i.tagPriceUsd) == Some(4.0),
+      )
+      TestKit.check(
+        "an unknown shipClass \"bogus\" falls back to Medium",
+        Array.get(decoded.items, 1)->Option.map(i => i.shipClass) == Some(Profit.Medium),
+      )
+      TestKit.check(
+        "a null tagPriceUsd decodes to None",
+        Array.get(decoded.items, 1)->Option.flatMap(i => i.tagPriceUsd) == None,
+      )
+    }
+  | Error(_) => TestKit.check("shipClass and tagPriceUsd reply decodes", false)
   }
 
   // A reply cut short by the token limit is a different callError, not a

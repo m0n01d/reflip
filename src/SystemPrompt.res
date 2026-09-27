@@ -25,6 +25,14 @@ For each item, report:
 - size: the item's size, when size changes what it is or what it sells
   for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
   size matters, put it in the query too.
+- shipClass: the shipping size class the item needs to ship. One of
+  "small" (under 1 lb, fits a mailer or a small box), "medium" (1 to 5
+  lb, fits a 12-inch box), "large" (5 to 20 lb, or bigger than a 12-inch
+  box), or "pickup" (over 20 lb, or too big or fragile to ship).
+- tagPriceUsd: the price on a price tag on this item in the photo, in US
+  dollars, or null if you see no single-item price. For a tag such as "3
+  for $10", write null. Ignore this tag price for estimateLowUsd and
+  estimateHighUsd.
 - box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
   in the photo, in integer pixel coordinates. x1 and y1 are the pixel
   position of the top-left corner. x2 and y2 are the pixel position of the
@@ -72,6 +80,33 @@ let itemSchema: JSON.t = Json.obj([
         ]),
       ),
       ("size", Json.obj([("type", Json.str("string"))])),
+      (
+        "shipClass",
+        Json.obj([
+          ("type", Json.str("string")),
+          (
+            "enum",
+            Json.arr([
+              Json.str("small"),
+              Json.str("medium"),
+              Json.str("large"),
+              Json.str("pickup"),
+            ]),
+          ),
+        ]),
+      ),
+      (
+        "tagPriceUsd",
+        Json.obj([
+          (
+            "anyOf",
+            Json.arr([
+              Json.obj([("type", Json.str("number"))]),
+              Json.obj([("type", Json.str("null"))]),
+            ]),
+          ),
+        ]),
+      ),
     ]),
   ),
   (
@@ -86,6 +121,8 @@ let itemSchema: JSON.t = Json.obj([
       Json.str("confidence"),
       Json.str("sources"),
       Json.str("size"),
+      Json.str("shipClass"),
+      Json.str("tagPriceUsd"),
       Json.str("box"),
     ]),
   ),
@@ -115,7 +152,7 @@ let outputFormat: JSON.t = Json.obj([
 // Stamped on every find row (Store.find.promptVersion), so a later prompt
 // change never scrambles history. POST /api/scene uses this one; haul mode
 // uses haulPromptVersion below.
-let promptVersion = "scene-4"
+let promptVersion = "scene-5"
 
 // Haul mode's own words: only list items worth the trip to sell, name
 // where each one sits in the photo, and count the rest instead of
@@ -144,6 +181,14 @@ For each listed item, report:
 - size: the item's size, when size changes what it is or what it sells
   for, such as "10 in skillet" or "2.5 qt". Else an empty string. When
   size matters, put it in the query too.
+- shipClass: the shipping size class the item needs to ship. One of
+  "small" (under 1 lb, fits a mailer or a small box), "medium" (1 to 5
+  lb, fits a 12-inch box), "large" (5 to 20 lb, or bigger than a 12-inch
+  box), or "pickup" (over 20 lb, or too big or fragile to ship).
+- tagPriceUsd: the price on a price tag on this item in the photo, in US
+  dollars, or null if you see no single-item price. For a tag such as "3
+  for $10", write null. Ignore this tag price for estimateLowUsd and
+  estimateHighUsd.
 - box: [x1, y1, x2, y2], the top-left and bottom-right corners of the item
   in the photo, in integer pixel coordinates. x1 and y1 are the pixel
   position of the top-left corner. x2 and y2 are the pixel position of the
@@ -188,6 +233,33 @@ let haulItemSchema: JSON.t = Json.obj([
       ("where", Json.obj([("type", Json.str("string"))])),
       ("size", Json.obj([("type", Json.str("string"))])),
       (
+        "shipClass",
+        Json.obj([
+          ("type", Json.str("string")),
+          (
+            "enum",
+            Json.arr([
+              Json.str("small"),
+              Json.str("medium"),
+              Json.str("large"),
+              Json.str("pickup"),
+            ]),
+          ),
+        ]),
+      ),
+      (
+        "tagPriceUsd",
+        Json.obj([
+          (
+            "anyOf",
+            Json.arr([
+              Json.obj([("type", Json.str("number"))]),
+              Json.obj([("type", Json.str("null"))]),
+            ]),
+          ),
+        ]),
+      ),
+      (
         "box",
         Json.obj([
           ("type", Json.str("array")),
@@ -209,6 +281,8 @@ let haulItemSchema: JSON.t = Json.obj([
       Json.str("sources"),
       Json.str("where"),
       Json.str("size"),
+      Json.str("shipClass"),
+      Json.str("tagPriceUsd"),
       Json.str("box"),
     ]),
   ),
@@ -234,7 +308,7 @@ let haulOutputFormat: JSON.t = Json.obj([
   ("schema", haulResponseSchema),
 ])
 
-let haulPromptVersion = "haul-3"
+let haulPromptVersion = "haul-4"
 
 let spotPrompt = `You are a fast item spotter for Flip Scout, a personal resale
 scanner. You will receive one photo of items on a table, shelf, or floor.
