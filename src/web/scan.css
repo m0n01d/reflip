@@ -90,6 +90,16 @@ body:has(.scan-shell) {
   letter-spacing: -0.02em;
 }
 
+/* What's actually deployed, at a glance — a build with local uncommitted
+   changes gets a trailing "+" so a spike-in-progress deploy is obvious. */
+.scan-header-build {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
 .scan-header-actions {
   display: flex;
   align-items: center;

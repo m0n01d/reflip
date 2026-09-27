@@ -38,6 +38,9 @@ let make = (
       <div className="scan-header-logo">
         <span ariaHidden={true} className="scan-header-dot" />
         <span className="scan-header-word"> {React.string("reflip")} </span>
+        <span className="scan-header-build" title={"built " ++ BuildInfo.builtAt}>
+          {React.string(BuildInfo.commitSha ++ (BuildInfo.dirty ? "+" : ""))}
+        </span>
       </div>
       <div className="scan-header-actions">
         {if isReady {
