@@ -56,6 +56,31 @@ let decodeBox = (json: JSON.t): option<Types.box> =>
   | _ => None
   }
 
+let decodeProfit = (json: JSON.t): result<Profit.estimate, string> =>
+  switch (
+    Json.floatField(json, "postageUsd"),
+    Json.floatField(json, "feeMidUsd"),
+    Json.floatField(json, "netLowUsd"),
+    Json.floatField(json, "netMidUsd"),
+    Json.floatField(json, "netHighUsd"),
+  ) {
+  | (Some(postageUsd), Some(feeMidUsd), Some(netLowUsd), Some(netMidUsd), Some(netHighUsd)) =>
+    let shipClass =
+      Json.stringField(json, "shipClass")
+      ->Option.flatMap(Profit.fromString)
+      ->Option.getOr(Profit.Medium)
+    Ok({
+      Profit.shipClass,
+      postageUsd,
+      feeMidUsd,
+      netLowUsd,
+      netMidUsd,
+      netHighUsd,
+      tagPriceUsd: Json.floatField(json, "tagPriceUsd"),
+    })
+  | _ => Error("profit missing a required field")
+  }
+
 let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
   switch (
     Json.stringField(json, "name"),
@@ -90,6 +115,14 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       }
     }
     let box = Json.field(json, "box")->Option.flatMap(decodeBox)
+    let profit = switch Json.field(json, "profit") {
+    | None => None
+    | Some(v) =>
+      switch decodeProfit(v) {
+      | Ok(p) => Some(p)
+      | Error(_) => None
+      }
+    }
     Ok({
       Types.name,
       query,
@@ -102,6 +135,7 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       soldSearchUrl,
       size: Json.stringField(json, "size")->Option.getOr(""),
       box,
+      ?profit,
     })
   | _ => Error("item missing a required field")
   }
@@ -216,6 +250,14 @@ let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
       }
     }
     let box = Json.field(json, "box")->Option.flatMap(decodeBox)
+    let profit = switch Json.field(json, "profit") {
+    | None => None
+    | Some(v) =>
+      switch decodeProfit(v) {
+      | Ok(p) => Some(p)
+      | Error(_) => None
+      }
+    }
     Ok({
       Types.findId,
       sceneId,
@@ -230,6 +272,7 @@ let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
       imageWidth: Json.intField(json, "imageWidth"),
       imageHeight: Json.intField(json, "imageHeight"),
       size: Json.stringField(json, "size")->Option.getOr(""),
+      ?profit,
     })
   | _ => Error("gem missing a required field")
   }

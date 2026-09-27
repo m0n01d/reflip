@@ -22,6 +22,12 @@ let sampleReplyItem: Types.replyItem = {
   soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=pyrex+bowls",
   size: "medium",
   box: Some({Types.x1: 10, y1: 20, x2: 300, y2: 250}),
+  profit: Profit.estimate(
+    ~lowUsd=15.0,
+    ~highUsd=45.0,
+    ~shipClass=Profit.Medium,
+    ~tagPriceUsd=None,
+  ),
 }
 
 let sampleSceneReply: Types.sceneReply = {

@@ -105,6 +105,12 @@ let insertFinds = async (
   Array.forEachWithIndex(decoded.items, (item, i) => {
     let (ebay, _note) = Array.getUnsafe(ebayResults, i)
     let ebayJson = ebay->Option.map(stats => JSON.stringify(Types.encodeEbayStats(stats)))
+    let est = Profit.estimate(
+      ~lowUsd=item.estimateLowUsd,
+      ~highUsd=item.estimateHighUsd,
+      ~shipClass=item.shipClass,
+      ~tagPriceUsd=item.tagPriceUsd,
+    )
     Store.insertFind(
       t.store,
       {
@@ -128,6 +134,10 @@ let insertFinds = async (
         createdAt: now,
         size: item.size,
         box: Box.decode(item.box, ~sentWidth, ~sentHeight, ~model=Shared.defaultModel),
+        shipClass: Some(item.shipClass),
+        feeEstUsd: Some(est.feeMidUsd),
+        postageEstUsd: Some(est.postageUsd),
+        tagPriceUsd: item.tagPriceUsd,
       },
     )
   })

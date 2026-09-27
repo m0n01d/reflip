@@ -56,6 +56,10 @@ type find = {
   createdAt: string,
   size: string,
   box: option<Types.box>,
+  shipClass: option<Profit.shipClass>,
+  feeEstUsd: option<float>,
+  postageEstUsd: option<float>,
+  tagPriceUsd: option<float>,
 }
 
 type counts = {
@@ -240,6 +244,10 @@ let decodeFind = (json: JSON.t): option<find> =>
       createdAt,
       size: Json.stringField(json, "size")->Option.getOr(""),
       box,
+      shipClass: Json.stringField(json, "shipClass")->Option.flatMap(Profit.fromString),
+      feeEstUsd: Json.floatField(json, "feeEstUsd"),
+      postageEstUsd: Json.floatField(json, "postageEstUsd"),
+      tagPriceUsd: Json.floatField(json, "tagPriceUsd"),
     })
   | _ => None
   }
@@ -313,7 +321,11 @@ let openAt = (path: string): t => {
       boxX1 INTEGER,
       boxY1 INTEGER,
       boxX2 INTEGER,
-      boxY2 INTEGER
+      boxY2 INTEGER,
+      shipClass TEXT,
+      feeEstUsd REAL,
+      postageEstUsd REAL,
+      tagPriceUsd REAL
     )`,
   )
   Sqlite.exec(db, `CREATE INDEX IF NOT EXISTS idx_finds_scene ON finds (sceneId)`)
@@ -341,6 +353,22 @@ let openAt = (path: string): t => {
   }
   if !hasCol("boxY2") {
     Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN boxY2 INTEGER`)
+  }
+
+  // A DB from before shipping-class profit estimates (docs/spec-profit.md,
+  // 2026-09-26) has a `finds` table with no profit columns. Same PRAGMA
+  // table_info check as the box migration above.
+  if !hasCol("shipClass") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN shipClass TEXT`)
+  }
+  if !hasCol("feeEstUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN feeEstUsd REAL`)
+  }
+  if !hasCol("postageEstUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN postageEstUsd REAL`)
+  }
+  if !hasCol("tagPriceUsd") {
+    Sqlite.exec(db, `ALTER TABLE finds ADD COLUMN tagPriceUsd REAL`)
   }
 
   // A DB from before the scene photo size (docs/spec-item-boxes.md /
@@ -610,8 +638,9 @@ let insertFind = (db: t, find: find): unit => {
       findId, sceneId, model, fixture, name, query, "where",
       estimateLowUsd, estimateHighUsd, confidence, category, promptVersion,
       ebayJson, paidUsd, soldUsd, soldOn, soldWhere, createdAt, size,
-      boxX1, boxY1, boxX2, boxY2
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      boxX1, boxY1, boxX2, boxY2,
+      shipClass, feeEstUsd, postageEstUsd, tagPriceUsd
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
   Sqlite.run(
     stmt,
@@ -639,6 +668,10 @@ let insertFind = (db: t, find: find): unit => {
       optInt(find.box->Option.map(b => b.y1)),
       optInt(find.box->Option.map(b => b.x2)),
       optInt(find.box->Option.map(b => b.y2)),
+      optText(find.shipClass->Option.map(Profit.toString)),
+      optNum(find.feeEstUsd),
+      optNum(find.postageEstUsd),
+      optNum(find.tagPriceUsd),
     ],
   )->ignore
 }

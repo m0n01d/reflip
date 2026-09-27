@@ -38,8 +38,8 @@ let run = () => {
     !Array.some(requiredNames(SystemPrompt.haulResponseSchema), n => n == "quarterSeen"),
   )
 
-  TestKit.check("the scene prompt version is scene-4", SystemPrompt.promptVersion == "scene-4")
-  TestKit.check("the haul prompt version is haul-3", SystemPrompt.haulPromptVersion == "haul-3")
+  TestKit.check("the scene prompt version is scene-5", SystemPrompt.promptVersion == "scene-5")
+  TestKit.check("the haul prompt version is haul-4", SystemPrompt.haulPromptVersion == "haul-4")
 
   TestKit.section("ScaleRef: encodeSceneReply / decodeSceneReply round trip")
 
@@ -61,6 +61,12 @@ let run = () => {
         soldSearchUrl: "https://www.ebay.com/sch/i.html?_nkw=dutch+oven&LH_Sold=1",
         size: "5.5 qt",
         box: None,
+        profit: Profit.estimate(
+          ~lowUsd=20.0,
+          ~highUsd=45.0,
+          ~shipClass=Profit.Medium,
+          ~tagPriceUsd=None,
+        ),
       },
     ],
     imageWidth: 800,

@@ -31,6 +31,12 @@ let toReplyItemPartial = (item: Types.claudeItem): Types.replyItem => {
   soldSearchUrl: EbayClient.soldSearchUrl(item.query),
   size: item.size,
   box: None,
+  profit: Profit.estimate(
+    ~lowUsd=item.estimateLowUsd,
+    ~highUsd=item.estimateHighUsd,
+    ~shipClass=item.shipClass,
+    ~tagPriceUsd=item.tagPriceUsd,
+  ),
 }
 
 // data/raw/<sceneId>.events.jsonl: one line per raw SSE event Claude sent,
