@@ -128,6 +128,14 @@ let make = (
   let lastLine = Array.get(lines, Array.length(lines) - 1)
   let marks = ScanState.trackMarks(model)
   let elapsed = ScanState.elapsedMs(model)
+  // The 3:00 track always means elapsed time — upload progress used to
+  // share it, but that made it impossible to tell "this is uploading"
+  // apart from "the scan is running" (docs/spec-upload-progress.md's
+  // follow-up). Upload progress now lives on its own, as a bar along the
+  // bottom edge of the photo itself (uploadBorderPct below), shown only
+  // during Sending.
+  let trackPct = pctOf(elapsed, limitMs)
+  let uploadBorderPct = pctOf(Int.toFloat(model.uploadedBytes), Int.toFloat(model.uploadBytes))
   let summary = ScanState.gemsSummary(model)
   let unpriced = visible->Array.filter(s => s.item->Option.isNone)
   let alsoItems = Array.concat(ScanState.others(model), unpriced)
@@ -144,6 +152,11 @@ let make = (
         | Some(url) =>
           <div className="scan-photo-frame">
             <img className="scan-photo-img" src={url} />
+            {model.phase == ScanState.Sending
+              ? <div className="scan-upload-border">
+                  <div className="scan-upload-border-fill" style={{JsxDOMStyle.width: uploadBorderPct}} />
+                </div>
+              : React.null}
             {
               let pinned =
                 visible->Array.filterMap(s =>
@@ -220,14 +233,12 @@ let make = (
             <p className="scan-sub"> {React.string(ScanState.sub(model))} </p>
             <div className="scan-track">
               <div className="scan-track-bg">
-                <div
-                  className="scan-track-fill" style={{JsxDOMStyle.width: pctOf(elapsed, limitMs)}}
-                />
+                <div className="scan-track-fill" style={{JsxDOMStyle.width: trackPct}} />
               </div>
               <div className="scan-track-usual-tick" />
               <div className="scan-track-usual-label"> {React.string("usual 0:47")} </div>
               <div className="scan-track-limit-label"> {React.string("3:00 limit")} </div>
-              <div className="scan-track-thumb" style={{JsxDOMStyle.left: pctOf(elapsed, limitMs)}} />
+              <div className="scan-track-thumb" style={{JsxDOMStyle.left: trackPct}} />
               {marks
               ->Array.mapWithIndex((mark, i) => {
                 let (cls, ms) = switch mark {

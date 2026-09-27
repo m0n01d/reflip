@@ -90,6 +90,16 @@ body:has(.scan-shell) {
   letter-spacing: -0.02em;
 }
 
+/* What's actually deployed, at a glance — a build with local uncommitted
+   changes gets a trailing "+" so a spike-in-progress deploy is obvious. */
+.scan-header-build {
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  color: var(--scan-muted);
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
 .scan-header-actions {
   display: flex;
   align-items: center;
@@ -479,6 +489,24 @@ body:has(.scan-shell) {
   display: block;
   width: 100%;
   height: auto;
+}
+
+/* Upload progress lives on the photo itself, not the status card below —
+   a bar along the bottom edge, unmissable and unambiguous: visible only
+   while the photo is actually going out, gone the moment it's not. */
+.scan-upload-border {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+.scan-upload-border-fill {
+  height: 6px;
+  background-color: var(--scan-orange);
+  transition: width .15s linear;
 }
 
 .scan-pin {
@@ -1977,6 +2005,42 @@ body:has(.scan-shell) {
   font-size: 14px;
   font-weight: 600;
   line-height: 20px;
+}
+
+.haul-upload-row {
+  margin-top: 14px;
+}
+
+.haul-upload-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-upload-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-upload-track {
+  position: relative;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.haul-upload-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .2s ease;
 }
 
 .haul-budget-row {

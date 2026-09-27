@@ -71,6 +71,31 @@ type requestInitString = {method: string, headers: Dict.t<string>, body: string}
 @val external setInterval: (unit => unit, int) => float = "setInterval"
 @val external clearInterval: float => unit = "clearInterval"
 
+// XMLHttpRequest, typed narrowly for one job: POST a blob with a real,
+// cross-browser upload-progress event. fetch has none (see
+// docs/spec-upload-progress.md's Research) — xhr.upload.onprogress is the
+// only one that also works in Safari/iOS Safari.
+type xhr
+type xhrUpload
+type progressEvent = {loaded: float, total: float, lengthComputable: bool}
+@new external makeXhr: unit => xhr = "XMLHttpRequest"
+@send external xhrOpen: (xhr, string, string) => unit = "open"
+@send external xhrSetRequestHeader: (xhr, string, string) => unit = "setRequestHeader"
+@send external xhrSend: (xhr, blob) => unit = "send"
+@get external xhrUploadOf: xhr => xhrUpload = "upload"
+@get external xhrStatus: xhr => int = "status"
+@get external xhrResponseText: xhr => string = "responseText"
+@set external onUploadProgress: (xhrUpload, progressEvent => unit) => unit = "onprogress"
+@set external onXhrLoad: (xhr, unit => unit) => unit = "onload"
+@set external onXhrError: (xhr, unit => unit) => unit = "onerror"
+@set external onXhrAbort: (xhr, unit => unit) => unit = "onabort"
+// Fires as response bytes arrive too (not just the upload side above) —
+// ScanApi.res's own upload reads xhr.responseText progressively off this,
+// the same "readyState 3" technique SSE-over-XHR has used since long
+// before fetch streams existed (baseline since Safari 4).
+@set external onXhrProgress: (xhr, unit => unit) => unit = "onprogress"
+@send external xhrAbort: xhr => unit = "abort"
+
 @get external blobType: blob => string = "type"
 
 // A Blob constructor: lets AppStateTest build a real queue item without a
@@ -150,6 +175,7 @@ type abortController
 type abortSignal
 @new external makeAbortController: unit => abortController = "AbortController"
 @get external abortSignalOf: abortController => abortSignal = "signal"
+@send external onAbortSignalEvent: (abortSignal, string, unit => unit) => unit = "addEventListener"
 @send external abortControllerAbort: abortController => unit = "abort"
 
 type requestInitBlobSignal = {method: string, headers: Dict.t<string>, body: blob, signal: abortSignal}

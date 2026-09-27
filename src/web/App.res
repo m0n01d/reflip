@@ -464,7 +464,8 @@ let restorePlaces = async (dispatch: AppState.msg => unit, currentHaulId: option
 // it — it is never dropped.
 let uploadOne = async (dispatch: AppState.msg => unit, haulId: string, item: AppState.queueItem) => {
   dispatch(AppState.UploadStarted(item.clientId))
-  switch await Api.postHaulScene(haulId, item.clientId, item.blob) {
+  let onProgress = bytes => dispatch(AppState.UploadProgress(item.clientId, bytes))
+  switch await Api.postHaulScene(haulId, item.clientId, item.blob, ~onProgress) {
   | Ok((sceneId, _duplicate)) =>
     await WebApi.idbDel(AppState.queueKey(haulId, item.clientId))
     dispatch(AppState.HaulUploadOk(item.clientId, sceneId))
@@ -1017,6 +1018,23 @@ module HaulView = {
                   </span>
                 </div>
               : React.null}
+            {switch model.queue->Array.find(item => item.status == AppState.SendingNow) {
+            | None => React.null
+            | Some(item) =>
+              let pct = HaulLayout.uploadPct(item.uploadedBytes, WebApi.blobSize(item.blob))
+              <div className="haul-upload-row">
+                <div className="haul-upload-top">
+                  <span> {React.string("uploading photo")} </span>
+                  <span className="haul-upload-value"> {React.string(fmtPct(pct))} </span>
+                </div>
+                <div
+                  role="img"
+                  ariaLabel={"Uploading photo, " ++ fmtPct(pct)}
+                  className="haul-upload-track">
+                  <div className="haul-upload-fill" style={{JsxDOMStyle.width: fmtPct(pct)}} />
+                </div>
+              </div>
+            }}
             <div className="haul-budget-row">
               <div className="haul-budget-top">
                 <span> {React.string("budget")} </span>

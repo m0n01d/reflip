@@ -44,6 +44,14 @@ let legendOf = (t: tileCounts): string =>
 let budgetFillPct = (cost: float, max: float): float =>
   max <= 0.0 ? 0.0 : Math.min(cost, max) /. max
 
+// The upload row's fill, 0.0 to 1.0 — same shape as budgetFillPct above.
+// totalBytes is a photo's own size, always > 0 in practice, but a queue
+// item mid-restore or a 0-byte blob must not divide by zero.
+let uploadPct = (sentBytes: int, totalBytes: int): float =>
+  totalBytes <= 0
+    ? 0.0
+    : Math.min(Int.toFloat(sentBytes), Int.toFloat(totalBytes)) /. Int.toFloat(totalBytes)
+
 // One notch per photo boundary except the last, at an even split of the
 // spend so far across `valued` photos — the API has no per-photo cost, so
 // this is an approximation (decision 3 says so explicitly).
