@@ -42,6 +42,8 @@ Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` an
 
 `Pricing.res` holds this table in code. `PricingTest.res` checks it against a hand-computed value.
 
+The first M1 experiment measured 10 real scenes on Sonnet 5 on 2026-09-24. Its record is in `docs/m1-first-experiment.md`.
+
 ## Hard design rules
 
 1. eBay numbers never reach the model. The order is: call Claude first, then query eBay for each item, then merge the two in code. `GuardTest.res` checks this by building a real Claude request and searching its JSON for eBay fixture titles and prices.
