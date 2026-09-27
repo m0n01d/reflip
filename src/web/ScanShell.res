@@ -18,10 +18,12 @@ let make = (
   ~onStartHaul: ReactEvent.Mouse.t => unit,
 ) => {
   let scanDispatch = (m: ScanState.msg) => dispatch(AppState.Scan(m))
+  let mapDispatch = (m: MapState.msg) => dispatch(AppState.Map(m))
   let phase = model.scan.phase
   let isReady = phase == ScanState.Ready
   let onScanTab = _ => dispatch(AppState.SetActiveTab(AppState.ScanTab))
   let onHaulTab = _ => dispatch(AppState.SetActiveTab(AppState.HaulTab))
+  let onMapTab = _ => dispatch(AppState.SetActiveTab(AppState.MapTab))
   let openSettings = _ => dispatch(AppState.SetSettingsOpen(true))
   let closeSettings = _ => dispatch(AppState.SetSettingsOpen(false))
   let onStop = (_: ReactEvent.Mouse.t) => scanDispatch(ScanState.StopTapped)
@@ -100,6 +102,14 @@ let make = (
             className={"scan-mode-btn" ++
             (model.activeTab == AppState.HaulTab ? " scan-mode-btn-active" : "")}>
             {React.string("Haul")}
+          </button>
+          <button
+            type_="button"
+            ariaPressed={model.activeTab == AppState.MapTab ? #"true" : #"false"}
+            onClick={onMapTab}
+            className={"scan-mode-btn" ++
+            (model.activeTab == AppState.MapTab ? " scan-mode-btn-active" : "")}>
+            {React.string("Map")}
           </button>
         </div>
         {switch model.activeTab {
@@ -231,6 +241,7 @@ let make = (
             | None => React.null
             }}
           </section>
+        | AppState.MapTab => <MapView model={model.map} dispatch={mapDispatch} />
         }}
       </>
     } else {
