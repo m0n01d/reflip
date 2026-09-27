@@ -546,17 +546,20 @@ Checklist:
       and the hash helpers for #map. Commit 83c8247.
 - [x] 4. Api.res: getHauls for GET /api/hauls, reusing the Set place call.
       Commit 83c8247.
-- [ ] 5. App.res: load hauls when the Map view opens and after a Set place
-      succeeds. Wire the URL hash. WebApi.res already has the hash
-      bindings (commit 83c8247) — not called from App.res yet.
+- [x] 5. App.res: load hauls when the Map view opens and after a Set place
+      succeeds. Wire the URL hash. Commit 036cf32. The Leaflet CSS link
+      is commit 8b67424.
 - [x] 6. ScanShell.res: the Map tab button and its content.
       src/web/MapView.res: the map ref effects, the pins, the range chips,
       the list and the panel. scan.css gets the new classes.
       Commit 83c8247.
 - [x] 7. npm test passes (commit 83c8247: all tests passed, npx rescript
       build with no warnings).
-- [ ] 8. npm run build, then a dev-browser check by hand at 390x844, with
-      shots in docs/shots/haul-map/.
+- [x] 8. npm run build, then a dev-browser check by hand at 390x844, with
+      shots in docs/shots/haul-map/. Commits 6dabce8 and a3dbe91. Every tap
+      passed: select a haul, Set place and a map tap, each range chip, and
+      each tab. On a3dbe91, npm test passed 1064 checks, and
+      haul-smoke.mjs and place-check.mjs passed.
 
 ### Log
 
@@ -615,4 +618,4 @@ MVP step 2, the phone test, waits for Dwight:
 5. Add the page to the Home Screen. Do step 4 again from the Home Screen icon.
 6. Write the results in `docs/spec-haul-map.md`, MVP step 2. If the results show a need, change the timeout (15 s now, in `App.askPlace`).
 
-Step 3 (`GET /api/hauls` and `HaulList.res`) is done on branch `claude/haul-map-list`, stacked on PR m0n01d/reflip#28. See "Step 3" above. Step 4, the Map view, waits for the results in the spec.
+Dwight reports that the position works on the iPhone, so step 2 is done. Step 3 merged in PR m0n01d/reflip#29. Step 4, the Map view, is done on branch `claude/haul-map-view`. See "Step 4" above. Step 5, the smoke test, needs budget MVP steps 2 to 4.
