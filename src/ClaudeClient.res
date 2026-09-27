@@ -89,7 +89,7 @@ let decodeItem = (json: JSON.t): result<Types.claudeItem, string> =>
     let shipClass =
       Json.stringField(json, "shipClass")
       ->Option.flatMap(Profit.fromString)
-      ->Option.getOr(Profit.Medium)
+      ->Option.getOr(Profit.defaultClass)
     let tagPriceUsd = Json.floatField(json, "tagPriceUsd")
     Ok({
       Types.name,

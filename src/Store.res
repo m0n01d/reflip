@@ -727,3 +727,14 @@ let findsAll = (db: t): array<(string, find)> => {
     }
   )
 }
+
+// The estimate for a stored find. HaulStatus.gemsOf and
+// HaulEmail.digestGemsOf both built this the same way from a find; this is
+// their one shared call. A missing shipClass defaults to Profit.defaultClass.
+let profitOf = (f: find): Profit.estimate =>
+  Profit.estimate(
+    ~lowUsd=f.estimateLowUsd,
+    ~highUsd=f.estimateHighUsd,
+    ~shipClass=f.shipClass->Option.getOr(Profit.defaultClass),
+    ~tagPriceUsd=f.tagPriceUsd,
+  )

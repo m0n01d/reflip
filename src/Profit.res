@@ -21,6 +21,10 @@ let fromString = (s: string): option<shipClass> =>
   | _ => None
   }
 
+// Claude can omit shipClass on an item; code then assumes medium
+// (docs/spec-profit.md "Decode").
+let defaultClass = Medium
+
 // Sales tax on the buyer's order. Source: the Tax Foundation, 2026 state and
 // local average, read 2026-09-25 (docs/spec-profit.md, Facts and sources).
 let taxRate = 0.075

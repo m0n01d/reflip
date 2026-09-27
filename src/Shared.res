@@ -68,7 +68,7 @@ let decodeProfit = (json: JSON.t): result<Profit.estimate, string> =>
     let shipClass =
       Json.stringField(json, "shipClass")
       ->Option.flatMap(Profit.fromString)
-      ->Option.getOr(Profit.Medium)
+      ->Option.getOr(Profit.defaultClass)
     Ok({
       Profit.shipClass,
       postageUsd,

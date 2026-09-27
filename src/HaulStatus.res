@@ -47,12 +47,7 @@ let gemsOf = (
         imageWidth,
         imageHeight,
         size: f.size,
-        profit: Profit.estimate(
-          ~lowUsd=f.estimateLowUsd,
-          ~highUsd=f.estimateHighUsd,
-          ~shipClass=f.shipClass->Option.getOr(Profit.Medium),
-          ~tagPriceUsd=f.tagPriceUsd,
-        ),
+        profit: Store.profitOf(f),
       }
     })
   ->Array.toSorted((a, b) => Float.compare(b.Types.estimateLowUsd, a.Types.estimateLowUsd))
