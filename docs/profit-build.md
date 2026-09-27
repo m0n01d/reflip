@@ -5,7 +5,7 @@ Branch: claude/profit-estimate (from dd77eeb)
 
 Verification command: `npm test`
 
-Spec: `docs/spec-profit.md`, sections "The math", "Shipping classes", "Shape", "MVP" (steps 1 and 2 only).
+Spec: `docs/spec-profit.md`, sections "The math", "Shipping classes", "Shape", "MVP" (steps 1 to 3).
 
 ## Steps
 
@@ -19,6 +19,8 @@ Spec: `docs/spec-profit.md`, sections "The math", "Shipping classes", "Shape", "
       (1076 baseline + 25 new). Commit: 037aff3
 - [x] 2. Class and tag price through the schema, decode, reply, stream and ledger. Green. See
       "Session 2 log" and "Session 3 log" below for the exact history.
+- [x] 3. The profit line on the scan sheet, the gem card and the haul email. See "Session 4
+      log" below.
 
 ## Design note: the `src/Shared.res` conflict
 
@@ -258,3 +260,37 @@ ok, 0 not ok. Curl checks against `FIXTURES=1 PORT=8797` matched `Profit.res`'s 
 cent. `node scripts/haul-smoke.mjs --timeout 300` passed (`"ok":true`, no failures). Commit:
 squashed with step 2's earlier work into one commit, "Profit step 2: class and tag price in the
 schema, reply and ledger".
+
+## Session 4 log
+
+Step 3 is in these commits:
+
+1. 7cdca68 and a3535ed: `Profit.res` got the text helpers `netText`, `profitText`, `lineText`,
+   `isLoss` and `partsText`. The haul email shows the line under the range of each gem. A loss
+   is red.
+2. d4faac9: `Profit.defaultClass` and `Store.profitOf`. A stored find gets one estimate from its
+   stored class and tag.
+3. 01753cf and 1edbcd6: the fixtures carry a ship class and a tag price. The board game lot in
+   the scene fixtures ships `large`, because it does not fit a small box.
+4. 71978cc: `src/web/ProfitLine.res`, a closed `<details>` on the scan sheet and on the gem card.
+   A tap on the line shows the price, the eBay fee, the postage and the tag.
+5. 0123fe2 and the commit after it: the four shots in `docs/shots/profit/`.
+
+`npm test` on 0123fe2: 1133 ok, 0 not ok. `node scripts/haul-smoke.mjs --skip-build --timeout
+300` passed with no console errors. At a 390x844 viewport, a mouse-wheel scroll brings the
+profit line of an open gem card into view.
+
+### Live check, 2026-09-27
+
+Live calls ran on the stream route and on the haul route, with structured output on. The API
+accepted the tag price as a number or null in `required`. A shelf of board games came back as
+losses, because each game ships `large` at $16.76. A Guardians book set showed a $5 tag, and its
+line read "Profit -$4 to $4 at the $5 tag". The calls cost about $0.13 in total. No email went
+out.
+
+## Later
+
+1. The profit readout, part 2 of `docs/spec-profit.md`. It compares the real profit of a sold
+   find with its estimate.
+2. A form for the paid price, so that the line can use the real buy price instead of the tag.
+3. A search by barcode. A barcode holds no price, so this search needs its own price source.
