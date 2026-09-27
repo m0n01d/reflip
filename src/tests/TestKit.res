@@ -11,4 +11,10 @@ let check = (name: string, cond: bool): unit => {
 let approx = (name: string, actual: float, expected: float, ~eps: float): unit =>
   check(name, Math.abs(actual -. expected) < eps)
 
-let section = (name: string): unit => Console.log("# " ++ name)
+// Remembers the current section name, so a failed assertion can report where it happened.
+let lastSection = ref("")
+
+let section = (name: string): unit => {
+  lastSection := name
+  Console.log("# " ++ name)
+}

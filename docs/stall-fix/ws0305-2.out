@@ -1,0 +1,19 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20250305 callers=default parallel=default
+headers: 2901ms
+message_start: 2905ms  input_tokens=5447
+search "ceramic lighted church village figurine vintage resale value": start=10931ms done=14254ms count=10
+search "vintage clear glass soda bottle antique value flea market": start=11311ms done=14263ms count=10
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: 24990ms
+first box: 25261ms
+first item: 26860ms
+last item: 49598ms
+done: 49666ms
+items: 22
+usage: in=39792 out=4512 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.1447
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

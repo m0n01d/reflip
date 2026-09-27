@@ -42,6 +42,45 @@ let decodeEbayStats = (json: JSON.t): result<Types.ebayStats, string> =>
   | _ => Error("ebay stats missing a required field")
   }
 
+// A well-formed box is 4 numbers; anything else (missing, wrong length, not
+// numbers) decodes as None — a page with no box for an item shows "no box"
+// rather than failing the whole item.
+let decodeBox = (json: JSON.t): option<Types.box> =>
+  switch JSON.Decode.array(json) {
+  | Some(arr) if Array.length(arr) == 4 =>
+    switch Array.filterMap(arr, JSON.Decode.float) {
+    | [x1, y1, x2, y2] =>
+      Some({Types.x1: Float.toInt(x1), y1: Float.toInt(y1), x2: Float.toInt(x2), y2: Float.toInt(y2)})
+    | _ => None
+    }
+  | _ => None
+  }
+
+let decodeProfit = (json: JSON.t): result<Profit.estimate, string> =>
+  switch (
+    Json.floatField(json, "postageUsd"),
+    Json.floatField(json, "feeMidUsd"),
+    Json.floatField(json, "netLowUsd"),
+    Json.floatField(json, "netMidUsd"),
+    Json.floatField(json, "netHighUsd"),
+  ) {
+  | (Some(postageUsd), Some(feeMidUsd), Some(netLowUsd), Some(netMidUsd), Some(netHighUsd)) =>
+    let shipClass =
+      Json.stringField(json, "shipClass")
+      ->Option.flatMap(Profit.fromString)
+      ->Option.getOr(Profit.defaultClass)
+    Ok({
+      Profit.shipClass,
+      postageUsd,
+      feeMidUsd,
+      netLowUsd,
+      netMidUsd,
+      netHighUsd,
+      tagPriceUsd: Json.floatField(json, "tagPriceUsd"),
+    })
+  | _ => Error("profit missing a required field")
+  }
+
 let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
   switch (
     Json.stringField(json, "name"),
@@ -75,6 +114,15 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       | Error(_) => None
       }
     }
+    let box = Json.field(json, "box")->Option.flatMap(decodeBox)
+    let profit = switch Json.field(json, "profit") {
+    | None => None
+    | Some(v) =>
+      switch decodeProfit(v) {
+      | Ok(p) => Some(p)
+      | Error(_) => None
+      }
+    }
     Ok({
       Types.name,
       query,
@@ -85,6 +133,9 @@ let decodeReplyItem = (json: JSON.t): result<Types.replyItem, string> =>
       sources,
       ebay,
       soldSearchUrl,
+      size: Json.stringField(json, "size")->Option.getOr(""),
+      box,
+      ?profit,
     })
   | _ => Error("item missing a required field")
   }
@@ -127,6 +178,8 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
     Json.boolField(json, "fixture"),
     Json.stringField(json, "outputPath"),
     Json.arrayField(json, "items"),
+    Json.intField(json, "imageWidth"),
+    Json.intField(json, "imageHeight"),
     Json.field(json, "timing"),
     Json.field(json, "cost"),
   ) {
@@ -136,6 +189,8 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
       Some(fixture),
       Some(outputPath),
       Some(itemsJson),
+      Some(imageWidth),
+      Some(imageHeight),
       Some(timingJson),
       Some(costJson),
     ) =>
@@ -151,11 +206,218 @@ let decodeSceneReply = (json: JSON.t): result<Types.sceneReply, string> =>
         fixture,
         outputPath,
         items,
+        imageWidth,
+        imageHeight,
         timing,
         cost,
         ebayNote: Json.stringField(json, "ebayNote"),
+        quarterSeen: Json.boolField(json, "quarterSeen")->Option.getOr(false),
       })
     | (Error(e), _, _) | (_, Error(e), _) | (_, _, Error(e)) => Error(e)
     }
   | _ => Error("reply missing a required field")
+  }
+
+// -- haulStatus decode, field-for-field against Types.encodeHaulStatus -----
+// (docs/spec-haul-mode.md "Step 3: brain queue" — the phone page decodes
+// this same shape in step 5, so it lives here, not in a Node-only module.)
+
+let decodeHaulGem = (json: JSON.t): result<Types.haulGem, string> =>
+  switch (
+    Json.stringField(json, "findId"),
+    Json.stringField(json, "sceneId"),
+    Json.stringField(json, "name"),
+    Json.floatField(json, "estimateLowUsd"),
+    Json.floatField(json, "estimateHighUsd"),
+    Json.floatField(json, "confidence"),
+    Json.stringField(json, "soldSearchUrl"),
+  ) {
+  | (
+      Some(findId),
+      Some(sceneId),
+      Some(name),
+      Some(estimateLowUsd),
+      Some(estimateHighUsd),
+      Some(confidence),
+      Some(soldSearchUrl),
+    ) =>
+    let ebay = switch Json.field(json, "ebay") {
+    | None => None
+    | Some(v) =>
+      switch decodeEbayStats(v) {
+      | Ok(stats) => Some(stats)
+      | Error(_) => None
+      }
+    }
+    let box = Json.field(json, "box")->Option.flatMap(decodeBox)
+    let profit = switch Json.field(json, "profit") {
+    | None => None
+    | Some(v) =>
+      switch decodeProfit(v) {
+      | Ok(p) => Some(p)
+      | Error(_) => None
+      }
+    }
+    Ok({
+      Types.findId,
+      sceneId,
+      name,
+      where: Json.stringField(json, "where"),
+      estimateLowUsd,
+      estimateHighUsd,
+      confidence,
+      soldSearchUrl,
+      ebay,
+      box,
+      imageWidth: Json.intField(json, "imageWidth"),
+      imageHeight: Json.intField(json, "imageHeight"),
+      size: Json.stringField(json, "size")->Option.getOr(""),
+      ?profit,
+    })
+  | _ => Error("gem missing a required field")
+  }
+
+let decodeFailedPhoto = (json: JSON.t): result<Types.failedPhoto, string> =>
+  switch (Json.stringField(json, "sceneId"), Json.stringField(json, "error")) {
+  | (Some(sceneId), Some(error)) => Ok({Types.sceneId, error})
+  | _ => Error("failed photo missing a required field")
+  }
+
+let decodeHaulCounts = (json: JSON.t): result<Types.haulCounts, string> =>
+  switch (
+    Json.intField(json, "queued"),
+    Json.intField(json, "running"),
+    Json.intField(json, "valued"),
+    Json.intField(json, "failed"),
+  ) {
+  | (Some(queued), Some(running), Some(valued), Some(failed)) =>
+    Ok({Types.queued, running, valued, failed})
+  | _ => Error("counts missing a required field")
+  }
+
+// A haul status round-trips its place through JSON: Types.encodePlace when
+// present, JSON null when not (Types.res encodeHaulStatus). Absent key,
+// present-but-null, and a malformed sub-object (missing lat/lon/source/at,
+// or an unrecognized source) all decode as None the same way — Json.field
+// already returns None for a missing key, and JSON.Decode.object rejects
+// a JSON.Null value the same as any other non-object, so floatField/
+// stringField on it fall through to None too.
+let decodePlace = (placeJson: JSON.t): option<Types.place> =>
+  switch (
+    Json.floatField(placeJson, "lat"),
+    Json.floatField(placeJson, "lon"),
+    Json.stringField(placeJson, "source"),
+    Json.stringField(placeJson, "at"),
+  ) {
+  | (Some(lat), Some(lon), Some(sourceStr), Some(at)) =>
+    switch Place.sourceFromString(sourceStr) {
+    | Some(source) =>
+      Some({Types.lat, lon, accuracyM: Json.floatField(placeJson, "accuracyM"), source, at})
+    | None => None
+    }
+  | _ => None
+  }
+
+let decodeHaulStatus = (json: JSON.t): result<Types.haulStatus, string> =>
+  switch (
+    Json.stringField(json, "haulId"),
+    Json.stringField(json, "startedAt"),
+    Json.floatField(json, "costUsd"),
+    Json.floatField(json, "maxUsd"),
+    Json.floatField(json, "gemMinUsd"),
+    Json.field(json, "counts"),
+    Json.arrayField(json, "gems"),
+    Json.intField(json, "otherCount"),
+    Json.arrayField(json, "failed"),
+  ) {
+  | (
+      Some(haulId),
+      Some(startedAt),
+      Some(costUsd),
+      Some(maxUsd),
+      Some(gemMinUsd),
+      Some(countsJson),
+      Some(gemsJson),
+      Some(otherCount),
+      Some(failedJson),
+    ) =>
+    switch (
+      decodeHaulCounts(countsJson),
+      Array.map(gemsJson, decodeHaulGem)->Result.all,
+      Array.map(failedJson, decodeFailedPhoto)->Result.all,
+    ) {
+    | (Ok(counts), Ok(gems), Ok(failed)) =>
+      Ok({
+        Types.haulId,
+        name: Json.stringField(json, "name"),
+        startedAt,
+        doneAt: Json.stringField(json, "doneAt"),
+        emailedAt: Json.stringField(json, "emailedAt"),
+        costUsd,
+        maxUsd,
+        gemMinUsd,
+        stopReason: Json.stringField(json, "stopReason"),
+        emailNote: Json.stringField(json, "emailNote"),
+        counts,
+        gems,
+        otherCount,
+        failed,
+        place: Json.field(json, "place")->Option.flatMap(decodePlace),
+      })
+    | (Error(e), _, _) | (_, Error(e), _) | (_, _, Error(e)) => Error(e)
+    }
+  | _ => Error("haul status missing a required field")
+  }
+
+let decodeHaulBuy = (json: JSON.t): result<Types.haulBuy, string> =>
+  switch (Json.stringField(json, "name"), Json.floatField(json, "paidUsd")) {
+  | (Some(name), Some(paidUsd)) =>
+    Ok({
+      Types.name,
+      paidUsd,
+      paidOn: Json.stringField(json, "paidOn"),
+      soldUsd: Json.floatField(json, "soldUsd"),
+      soldOn: Json.stringField(json, "soldOn"),
+    })
+  | _ => Error("buy missing a required field")
+  }
+
+let decodeHaulListRow = (json: JSON.t): result<Types.haulListRow, string> =>
+  switch (
+    Json.stringField(json, "haulId"),
+    Json.stringField(json, "startedAt"),
+    Json.intField(json, "photoCount"),
+    Json.intField(json, "gemCount"),
+    Json.floatField(json, "paidUsd"),
+    Json.arrayField(json, "buys"),
+  ) {
+  | (
+      Some(haulId),
+      Some(startedAt),
+      Some(photoCount),
+      Some(gemCount),
+      Some(paidUsd),
+      Some(buysJson),
+    ) =>
+    switch Array.map(buysJson, decodeHaulBuy)->Result.all {
+    | Ok(buys) =>
+      Ok({
+        Types.haulId,
+        name: Json.stringField(json, "name"),
+        startedAt,
+        place: Json.field(json, "place")->Option.flatMap(decodePlace),
+        photoCount,
+        gemCount,
+        paidUsd,
+        buys,
+      })
+    | Error(e) => Error(e)
+    }
+  | _ => Error("haul list row missing a required field")
+  }
+
+let decodeHaulList = (json: JSON.t): result<array<Types.haulListRow>, string> =>
+  switch JSON.Decode.array(json) {
+  | Some(rowsJson) => Array.map(rowsJson, decodeHaulListRow)->Result.all
+  | None => Error("haul list is not an array")
   }

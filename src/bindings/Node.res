@@ -8,6 +8,15 @@ module Buffer = {
   @val @scope("Buffer") external concat: array<t> => t = "concat"
   @send external toStringWithEncoding: (t, string) => string = "toString"
   @get external length: t => int = "length"
+  @send external readUInt8: (t, int) => int = "readUInt8"
+  @send external readUInt16BE: (t, int) => int = "readUInt16BE"
+
+  @val @scope("Buffer") external fromString: (string, string) => t = "from"
+
+  // For a fetch response body read with `.arrayBuffer()` (Fetch.res) —
+  // opaque on this side, since nothing here inspects it, only converts it.
+  type arrayBufferLike
+  @val @scope("Buffer") external fromArrayBuffer: arrayBufferLike => t = "from"
 }
 
 module Fs = {
@@ -15,10 +24,31 @@ module Fs = {
   @module("node:fs") external readFileBuffer: string => Buffer.t = "readFileSync"
   @module("node:fs") external readFileUtf8: (string, string) => string = "readFileSync"
   @module("node:fs") external writeFileSync: (string, string) => unit = "writeFileSync"
+  // Same underlying "writeFileSync", a second typed binding for the Buffer
+  // overload — needed to save an uploaded photo's raw JPEG bytes without
+  // corrupting them through a string round-trip (mirrors Server.res's
+  // endWithBuffer, the equivalent split for "end").
+  @module("node:fs") external writeFileBuffer: (string, Buffer.t) => unit = "writeFileSync"
   @module("node:fs") external appendFileSync: (string, string) => unit = "appendFileSync"
 
   type mkdirOptions = {recursive: bool}
   @module("node:fs") external mkdirSync: (string, mkdirOptions) => unit = "mkdirSync"
+
+  @module("node:fs") external copyFileSync: (string, string) => unit = "copyFileSync"
+  // Removes the intermediate crop file Crop.res writes next to its dest.
+  @module("node:fs") external unlinkSync: string => unit = "unlinkSync"
+  // Used by CropTest.res to prove the intermediate crop file is gone.
+  @module("node:fs") external readdirSync: string => array<string> = "readdirSync"
+
+  // A throwaway per-test directory under the OS temp dir, with a unique
+  // suffix Node itself generates -- used by StreamRouteSpotTest.res so a
+  // scene-log read-back cannot collide with another test run.
+  @module("node:fs") external mkdtempSync: string => string = "mkdtempSync"
+
+  type rmOptions = {recursive: bool, force: bool}
+  // Recursively removes that throwaway directory again once a test is
+  // done reading it.
+  @module("node:fs") external rmSync: (string, rmOptions) => unit = "rmSync"
 }
 
 module Path = {
@@ -28,6 +58,12 @@ module Path = {
 module Process = {
   @scope("process") @val external env: dict<string> = "env"
   @scope("process") @val external cwd: unit => string = "cwd"
+  // Used by EmailCheck.res to report a clean 0/1 status instead of an
+  // uncaught-rejection stack trace.
+  @scope("process") @val external exit: int => unit = "exit"
+  // [execPath, scriptPath, ...userArgs] -- StreamSpike.res slices off the
+  // first two to get just the flags the caller passed after the script name.
+  @scope("process") @val external argv: array<string> = "argv"
 }
 
 module Crypto = {
@@ -36,6 +72,24 @@ module Crypto = {
 
 module Os = {
   @module("node:os") external tmpdir: unit => string = "tmpdir"
+}
+
+// The global timer. `setTimeout` (no handle) is used by HaulWorker.res to
+// retry after a 429/529 without blocking the queue (`setTimeout(kick,
+// retryMs)` in docs/spec-haul-mode.md "Step 3: brain queue") -- that retry
+// is short and only ever set on a path that itself required this exact
+// timer to fire before the worker can look at that haul again, so nothing
+// needs to cancel it early. `setTimeoutHandle` / `clearTimeout` are a
+// second typed view of the same global setTimeout (the `fetch` /
+// `fetchBuffer` split in Fetch.res is the same idea), for
+// FixtureReplay.res's sleep(), which does need to cancel an in-flight wait
+// early on an abort mid-gap.
+module Timer = {
+  @val external setTimeout: (unit => unit, int) => unit = "setTimeout"
+
+  type t
+  @val external setTimeoutHandle: (unit => unit, int) => t = "setTimeout"
+  @val external clearTimeout: t => unit = "clearTimeout"
 }
 
 module Url = {
@@ -62,9 +116,47 @@ module HttpServer = {
 
   @send external onData: (request, string, Buffer.t => unit) => unit = "on"
   @send external onEnd: (request, string, unit => unit) => unit = "on"
+  // The stub Claude server in ClaudeStream tests: fires when the incoming
+  // request's underlying connection is terminated, so a test can see that
+  // an aborted downstream fetch (StreamRoute.res) really tore down the
+  // upstream connection to it too.
+  @send external onRequestClose: (request, string, unit => unit) => unit = "on"
 
   @send external writeHead: (response, int, dict<string>) => unit = "writeHead"
   @send external endWithBody: (response, string) => unit = "end"
+
+  // StreamRoute.res: write one SSE chunk without ending the response, force
+  // the headers out immediately (tailscale serve, a Go reverse proxy, only
+  // flushes a text/event-stream response once headers are on the wire), and
+  // tell whether "end" was already called — so a late write (a heartbeat, or
+  // an event still in flight when the client disconnects) is a no-op instead
+  // of a write-after-end throw.
+  @send external write: (response, string) => unit = "write"
+  @send external flushHeaders: response => unit = "flushHeaders"
+  @get external writableEnded: response => bool = "writableEnded"
+  // Server.res's server-level error handler: once StreamRoute.handle has
+  // already sent the SSE 200 headers, a later uncaught rejection must not
+  // call writeHead again (Node throws ERR_HTTP_HEADERS_SENT for that). This
+  // says whether the headers already went out.
+  @get external headersSent: response => bool = "headersSent"
+  // Test-only: StreamRouteTest.res's stub Claude server uses this to
+  // simulate a connection dropping mid-stream — a plain "end" is a clean
+  // finish, not the failure that test needs.
+  @send external destroy: response => unit = "destroy"
+  // Fires on a premature disconnect (checked via writableEnded above) and
+  // also once normally after our own "end" finishes flushing — the caller
+  // tells the two apart. A no-op "error" listener too: Node treats an
+  // unlistened "error" event as an uncaught exception, and a response
+  // being written to after the client aborted the connection can raise one.
+  @send external onClose: (response, string, unit => unit) => unit = "on"
+  @send external onResponseError: (response, string, unit => unit) => unit = "on"
+
+  // Test-only escape hatch: STREAM_DROP_AFTER_MS (StreamRoute.res) destroys
+  // the raw TCP socket under a response to simulate an abrupt client drop,
+  // instead of waiting on a real network failure.
+  type socket
+  @get external socket: response => socket = "socket"
+  @send external destroySocket: socket => unit = "destroy"
 
   @module("node:http")
   external createServer: ((request, response) => unit) => server = "createServer"

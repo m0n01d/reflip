@@ -1,0 +1,23 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=default parallel=default
+headers: 2546ms
+message_start: 2552ms  input_tokens=8595
+tool code_execution: start=15181ms done=22639ms status=-
+tool code_execution: start=23051ms done=26091ms status=-
+tool code_execution: start=27260ms done=29569ms status=-
+tool code_execution: start=55783ms done=58621ms status=-
+search "ceramic Christmas village lighted church figurine porcelain resale value": start=22615ms done=22619ms count=9
+search "blue white transferware divided vegetable bowl antique value": start=22619ms done=22639ms count=10
+code steps: 4  detection_timeout: 0  longest step: 7458ms
+first text delta: 58622ms
+first box: 58954ms
+first item: 59695ms
+last item: 76461ms
+done: 76572ms
+items: 18
+usage: in=55279 out=7009 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.2006
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

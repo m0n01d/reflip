@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>reflip · Scan flow</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="position: relative; width: 390px; height: {{ frameH }}; overflow: hidden; background-color: #F3EFE6; color: #1B1813; font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased">
+
+<sc-if value="{{ isReady }}" hint-placeholder-val="{{ true }}">
+<div style="position: absolute; left: 0; top: 0; width: 390px; height: 100%; display: flex; flex-direction: column; background-color: #F3EFE6; background-image: radial-gradient(circle, #E4DCCB 0 2px, transparent 2.6px); background-size: 22px 22px">
+<header style="height: 56px; flex-shrink: 0; padding: 0 6px 0 16px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 9px">
+<span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; background-color: #FF6A13; box-shadow: 0 0 0 2px #1B1813"></span>
+<span style="font-size: 23px; font-weight: 800; font-stretch: 85%; letter-spacing: -0.02em">reflip</span>
+</div>
+<button type="button" aria-label="Settings" onClick="{{ openSettings }}" style="width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background-color: transparent; color: #1B1813; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+</button>
+</header>
+<div role="group" aria-label="Mode" style="margin: 2px 16px 0; padding: 4px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background-color: #E6DECD; border-radius: 14px">
+<button type="button" aria-pressed="{{ scanPressed }}" onClick="{{ pickScan }}" style="height: 44px; border: 0; border-radius: 10px; background-color: {{ scanBg }}; color: {{ scanFg }}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; transition: background-color .2s, color .2s">Scan</button>
+<button type="button" aria-pressed="{{ haulPressed }}" onClick="{{ pickHaul }}" style="height: 44px; border: 0; border-radius: 10px; background-color: {{ haulBg }}; color: {{ haulFg }}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; transition: background-color .2s, color .2s">Haul</button>
+</div>
+<sc-if value="{{ isScanMode }}" hint-placeholder-val="{{ true }}">
+<div style="flex-grow: 1; display: flex; flex-direction: column; padding: 0 16px">
+<h1 style="margin: 30px 0 0; font-size: 54px; line-height: 0.92; font-weight: 800; font-stretch: 78%; letter-spacing: -0.025em">What’s on the table?</h1>
+<p style="margin: 14px 0 0; max-width: 310px; font-size: 17px; line-height: 1.4; color: #4A443B">Snap it. Price stickers land on the photo as each item is found.</p>
+<div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<button type="button" onClick="{{ startRun }}" style="position: relative; width: 212px; height: 212px; padding: 0; border: 0; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: inherit; transform: rotate(-7deg); box-shadow: 0 2px 0 rgba(27,24,19,.18), 0 16px 32px rgba(27,24,19,.22); cursor: pointer; display: flex; align-items: center; justify-content: center">
+<span aria-hidden="true" style="position: absolute; left: 9px; top: 9px; right: 9px; bottom: 9px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.5)"></span>
+<span style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px">
+<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+<span style="font-size: 23px; font-weight: 750; font-stretch: 85%; letter-spacing: -0.01em">Snap a photo</span>
+</span>
+</button>
+<button type="button" onClick="{{ startRun }}" style="min-height: 44px; padding: 0 12px; border: 0; background-color: transparent; color: #4A443B; font-family: inherit; font-size: 16px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">or pick from your photos</button>
+</div>
+<div style="display: flex; justify-content: center; padding-bottom: 26px">
+<button type="button" onClick="{{ openSettings }}" style="min-height: 44px; padding: 0 16px; border: 1px solid #DDD5C5; border-radius: 999px; background-color: #FFFCF5; color: #4A443B; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+<span>{{ chipText }}</span>
+</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ isHaulMode }}" hint-placeholder-val="{{ false }}">
+<div style="flex-grow: 1; margin: 16px 16px 26px; padding: 24px; border: 2px dashed #CFC5B1; border-radius: 16px; background-color: rgba(255,252,245,.75); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center">
+<div style="font-size: 26px; font-weight: 750; font-stretch: 85%">Haul mode</div>
+<p style="margin: 0; max-width: 270px; font-size: 15px; line-height: 1.45; color: #4A443B">Placeholder. The haul screens come from the haul-mode track and keep this header and switch.</p>
+</div>
+</sc-if>
+</div>
+</sc-if>
+
+<sc-if value="{{ isRun }}" hint-placeholder-val="{{ false }}">
+<div style="position: absolute; left: 0; top: 0; width: 390px; height: 100%; overflow-x: hidden; overflow-y: auto">
+<header style="height: 56px; padding: 0 12px 0 16px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 9px">
+<span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; background-color: #FF6A13; box-shadow: 0 0 0 2px #1B1813"></span>
+<span style="font-size: 23px; font-weight: 800; font-stretch: 85%; letter-spacing: -0.02em">reflip</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px">
+<sc-if value="{{ live }}" hint-placeholder-val="{{ true }}">
+<span style="display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .1em"><span aria-hidden="true" style="width: 8px; height: 8px; border-radius: 50%; background-color: #FF6A13; box-shadow: 0 0 0 1.5px #1B1813; opacity: {{ blink }}; transition: opacity .5s"></span>LIVE</span>
+<button type="button" onClick="{{ stop }}" style="height: 44px; padding: 0 18px; border: 1.5px solid #1B1813; border-radius: 999px; background-color: transparent; color: #1B1813; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">Stop</button>
+</sc-if>
+<sc-if value="{{ over }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ newScan }}" style="height: 44px; padding: 0 18px; border: 1.5px solid #1B1813; border-radius: 999px; background-color: transparent; color: #1B1813; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer">New scan</button>
+</sc-if>
+</div>
+</header>
+
+<div style="position: relative; margin: 2px 16px 0; width: 358px; height: 268.5px; border-radius: 14px; overflow: hidden; background-color: #2A251E; box-shadow: 0 1px 0 rgba(27,24,19,.08), 0 8px 22px rgba(27,24,19,.14)">
+<img src="/_blob/61e44ebaf9be18e100691d7a877d0827" alt="The table photo being scanned" style="display: block; width: 358px; height: 268.5px">
+<sc-for list="{{ pins }}" as="p" hint-placeholder-count="0">
+<button type="button" aria-label="{{ p.label }}" onClick="{{ p.pick }}" style="position: absolute; left: {{ p.left }}; top: {{ p.top }}; z-index: {{ p.z }}; visibility: {{ p.vis }}; width: 44px; height: 44px; padding: 0; border: 0; background-color: transparent; cursor: pointer">
+<sc-if value="{{ p.gem }}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; left: 9px; top: 9px; width: 26px; height: 26px; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; line-height: 26px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5, 0 3px 8px rgba(27,24,19,.45); transform: {{ p.tf }}; transition: transform .5s cubic-bezier(.34,1.56,.64,1)">{{ p.num }}</span>
+</sc-if>
+<sc-if value="{{ p.plain }}" hint-placeholder-val="{{ false }}">
+<span style="position: absolute; left: 16px; top: 16px; width: 12px; height: 12px; border-radius: 50%; background-color: #FFFCF5; box-shadow: 0 0 0 2px #1B1813, 0 2px 5px rgba(27,24,19,.4); transform: {{ p.tf }}; transition: transform .5s cubic-bezier(.34,1.56,.64,1)"></span>
+</sc-if>
+<span aria-hidden="true" style="position: absolute; left: {{ p.coLeft }}; top: {{ p.coTop }}; height: 24px; padding: 0 8px; border-radius: 999px; background-color: #1B1813; color: #FFFCF5; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; line-height: 24px; white-space: nowrap; pointer-events: none; opacity: {{ p.coOp }}; transform: {{ p.coTf }}; transform-origin: {{ p.coOrigin }}; transition: opacity .3s, transform .35s cubic-bezier(.34,1.56,.64,1)">{{ p.price }}</span>
+</button>
+</sc-for>
+</div>
+
+<div style="margin: 14px 16px 0; filter: drop-shadow(0 1px 0 rgba(27,24,19,.10)) drop-shadow(0 6px 12px rgba(27,24,19,.07))">
+<section aria-label="Scan status" style="padding: 14px 16px 24px; border-radius: 12px 12px 0 0; background-color: #FFFCF5; -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+<h1 aria-live="polite" style="margin: 0; font-size: 28px; line-height: 1.05; font-weight: 750; font-stretch: 82%; letter-spacing: -0.01em">{{ headline }}</h1>
+<span style="flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums">{{ clock }}</span>
+</div>
+<p style="margin: 4px 0 0; font-size: 15px; line-height: 1.35; color: #4A443B">{{ sub }}</p>
+<div role="img" aria-label="{{ trackLabel }}" style="position: relative; height: 36px; margin-top: 12px">
+<div style="position: absolute; left: 0; right: 0; top: 6px; height: 6px; border-radius: 3px; background-color: #E9E2D3; overflow: hidden"><div style="width: {{ fillW }}; height: 6px; background-color: #1B1813; transition: width .1s linear"></div></div>
+<span style="position: absolute; left: 26.17%; top: 0; width: 2px; height: 18px; margin-left: -1px; background-color: #6B6357"></span>
+<span style="position: absolute; left: 26.17%; top: 21px; transform: translateX(-50%); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357; white-space: nowrap">usual 0:47</span>
+<span style="position: absolute; right: 0; top: 21px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357; white-space: nowrap">3:00 limit</span>
+<sc-for list="{{ marks }}" as="m" hint-placeholder-count="0">
+<span style="position: absolute; left: {{ m.left }}; top: {{ m.top }}; width: {{ m.w }}; height: {{ m.h }}; margin-left: {{ m.ml }}; border-radius: {{ m.r }}; background-color: {{ m.bg }}; box-shadow: {{ m.sh }}"></span>
+</sc-for>
+<sc-if value="{{ live }}" hint-placeholder-val="{{ true }}">
+<span style="position: absolute; left: {{ fillW }}; top: 3px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background-color: #1B1813; box-shadow: 0 0 0 2px #FFFCF5; transition: left .1s linear"></span>
+</sc-if>
+</div>
+
+<sc-if value="{{ live }}" hint-placeholder-val="{{ true }}">
+<div style="margin-top: 8px; padding-top: 10px; border-top: 1px dashed #D5CCBA; min-height: 60px">
+<sc-for list="{{ tail }}" as="l" hint-placeholder-count="2">
+<div style="display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 20px; color: {{ l.color }}; opacity: {{ l.op }}; transform: {{ l.tf }}; transition: {{ l.tr }}">
+<span style="color: #6B6357">{{ l.time }}</span>
+<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ l.text }}</span>
+<span style="font-weight: 600; white-space: nowrap">{{ l.right }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{ showTotals }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 8px; padding-top: 10px; border-top: 1px dashed #D5CCBA; display: flex; flex-direction: column; gap: 4px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 20px">
+<div style="display: flex; justify-content: space-between; gap: 12px"><span>{{ gemTotalLabel }}</span><span style="font-weight: 600">{{ gemTotal }}</span></div>
+<div style="display: flex; justify-content: space-between; gap: 12px; color: #4A443B"><span>{{ allTotalLabel }}</span><span>{{ allTotal }}</span></div>
+</div>
+</sc-if>
+<sc-if value="{{ showRetry }}" hint-placeholder-val="{{ false }}">
+<button type="button" onClick="{{ retry }}" style="margin-top: 12px; width: 100%; height: 48px; border: 0; border-radius: 12px; background-color: #1B1813; color: #FFFCF5; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Try again</button>
+</sc-if>
+<sc-if value="{{ over }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 12px; padding: 10px 12px; border-radius: 10px; background-color: #F3EFE6; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; align-items: start">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" style="margin-top: 1px"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 7.5v.01"></path></svg>
+<div>
+<div style="font-size: 14px; font-weight: 650; line-height: 20px">No eBay stats</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #6B6357; overflow-wrap: anywhere">eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET</div>
+</div>
+</div>
+<button type="button" aria-expanded="{{ logExpanded }}" onClick="{{ toggleLog }}" style="margin-top: 6px; width: 100%; min-height: 44px; padding: 0; border: 0; background-color: transparent; color: #1B1813; font-family: inherit; font-size: 15px; font-weight: 650; display: flex; align-items: center; justify-content: space-between; cursor: pointer">
+<span>{{ logToggleText }}</span>
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: {{ logChevron }}; transition: transform .25s"><path d="M6 9l6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{ logOpen }}" hint-placeholder-val="{{ false }}">
+<div style="padding-top: 2px">
+<sc-for list="{{ full }}" as="l" hint-placeholder-count="4">
+<div style="display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 20px; color: {{ l.color }}">
+<span style="color: #6B6357">{{ l.time }}</span>
+<span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ l.text }}</span>
+<span style="font-weight: 600; white-space: nowrap">{{ l.right }}</span>
+</div>
+</sc-for>
+</div>
+</sc-if>
+</sc-if>
+</section>
+</div>
+
+<sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="margin: 18px 16px 0; padding: 22px 18px; border: 2px dashed #D5CCBA; border-radius: 14px; text-align: center">
+<div style="font-size: 17px; font-weight: 650">{{ emptyTitle }}</div>
+<div style="margin-top: 4px; font-size: 14px; line-height: 1.4; color: #6B6357">{{ emptySub }}</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasGems }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Worth a look" style="margin: 22px 16px 0">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-size: 20px; line-height: 1.2; font-weight: 700">Worth a look</h2>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 600">{{ gemHead }}</span>
+</div>
+<div style="margin-top: 2px; font-size: 13px; color: #6B6357">high estimate $20 or more</div>
+<div style="margin-top: 10px; border: 1px solid #E3DBCB; border-radius: 12px; overflow: hidden; background-color: #FFFCF5">
+<sc-for list="{{ gemRows }}" as="r" hint-placeholder-count="3">
+<button type="button" aria-label="{{ r.label }}" onClick="{{ r.pick }}" style="width: 100%; min-height: 64px; padding: 10px 14px; border: 0; border-top: {{ r.rule }}; background-color: {{ r.bg }}; color: #1B1813; font-family: inherit; text-align: left; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; cursor: pointer; opacity: {{ r.op }}; transform: {{ r.tf }}; transition: {{ r.tr }}">
+<span style="width: 28px; height: 28px; border-radius: 50%; background-color: #FF6A13; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; line-height: 28px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5, 0 1px 3px rgba(27,24,19,.35); transform: {{ r.rot }}">{{ r.num }}</span>
+<span style="font-size: 16px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{ r.name }}</span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 16px; font-weight: 600; white-space: nowrap">{{ r.price }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #6B6357; white-space: nowrap">{{ r.conf }}</span>
+</span>
+</button>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ hasAlso }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Also seen" style="margin: 14px 16px 0; border: 1px solid #E3DBCB; border-radius: 12px; overflow: hidden; background-color: #FFFCF5">
+<button type="button" aria-expanded="{{ alsoExpanded }}" onClick="{{ toggleAlso }}" style="width: 100%; min-height: 64px; padding: 12px 14px; border: 0; background-color: transparent; color: #1B1813; font-family: inherit; text-align: left; display: grid; grid-template-columns: minmax(0, 1fr) 24px; gap: 12px; align-items: center; cursor: pointer">
+<span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 16px; font-weight: 700">{{ alsoTitle }}</span>
+<span style="font-size: 13px; color: #6B6357; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ alsoPreview }}</span>
+</span>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: {{ alsoChevron }}; transition: transform .25s"><path d="M6 9l6 6 6-6"></path></svg>
+</button>
+<sc-if value="{{ alsoOpen }}" hint-placeholder-val="{{ false }}">
+<sc-for list="{{ alsoRows }}" as="r" hint-placeholder-count="3">
+<button type="button" aria-label="{{ r.label }}" onClick="{{ r.pick }}" style="width: 100%; min-height: 48px; padding: 8px 14px; border: 0; border-top: 1px dashed #DDD5C5; background-color: {{ r.bg }}; color: #1B1813; font-family: inherit; text-align: left; display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: center; cursor: pointer; opacity: {{ r.op }}; transform: {{ r.tf }}; transition: {{ r.tr }}">
+<span aria-hidden="true" style="justify-self: center; width: 12px; height: 12px; border-radius: 50%; background-color: #FFFCF5; box-shadow: 0 0 0 2px #1B1813"></span>
+<span style="font-size: 15px; font-weight: 500; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{ r.name }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; font-weight: 500; color: #4A443B; white-space: nowrap">{{ r.price }}</span>
+</button>
+</sc-for>
+</sc-if>
+</section>
+</sc-if>
+
+<sc-if value="{{ finished }}" hint-placeholder-val="{{ false }}">
+<div style="margin: 26px 16px 0; padding-bottom: 32px">
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">RUN RECEIPT</div>
+<div style="margin-top: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 22px">
+<sc-for list="{{ receipt }}" as="r" hint-placeholder-count="8">
+<div style="display: flex; align-items: baseline; gap: 6px">
+<span style="white-space: nowrap; color: #4A443B">{{ r.k }}</span>
+<span aria-hidden="true" style="flex-grow: 1; min-width: 12px; border-bottom: 1.5px dotted #B9AE98"></span>
+<span style="white-space: nowrap; font-weight: 500">{{ r.v }}</span>
+</div>
+</sc-for>
+</div>
+<button type="button" onClick="{{ newScan }}" style="margin-top: 18px; width: 358px; height: 56px; border: 0; border-radius: 14px; background-color: #FF6A13; color: #1B1813; font-family: inherit; font-size: 18px; font-weight: 750; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; box-shadow: 0 2px 0 rgba(27,24,19,.18)">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+<span>Snap another</span>
+</button>
+</div>
+</sc-if>
+<sc-if value="{{ padEnd }}" hint-placeholder-val="{{ true }}">
+<div style="height: 40px"></div>
+</sc-if>
+</div>
+</sc-if>
+
+<button type="button" aria-label="Close item" tabindex="-1" onClick="{{ closeSheet }}" style="position: absolute; left: 0; top: 0; width: 390px; height: 100%; padding: 0; border: 0; background-color: rgba(27,24,19,.45); cursor: pointer; opacity: {{ sheetScrimOp }}; visibility: {{ sheetVis }}; transition: {{ sheetScrimTr }}"></button>
+<section role="dialog" aria-modal="true" aria-label="{{ sheetLabel }}" style="position: absolute; left: 0; bottom: 0; width: 390px; height: 760px; box-sizing: border-box; border-radius: 22px 22px 0 0; background-color: #FFFCF5; box-shadow: 0 -10px 30px rgba(27,24,19,.2); overflow-y: auto; padding: 8px 16px 28px; transform: {{ sheetTf }}; visibility: {{ sheetVis }}; transition: {{ sheetTr }}">
+<div aria-hidden="true" style="display: flex; justify-content: center; padding: 2px 0 4px"><span style="width: 40px; height: 5px; border-radius: 3px; background-color: #D5CCBA"></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">{{ s.kicker }}</span>
+<button type="button" aria-label="Close" onClick="{{ closeSheet }}" style="width: 44px; height: 44px; margin-right: -10px; padding: 0; border: 0; background-color: transparent; color: #1B1813; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</button>
+</div>
+<div style="position: relative; margin-top: 4px; width: 358px; height: 184px; border-radius: 12px; overflow: hidden; background-color: #2A251E">
+<img src="/_blob/61e44ebaf9be18e100691d7a877d0827" alt="{{ s.cropAlt }}" style="position: absolute; left: {{ s.imgL }}; top: {{ s.imgT }}; width: {{ s.imgW }}; height: {{ s.imgH }}; max-width: none">
+<span aria-hidden="true" style="position: absolute; left: {{ s.boxL }}; top: {{ s.boxT }}; width: {{ s.boxW }}; height: {{ s.boxH }}; box-sizing: border-box; border: 2px solid #FF6A13; border-radius: 6px; box-shadow: 0 0 0 999px rgba(27,24,19,.28)"></span>
+</div>
+<div style="margin-top: 14px; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; align-items: start">
+<sc-if value="{{ s.gem }}" hint-placeholder-val="{{ true }}">
+<span style="margin-top: 1px; width: 30px; height: 30px; border-radius: 50%; background-color: #FF6A13; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; line-height: 30px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5, 0 2px 5px rgba(27,24,19,.35); transform: rotate(-6deg)">{{ s.num }}</span>
+</sc-if>
+<sc-if value="{{ s.plain }}" hint-placeholder-val="{{ false }}">
+<span style="margin: 9px 0 0 9px; width: 12px; height: 12px; border-radius: 50%; background-color: #FFFCF5; box-shadow: 0 0 0 2px #1B1813"></span>
+</sc-if>
+<h2 style="margin: 0; font-size: 25px; line-height: 1.08; font-weight: 750; font-stretch: 85%; letter-spacing: -0.01em">{{ s.name }}</h2>
+</div>
+<div style="margin-top: 12px; display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 36px; font-weight: 600; letter-spacing: -0.03em">{{ s.price }}</span>
+<span style="font-size: 14px; color: #6B6357">Claude’s estimate</span>
+</div>
+<div style="margin-top: 6px; display: flex; align-items: center; gap: 8px">
+<span role="img" aria-label="{{ s.confLabel }}" style="display: flex; gap: 4px">
+<sc-for list="{{ s.dots }}" as="d" hint-placeholder-count="5">
+<span style="width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #1B1813; background-color: {{ d.bg }}"></span>
+</sc-for>
+</span>
+<span style="font-size: 14px; font-weight: 600">{{ s.confWord }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #6B6357">{{ s.confNum }}</span>
+</div>
+<p style="margin: 12px 0 0; font-size: 15px; line-height: 1.45; color: #4A443B">{{ s.basis }}</p>
+<div style="margin-top: 16px; padding: 14px; border: 1px solid #E3DBCB; border-radius: 12px; background-color: #F3EFE6">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<span style="font-size: 13px; font-weight: 750; letter-spacing: .02em">eBay</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #6B6357">stats off</span>
+</div>
+<div style="margin-top: 6px; font-size: 16px; font-weight: 650">No eBay stats</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #6B6357; overflow-wrap: anywhere">eBay stats disabled: set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET</div>
+<div style="margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #6B6357">searched</span>
+<span style="padding: 3px 8px; border: 1px solid #DDD5C5; border-radius: 6px; background-color: #FFFCF5; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; overflow-wrap: anywhere">{{ s.query }}</span>
+</div>
+<a href="{{ s.soldUrl }}" target="_blank" rel="noopener noreferrer" style="margin-top: 12px; min-height: 48px; border-radius: 10px; background-color: #FF6A13; color: #1B1813; font-size: 16px; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px">Check sold prices on eBay<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"></path></svg></a>
+</div>
+<sc-if value="{{ s.hasSources }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 14px">
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">SOURCES</div>
+<sc-for list="{{ s.sources }}" as="src" hint-placeholder-count="1">
+<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer" style="min-height: 44px; display: flex; align-items: center; gap: 6px; color: #2B55C8; font-size: 15px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px">{{ src.host }}<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"></path></svg></a>
+</sc-for>
+</div>
+</sc-if>
+</section>
+
+<button type="button" aria-label="Close settings" tabindex="-1" onClick="{{ closeSettings }}" style="position: absolute; left: 0; top: 0; width: 390px; height: 100%; padding: 0; border: 0; background-color: rgba(27,24,19,.45); cursor: pointer; opacity: {{ setScrimOp }}; visibility: {{ setVis }}; transition: {{ setScrimTr }}"></button>
+<section role="dialog" aria-modal="true" aria-label="Settings" style="position: absolute; left: 0; bottom: 0; width: 390px; height: 600px; box-sizing: border-box; border-radius: 22px 22px 0 0; background-color: #FFFCF5; box-shadow: 0 -10px 30px rgba(27,24,19,.2); overflow-y: auto; padding: 8px 16px 24px; transform: {{ setTf }}; visibility: {{ setVis }}; transition: {{ setTr }}">
+<div aria-hidden="true" style="display: flex; justify-content: center; padding: 2px 0 4px"><span style="width: 40px; height: 5px; border-radius: 3px; background-color: #D5CCBA"></span></div>
+<div style="display: flex; align-items: center; justify-content: space-between">
+<h2 style="margin: 0; font-size: 24px; font-weight: 750; font-stretch: 85%">Settings</h2>
+<button type="button" onClick="{{ closeSettings }}" style="min-height: 44px; padding: 0 2px 0 14px; border: 0; background-color: transparent; color: #2B55C8; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Done</button>
+</div>
+<fieldset style="margin: 8px 0 0; padding: 0; border: 0; min-width: 0">
+<legend style="padding: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">MODEL</legend>
+<sc-for list="{{ modelOpts }}" as="o" hint-placeholder-count="3">
+<label style="display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px dashed #DDD5C5; cursor: pointer">
+<input type="radio" name="{{ modelName }}" value="{{ o.id }}" checked="{{ o.checked }}" onChange="{{ o.pick }}" style="margin: 2px 0 0; width: 20px; height: 20px; accent-color: #1B1813">
+<span>
+<span style="display: block; font-size: 16px; font-weight: 650">{{ o.label }}</span>
+<span style="display: block; margin-top: 2px; font-size: 14px; line-height: 1.4; color: #4A443B">{{ o.desc }}</span>
+</span>
+</label>
+</sc-for>
+</fieldset>
+<fieldset style="margin: 16px 0 0; padding: 0; border: 0; min-width: 0">
+<legend style="padding: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">PHOTO SIZE</legend>
+<sc-for list="{{ edgeOpts }}" as="o" hint-placeholder-count="2">
+<label style="display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; padding: 12px 0; border-bottom: 1px dashed #DDD5C5; cursor: pointer">
+<input type="radio" name="{{ edgeName }}" value="{{ o.id }}" checked="{{ o.checked }}" onChange="{{ o.pick }}" style="margin: 2px 0 0; width: 20px; height: 20px; accent-color: #1B1813">
+<span>
+<span style="display: block; font-size: 16px; font-weight: 650">{{ o.label }}</span>
+<span style="display: block; margin-top: 2px; font-size: 14px; line-height: 1.4; color: #4A443B">{{ o.desc }}</span>
+</span>
+</label>
+</sc-for>
+</fieldset>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"moment":{"editor":"enum","options":["flow","ready","thinking","searching","first","midway","done","item","timeout","settings"],"default":"flow"},"speed":{"editor":"range","min":1,"max":20,"step":1,"unit":"x","default":4},"frameHeight":{"editor":null,"default":844},"$preview":{"width":390,"height":844}}'>
+// Timeline from real scene 5c0c5ba7 (Sonnet 5, 22 items, 165.6 s, $0.165).
+// The brain does not stream yet, so item arrival times are modeled from its token counts.
+const PHOTO_W = 1568, PHOTO_H = 1176, S = 358 / 1568;
+const LIMIT = 180, DONE = 165.6, MEDIAN = 47.1, LOOK = 0.6, WRITE = 88;
+const SEARCHES = [
+  { at: 24.0, end: 26.3, q: 'vintage blue and white transferware scalloped bowl floral pattern value', n: 10 },
+  { at: 55.8, end: 58.1, q: 'vintage milk glass hobnail bud vase value used', n: 10 }
+];
+const MODELS = [
+  { id: 'sonnet', label: 'Sonnet 5', desc: 'Default. On 10 real scenes: median 0:47 and $0.15 a photo.' },
+  { id: 'opus', label: 'Opus 5.5', desc: 'Most capable. Twice the token price of Sonnet 5.' },
+  { id: 'haiku', label: 'Haiku 4.5', desc: 'Half the token price of Sonnet 5. Sees at most 1568 px.' }
+];
+const EDGES = [
+  { px: 1568, label: '1568 px', desc: 'Default. About 2,400 image tokens.' },
+  { px: 2576, label: '2576 px', desc: 'Sharper. About 6,300 image tokens, near $0.01 more a photo on Sonnet 5.' }
+];
+const MG = 'https://vintagegreenantiques.net/milk-glass/';
+const ITEMS = [
+  { n: 'Stacked scalloped-edge bowls', b: [0, 110, 215, 300], lo: 10, hi: 22, c: 0.35, q: 'vintage scalloped edge china bowls set', src: [], basis: 'Common mid-century decorative china bowl sets sell modestly as a lot on resale sites' },
+  { n: 'Small Christmas elf/Santa figurines', b: [95, 195, 270, 330], lo: 5, hi: 14, c: 0.35, q: 'vintage christmas elf santa figurine lot', src: [], basis: 'Generic vintage holiday figurines typically sell for a few dollars each' },
+  { n: 'Ceramic lit Christmas village church', b: [235, 170, 530, 520], lo: 15, hi: 32, c: 0.4, q: 'vintage ceramic lighted christmas village church', src: [], basis: 'Hand-painted lighted ceramic village buildings are a popular collectible category with steady mid-range demand' },
+  { n: 'Bisque figurine cluster (bride/groom & angels)', b: [480, 195, 710, 400], lo: 10, hi: 22, c: 0.3, q: 'vintage bisque porcelain figurine set wedding angel', src: [], basis: 'Small unmarked bisque figurines commonly resell in the low double digits as a set' },
+  { n: 'Cross-stitch fabric box/pillow', b: [440, 395, 700, 455], lo: 5, hi: 12, c: 0.25, q: 'vintage handmade cross stitch fabric box', src: [], basis: 'Handmade needlework crafts have niche resale value, typically low' },
+  { n: 'Wheat-pattern ceramic mugs (pair)', b: [590, 395, 815, 520], lo: 8, hi: 16, c: 0.35, q: 'vintage wheat pattern stoneware mugs pair', src: [], basis: 'Common stoneware mug sets sell for modest sums as a matched pair' },
+  { n: 'Vintage tin canister', b: [325, 445, 455, 635], lo: 10, hi: 25, c: 0.3, q: 'vintage advertising tin canister container', src: [], basis: 'Old advertising tins vary widely in value but generic examples fetch modest prices' },
+  { n: 'Blue and white transferware scalloped bowl set', b: [440, 505, 1000, 760], lo: 20, hi: 42, c: 0.4, q: 'vintage blue white transferware scalloped bowl plates', src: [], basis: 'Floral blue-and-white transferware dishware is a popular resale category, especially scalloped patterns' },
+  { n: 'Vintage clear glass bottles (pair)', b: [790, 90, 1000, 430], lo: 10, hi: 24, c: 0.3, q: 'antique clear glass soda bottles lot', src: [], basis: 'Unmarked vintage bottles typically sell cheaply unless a known bottling brand is identified' },
+  { n: 'Milk glass ribbed bud vase', b: [985, 165, 1080, 375], lo: 6, hi: 14, c: 0.45, q: 'vintage milk glass ribbed bud vase', src: [MG], basis: 'Unmarked milk glass bud vases commonly sell for under $15 per collector price guides' },
+  { n: 'Milk glass creamer pitcher with painted design', b: [980, 340, 1150, 495], lo: 10, hi: 20, c: 0.35, q: 'vintage milk glass hand painted creamer pitcher', src: [], basis: 'Decorated milk glass pitchers command a modest premium over plain pieces' },
+  { n: 'Pink milk glass canister with lid', b: [1105, 190, 1230, 460], lo: 10, hi: 18, c: 0.35, q: 'vintage pink milk glass canister jar lid', src: [MG], basis: 'Colored milk glass generally sells 2-4x higher than plain white per collector guides' },
+  { n: 'Glass canister jar with white lid', b: [1135, 190, 1300, 395], lo: 6, hi: 14, c: 0.3, q: 'vintage kitchen glass canister white lid', src: [], basis: 'Common utilitarian glass storage jars sell cheaply on resale sites' },
+  { n: 'Small amber medicine bottle', b: [1075, 245, 1120, 340], lo: 4, hi: 10, c: 0.25, q: 'antique amber glass medicine bottle small', src: [], basis: 'Small unmarked amber bottles are common and low value unless embossed' },
+  { n: 'Pressed glass serving tray/dish', b: [800, 390, 995, 490], lo: 8, hi: 16, c: 0.3, q: 'vintage pressed glass serving tray dish', src: [], basis: 'Generic pressed glass servingware sells modestly unless a named pattern is identified' },
+  { n: 'Small pressed glass bowl', b: [960, 470, 1140, 600], lo: 5, hi: 10, c: 0.25, q: 'vintage small pressed glass bowl', src: [], basis: 'Small unmarked glass bowls typically sell for very little individually' },
+  { n: 'Pink floral ceramic vase/planter', b: [1300, 320, 1470, 590], lo: 10, hi: 20, c: 0.3, q: 'vintage pink floral ceramic vase planter', src: [], basis: 'Decorative hand-painted ceramic planters have moderate resale demand' },
+  { n: 'Gold-footed glass compote/hurricane vase', b: [1420, 0, 1568, 590], lo: 15, hi: 28, c: 0.35, q: 'vintage gold footed glass compote vase', src: [], basis: 'Tall decorative glass compotes with gilded bases sell for a moderate premium over plain glass' },
+  { n: 'Pewter tankard/mug', b: [995, 610, 1095, 785], lo: 15, hi: 30, c: 0.3, q: 'vintage pewter tankard mug engraved', src: [], basis: 'Pewter drinkware with detail work generally sells better than plain metalware' },
+  { n: 'Glass candle holder', b: [1085, 585, 1215, 800], lo: 4, hi: 10, c: 0.25, q: 'vintage glass candle holder tumbler', src: [], basis: 'Common glass candle holders are low value items typically sold in lots' },
+  { n: 'Ornate silver-plated round tray', b: [0, 540, 220, 650], lo: 15, hi: 28, c: 0.3, q: 'vintage silver plated ornate round serving tray', src: [], basis: 'Silver-plate decorative trays with embossed designs have moderate collector demand' },
+  { n: 'Fluted metal tart/pie tray', b: [1210, 720, 1568, 880], lo: 8, hi: 16, c: 0.25, q: 'vintage fluted metal serving tray scalloped', src: [], basis: 'Decorative fluted metal serveware typically sells for modest sums' }
+];
+const PRESETS = {
+  flow: {},
+  ready: { view: 'ready' },
+  settings: { view: 'ready', settingsOpen: true },
+  thinking: { view: 'run', t: 14, prevT: 14 },
+  searching: { view: 'run', t: 57, prevT: 57 },
+  first: { view: 'run', t: 101, prevT: 101 },
+  midway: { view: 'run', t: 125, prevT: 125 },
+  done: { view: 'run', t: DONE, prevT: DONE },
+  item: { view: 'run', t: DONE, prevT: DONE, sel: 7, lastSel: 7 },
+  timeout: { view: 'run', t: LIMIT, prevT: LIMIT, slow: true }
+};
+const base = () => ({ view: 'ready', mode: 'scan', t: 0, prevT: 0, running: false, stopped: false, slow: false, sel: -1, lastSel: 7, alsoOpen: false, logOpen: false, model: 'sonnet', edge: 1568, settingsOpen: false });
+const preset = (m) => Object.assign(base(), PRESETS[m] || {});
+const px = (v) => (Math.round(v * 10) / 10) + 'px';
+const pct = (v) => (Math.round(v * 10000) / 100) + '%';
+const mss = (s) => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+const word = (c) => (c >= 0.7 ? 'confident' : c >= 0.4 ? 'fair guess' : 'rough guess');
+const money = (lo, hi) => '$' + lo + '–' + hi;
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const rank = (a, b) => (b.lo - a.lo) || (b.hi - a.hi) || (a.i - b.i);
+const hostOf = (u) => u.replace(/^https?:\/\//, '').split('/')[0];
+const crop = (b) => {
+  const A = 358 / 184;
+  let w = Math.max((b[2] - b[0]) * 1.3, 460), h = (b[3] - b[1]) * 1.3;
+  if (w / h < A) w = h * A; else h = w / A;
+  if (w > PHOTO_W) { w = PHOTO_W; h = w / A; }
+  const x0 = Math.max(0, Math.min(PHOTO_W - w, (b[0] + b[2]) / 2 - w / 2));
+  const y0 = Math.max(0, Math.min(PHOTO_H - h, (b[1] + b[3]) / 2 - h / 2));
+  const k = 358 / w;
+  return {
+    imgL: px(-x0 * k), imgT: px(-y0 * k), imgW: px(PHOTO_W * k), imgH: px(PHOTO_H * k),
+    boxL: px((b[0] - x0) * k), boxT: px((b[1] - y0) * k), boxW: px((b[2] - b[0]) * k), boxH: px((b[3] - b[1]) * k)
+  };
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.uid = Math.random().toString(36).slice(2, 8);
+    this.timer = null;
+    this.settle = null;
+    this.state = preset((props && props.moment) || 'flow');
+  }
+  componentDidUpdate(prev) {
+    if (prev && prev.moment !== this.props.moment) {
+      this.halt();
+      this.setState(preset(this.props.moment || 'flow'));
+    }
+  }
+  componentWillUnmount() { this.halt(); }
+  halt() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.settle) { clearTimeout(this.settle); this.settle = null; }
+  }
+  speed() {
+    const v = Number(this.props.speed ?? 4);
+    return v > 0 ? v : 4;
+  }
+  run() {
+    this.halt();
+    this.setState({ view: 'run', t: 0, prevT: 0, running: true, stopped: false, slow: false, sel: -1, alsoOpen: false, logOpen: false, settingsOpen: false });
+    this.timer = setInterval(() => this.tick(), 100);
+  }
+  tick() {
+    const f = this.state.slow ? 1.3 : 1;
+    const end = Math.min(DONE * f, LIMIT);
+    const t = this.state.t;
+    const next = Math.min(end, t + 0.1 * this.speed());
+    if (next >= end) {
+      clearInterval(this.timer);
+      this.timer = null;
+      this.setState({ prevT: t, t: end, running: false });
+      this.settle = setTimeout(() => { this.settle = null; this.setState({ prevT: this.state.t }); }, 80);
+    } else {
+      this.setState({ prevT: t, t: next });
+    }
+  }
+  stop() {
+    this.halt();
+    this.setState({ stopped: true, running: false, prevT: this.state.t });
+  }
+  newScan() {
+    this.halt();
+    this.setState(Object.assign(base(), { mode: this.state.mode, model: this.state.model, edge: this.state.edge }));
+  }
+  pick(i) { this.setState({ sel: i, lastSel: i }); }
+
+  renderVals() {
+    const st = this.state;
+    const fixed = (this.props.moment || 'flow') !== 'flow';
+    const frame = Number(this.props.frameHeight) || 844;
+    const f = st.slow ? 1.3 : 1;
+    const t = st.t, prevT = st.prevT;
+    const run = st.view === 'run';
+    const doneAt = DONE * f;
+    const finished = run && doneAt <= LIMIT && t >= doneAt;
+    const timedOut = run && doneAt > LIMIT && t >= LIMIT;
+    const stopped = run && st.stopped && !finished && !timedOut;
+    const live = run && !finished && !timedOut && !stopped;
+    const over = run && !live;
+    const landT = ITEMS.map((_, i) => (90 + 3.4 * i) * f);
+    const EASE = 'opacity .35s, transform .45s cubic-bezier(.2,.8,.2,1)';
+    const enters = (at) => prevT < t && prevT < at && at <= t;
+    const entry = (at, dy) => (enters(at) ? { op: '0', tf: 'translateY(' + dy + 'px)', tr: 'none' } : { op: '1', tf: 'translateY(0px)', tr: EASE });
+    const all = ITEMS.map((it, i) => Object.assign({ i: i }, it));
+    const landed = run ? all.filter((x) => landT[x.i] <= t) : [];
+    const nLanded = landed.length;
+    const latest = live && nLanded ? landed[nLanded - 1].i : -1;
+    const gems = landed.filter((x) => x.hi >= 20).sort(rank);
+    const also = landed.filter((x) => x.hi < 20).sort(rank);
+    const sumLo = (xs) => xs.reduce((a, x) => a + x.lo, 0);
+    const sumHi = (xs) => xs.reduce((a, x) => a + x.hi, 0);
+    const model = MODELS.find((m) => m.id === st.model) || MODELS[0];
+    const photo = st.edge + ' × ' + Math.round(st.edge * PHOTO_H / PHOTO_W) + (st.edge === 1568 ? ' · 0.7 MB' : '');
+
+    const inSearch = SEARCHES.some((s) => t >= s.at * f && t < s.end * f);
+    let headline = 'Sending photo';
+    let sub = st.edge === 1568 ? 'Uploading 0.7 MB.' : 'Uploading the photo.';
+    if (finished) {
+      headline = gems.length ? gems.length + ' worth a look' : 'Nothing over $20';
+      sub = plural(nLanded, 'item', 'items') + ' on the table';
+    } else if (timedOut) {
+      headline = 'Stopped at 3:00';
+      sub = 'Hit the time limit. Kept the ' + plural(nLanded, 'item', 'items') + ' found before it.';
+    } else if (stopped) {
+      headline = 'Stopped';
+      sub = nLanded ? 'Kept the ' + plural(nLanded, 'item', 'items') + ' found so far.' : 'Nothing had landed yet.';
+    } else if (nLanded) {
+      headline = nLanded + ' found so far';
+      sub = gems.length ? gems.length + ' worth a look so far' : 'None over $20 yet';
+    } else if (t >= WRITE * f) {
+      headline = 'Writing up items';
+      sub = 'The first items land in a few seconds.';
+    } else if (inSearch) {
+      headline = 'Looking up prices';
+      sub = 'Checking the web for what these sell for.';
+    } else if (t >= LOOK * f) {
+      headline = 'Looking it over';
+      sub = t < MEDIAN ? 'Most photos take about 0:47.' : 'A busy table. This one is taking longer than most.';
+    }
+    const clock = live ? mss(Math.floor(t)) : mss(Math.round(t));
+
+    const log = [
+      { at: 0, text: (t >= LOOK * f ? 'Sent photo · ' : 'Sending photo · ') + photo, right: '' },
+      { at: LOOK * f, text: model.label + ' is looking', right: '' }
+    ];
+    SEARCHES.forEach((s) => {
+      const d = t >= s.end * f;
+      log.push({ at: s.at * f, text: (d ? 'Searched “' : 'Searching “') + s.q + '”', right: d ? s.n + ' results' : '…' });
+    });
+    log.push({ at: WRITE * f, text: 'Writing up items', right: '' });
+    all.forEach((x) => log.push({ at: landT[x.i], text: '#' + (x.i + 1) + ' ' + x.n, right: money(x.lo, x.hi) }));
+    if (finished) log.push({ at: doneAt, text: 'Done · ' + plural(nLanded, 'item', 'items') + ' · $0.165', right: '' });
+    if (timedOut) log.push({ at: LIMIT, text: 'Hit the 3:00 limit', right: '' });
+    if (stopped) log.push({ at: t, text: 'Stopped by you', right: '' });
+    const seen = run ? log.filter((l) => l.at <= t) : [];
+    const line = (l, k, arr) => Object.assign({ time: mss(Math.round(l.at)), text: l.text, right: l.right, color: k === arr.length - 1 ? '#1B1813' : '#4A443B' }, entry(l.at, 6));
+
+    const marks = [];
+    SEARCHES.forEach((s) => {
+      if (run && s.at * f <= t) marks.push({ left: pct(s.at * f / LIMIT), top: '5px', w: '8px', h: '8px', ml: '-4px', r: '50%', bg: '#2B55C8', sh: '0 0 0 2px #FFFCF5' });
+    });
+    landed.forEach((x) => marks.push(x.hi >= 20
+      ? { left: pct(landT[x.i] / LIMIT), top: '3px', w: '3px', h: '12px', ml: '-1.5px', r: '1px', bg: '#FF6A13', sh: 'none' }
+      : { left: pct(landT[x.i] / LIMIT), top: '5px', w: '2px', h: '8px', ml: '-1px', r: '1px', bg: '#FFFCF5', sh: 'none' }));
+
+    const pins = all.map((x) => {
+      const cx = (x.b[0] + x.b[2]) / 2 * S, cy = (x.b[1] + x.b[3]) / 2 * S;
+      const on = run && landT[x.i] <= t;
+      const isTop = x.i === latest;
+      const price = money(x.lo, x.hi);
+      const w = 16 + 7.3 * price.length;
+      const above = cy - 46 >= 4;
+      const coY = above ? cy - 46 : cy + 22;
+      const coX = Math.max(6, Math.min(352 - w, cx - w / 2));
+      return {
+        num: String(x.i + 1), gem: x.hi >= 20, plain: x.hi < 20,
+        left: px(cx - 22), top: px(cy - 22), z: isTop ? '5' : x.hi >= 20 ? '3' : '2', vis: on ? 'visible' : 'hidden',
+        tf: 'rotate(' + (((x.i * 37) % 17) - 8) + 'deg) scale(' + (on ? (isTop ? 1.18 : 1) : 0) + ')',
+        label: 'Item ' + (x.i + 1) + ': ' + x.n + ', $' + x.lo + ' to $' + x.hi,
+        price: price, coLeft: px(coX - (cx - 22)), coTop: px(coY - (cy - 22)),
+        coOp: isTop ? '1' : '0', coTf: isTop ? 'scale(1)' : 'scale(0.6)', coOrigin: above ? '50% 100%' : '50% 0%',
+        pick: () => this.pick(x.i)
+      };
+    });
+
+    const row = (x, k) => {
+      const e = entry(landT[x.i], 8);
+      return {
+        num: String(x.i + 1), name: x.n, price: money(x.lo, x.hi), conf: word(x.c),
+        rule: k === 0 ? '0px solid transparent' : '1px dashed #DDD5C5',
+        bg: x.i === latest ? '#FFE8D6' : '#FFFCF5',
+        rot: 'rotate(' + (((x.i * 37) % 17) - 8) + 'deg)',
+        op: e.op, tf: e.tf, tr: e.tr === 'none' ? 'none' : 'background-color 1.4s, ' + e.tr,
+        label: 'Item ' + (x.i + 1) + ': ' + x.n + ', $' + x.lo + ' to $' + x.hi + ', ' + word(x.c),
+        pick: () => this.pick(x.i)
+      };
+    };
+
+    const si = ITEMS[st.lastSel] ? st.lastSel : 7;
+    const it = ITEMS[si];
+    const nd = Math.round(it.c * 5);
+    const s = Object.assign({
+      kicker: 'ITEM ' + (si + 1) + (finished ? ' OF ' + nLanded : ''),
+      num: String(si + 1), gem: it.hi >= 20, plain: it.hi < 20, name: it.n, price: money(it.lo, it.hi),
+      confWord: word(it.c), confNum: it.c.toFixed(2), confLabel: 'Confidence ' + nd + ' of 5',
+      dots: [0, 1, 2, 3, 4].map((k) => ({ bg: k < nd ? '#1B1813' : 'transparent' })),
+      basis: /[.!?]$/.test(it.basis) ? it.basis : it.basis + '.',
+      query: it.q,
+      soldUrl: 'https://www.ebay.com/sch/i.html?_nkw=' + encodeURIComponent(it.q) + '&LH_Sold=1&LH_Complete=1',
+      hasSources: it.src.length > 0,
+      sources: it.src.map((u) => ({ url: u, host: hostOf(u) })),
+      cropAlt: 'Close-up of ' + it.n
+    }, crop(it.b));
+
+    const sheetOpen = run && st.sel >= 0;
+    const setOpen = !!st.settingsOpen;
+    const SLIDE_IN = 'transform .38s cubic-bezier(.2,.8,.2,1), visibility 0s linear 0s';
+    const SLIDE_OUT = 'transform .3s cubic-bezier(.4,0,1,1), visibility 0s linear .3s';
+    const FADE_IN = 'opacity .3s, visibility 0s linear 0s';
+    const FADE_OUT = 'opacity .3s, visibility 0s linear .3s';
+    const haul = st.mode === 'haul';
+
+    return {
+      frameH: frame + 'px',
+      isReady: st.view === 'ready', isRun: run,
+      isScanMode: !haul, isHaulMode: haul,
+      scanPressed: String(!haul), haulPressed: String(haul),
+      scanBg: haul ? 'transparent' : '#1B1813', scanFg: haul ? '#4A443B' : '#FFFCF5',
+      haulBg: haul ? '#1B1813' : 'transparent', haulFg: haul ? '#FFFCF5' : '#4A443B',
+      chipText: model.label + ' · ' + st.edge + ' px',
+      live: live, over: over, finished: finished, padEnd: run && !finished,
+      blink: live && !fixed && st.running ? (Math.floor(Date.now() / 600) % 2 ? '1' : '0.3') : '1',
+      headline: headline, sub: sub, clock: clock,
+      trackLabel: 'Elapsed ' + clock + '. Most scans take about 0:47. The limit is 3:00.',
+      fillW: pct(Math.min(t, LIMIT) / LIMIT),
+      marks: marks, pins: pins,
+      tail: seen.slice(-3).map(line), full: seen.map(line),
+      showTotals: over && nLanded > 0,
+      gemTotalLabel: 'Worth a look (' + gems.length + ')', gemTotal: money(sumLo(gems), sumHi(gems)),
+      allTotalLabel: 'All ' + plural(nLanded, 'item', 'items'), allTotal: money(sumLo(landed), sumHi(landed)),
+      showRetry: timedOut || stopped,
+      logOpen: !!st.logOpen, logExpanded: String(!!st.logOpen), logChevron: st.logOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+      logToggleText: 'Run log · ' + seen.length + ' lines',
+      showEmpty: run && nLanded === 0,
+      emptyTitle: live ? 'Items show up here one by one.' : 'No items landed before it stopped.',
+      emptySub: live ? 'Real scans so far found 5 to 22 items.' : 'Try again, or take a closer photo.',
+      hasGems: gems.length > 0, gemHead: gems.length + ' · ' + money(sumLo(gems), sumHi(gems)),
+      gemRows: gems.map((x, k) => row(x, k)),
+      hasAlso: also.length > 0, alsoTitle: 'Also seen · ' + also.length,
+      alsoPreview: also.slice(0, 3).map((x) => x.n).join(', ') + (also.length > 3 ? ', …' : ''),
+      alsoOpen: !!st.alsoOpen, alsoExpanded: String(!!st.alsoOpen), alsoChevron: st.alsoOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+      alsoRows: also.map((x) => row(x, 1)),
+      receipt: [
+        { k: 'Model', v: model.label },
+        { k: 'Photo', v: photo },
+        { k: 'Resize', v: '40 ms' },
+        { k: 'Claude', v: '2:46' },
+        { k: 'Round trip', v: '2:46' },
+        { k: 'Tokens', v: '40,218 in · 6,479 out' },
+        { k: 'Web searches', v: '2' },
+        { k: 'Cost', v: '$0.165' }
+      ],
+      s: s,
+      sheetLabel: 'Item ' + (si + 1) + ': ' + it.n,
+      sheetTf: sheetOpen ? 'translateY(0%)' : 'translateY(104%)', sheetVis: sheetOpen ? 'visible' : 'hidden',
+      sheetTr: sheetOpen ? SLIDE_IN : SLIDE_OUT, sheetScrimOp: sheetOpen ? '1' : '0', sheetScrimTr: sheetOpen ? FADE_IN : FADE_OUT,
+      setTf: setOpen ? 'translateY(0%)' : 'translateY(104%)', setVis: setOpen ? 'visible' : 'hidden',
+      setTr: setOpen ? SLIDE_IN : SLIDE_OUT, setScrimOp: setOpen ? '1' : '0', setScrimTr: setOpen ? FADE_IN : FADE_OUT,
+      modelName: 'model-' + this.uid, edgeName: 'edge-' + this.uid,
+      modelOpts: MODELS.map((m) => ({ id: m.id, label: m.label, desc: m.desc, checked: st.model === m.id, pick: () => this.setState({ model: m.id }) })),
+      edgeOpts: EDGES.map((e) => ({ id: String(e.px), label: e.label, desc: e.desc, checked: st.edge === e.px, pick: () => this.setState({ edge: e.px }) })),
+      startRun: () => this.run(),
+      retry: () => this.run(),
+      stop: () => this.stop(),
+      newScan: () => this.newScan(),
+      closeSheet: () => this.setState({ sel: -1 }),
+      openSettings: () => this.setState({ settingsOpen: true }),
+      closeSettings: () => this.setState({ settingsOpen: false }),
+      toggleAlso: () => this.setState({ alsoOpen: !this.state.alsoOpen }),
+      toggleLog: () => this.setState({ logOpen: !this.state.logOpen }),
+      pickScan: () => this.setState({ mode: 'scan' }),
+      pickHaul: () => this.setState({ mode: 'haul' })
+    };
+  }
+}
+</script>
+</body>
+</html>

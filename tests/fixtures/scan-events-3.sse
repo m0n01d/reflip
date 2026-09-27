@@ -1,0 +1,47 @@
+event: photo-received
+data: {"sceneId":"b91895d3-f061-473f-90e2-43160bd1496a","bytes":916,"width":64,"height":48}
+
+event: claude-started
+data: {"t":2,"inputTokens":2800}
+
+event: thinking
+data: {"t":304}
+
+event: tool-run
+data: {"t":1375,"id":"srvtoolu_code_01","name":"code_execution"}
+
+event: search-started
+data: {"t":2135,"id":"srvtoolu_search_01","query":"vintage Pyrex nesting mixing bowls set"}
+
+event: search-done
+data: {"t":2289,"id":"srvtoolu_search_01","count":3}
+
+event: tool-done
+data: {"t":2596,"id":"srvtoolu_code_01","name":"code_execution","status":null}
+
+event: search-started
+data: {"t":3357,"id":"srvtoolu_search_02","query":"rare vintage board game lot price guide"}
+
+event: search-failed
+data: {"t":3508,"id":"srvtoolu_search_02","errorCode":"max_uses_exceeded"}
+
+event: item
+data: {"t":7457,"index":0,"item":{"name":"Pyrex mixing bowl set","query":"vintage Pyrex nesting mixing bowls set","confidence":0.7,"estimateLowUsd":35,"estimateHighUsd":85,"basis":"Complete vintage nesting sets sell steadily to collectors","sources":["https://example-collectibles.test/pyrex-bowls"],"ebay":null,"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20Pyrex%20nesting%20mixing%20bowls%20set&LH_Sold=1&LH_Complete=1","size":"","box":null}}
+
+: heartbeat
+
+event: item
+data: {"t":10334,"index":1,"item":{"name":"Cast iron skillet","query":"vintage unmarked cast iron skillet 10 inch","confidence":0.5,"estimateLowUsd":15,"estimateHighUsd":40,"basis":"Unmarked skillets sell for less than Griswold or Wagner","sources":["https://example-collectibles.test/cast-iron-skillets"],"ebay":null,"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20unmarked%20cast%20iron%20skillet%2010%20inch&LH_Sold=1&LH_Complete=1","size":"","box":null}}
+
+event: item
+data: {"t":12615,"index":2,"item":{"name":"Board game lot","query":"vintage board game lot 1970s","confidence":0.4,"estimateLowUsd":10,"estimateHighUsd":25,"basis":"Mixed-condition lots sell low without box art photos","sources":[],"ebay":null,"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20board%20game%20lot%201970s&LH_Sold=1&LH_Complete=1","size":"","box":null}}
+
+event: done
+data: {"claudeMs":13075,"inputTokens":2800,"outputTokens":410,"webSearches":2,"usd":0.0297}
+
+event: scene
+data: {"sceneId":"b91895d3-f061-473f-90e2-43160bd1496a","model":"claude-sonnet-5","fixture":true,"outputPath":"/Users/dwight/code/reflip/.claude/worktrees/scan-ui-page/data/raw/b91895d3-f061-473f-90e2-43160bd1496a.events.jsonl","items":[{"name":"Pyrex mixing bowl set","query":"vintage Pyrex nesting mixing bowls set","confidence":0.7,"estimateLowUsd":35,"estimateHighUsd":85,"basis":"Complete vintage nesting sets sell steadily to collectors","sources":["https://example-collectibles.test/pyrex-bowls"],"ebay":{"count":6,"minUsd":28.5,"p25Usd":46,"medianUsd":61.5,"p75Usd":71.75,"maxUsd":89.99},"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20Pyrex%20nesting%20mixing%20bowls%20set&LH_Sold=1&LH_Complete=1","size":"","box":null},{"name":"Cast iron skillet","query":"vintage unmarked cast iron skillet 10 inch","confidence":0.5,"estimateLowUsd":15,"estimateHighUsd":40,"basis":"Unmarked skillets sell for less than Griswold or Wagner","sources":["https://example-collectibles.test/cast-iron-skillets"],"ebay":{"count":5,"minUsd":15,"p25Usd":18.5,"medianUsd":22,"p75Usd":26.99,"maxUsd":31},"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20unmarked%20cast%20iron%20skillet%2010%20inch&LH_Sold=1&LH_Complete=1","size":"","box":null},{"name":"Board game lot","query":"vintage board game lot 1970s","confidence":0.4,"estimateLowUsd":10,"estimateHighUsd":25,"basis":"Mixed-condition lots sell low without box art photos","sources":[],"ebay":{"count":5,"minUsd":9.99,"p25Usd":12,"medianUsd":16.5,"p75Usd":20,"maxUsd":24},"soldSearchUrl":"https://www.ebay.com/sch/i.html?_nkw=vintage%20board%20game%20lot%201970s&LH_Sold=1&LH_Complete=1","size":"","box":null}],"imageWidth":64,"imageHeight":48,"timing":{"serverMs":13246,"claudeMs":13075,"ebayMs":2},"cost":{"usd":0.0297,"inputTokens":2800,"outputTokens":410,"cacheReadTokens":0,"cacheWriteTokens":0,"webSearches":2},"ebayNote":null,"quarterSeen":false}
+
+event: end
+data: {"t":13247,"status":"done"}
+
