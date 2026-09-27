@@ -1,0 +1,22 @@
+photo: /private/tmp/claude-501/-Users-dwight-code/884c8a85-ddf3-494b-8bae-c1feeecf9648/scratchpad/scene-5c0c5ba7/photo-1568x1176.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-last  search: on
+headers: 1910ms
+message_start: 1915ms  input_tokens=8595
+tool code_execution: start=21488ms done=30112ms status=-
+tool code_execution: start=30713ms done=33467ms status=-
+tool code_execution: start=34739ms done=37150ms status=-
+search "vintage ceramic light-up Christmas village church house value collectible": start=30073ms done=30091ms count=10
+search "blue and white transferware divided relish bowl vintage value": start=30091ms done=30101ms count=10
+search "vintage milk glass bud vase hobnail value": start=30102ms done=30112ms count=10
+first text delta: 55119ms
+first box: 56764ms
+first item: 56764ms
+last item: 56764ms
+done: 56777ms
+items: 1
+usage: in=8595 out=8 cacheRead=0 cacheWrite=0 webSearch=0
+usd: $0.0173
+stop reason: (stream did not finish)
+items equal final decode: false
+outcome: stopped
+stop to end: 13ms  items kept: 1

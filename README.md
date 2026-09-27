@@ -6,6 +6,7 @@ Claude, and matching eBay active-listing stats.
 
 <img src="docs/shots/reflip-empty.png" width="220" alt="empty">
 <img src="docs/shots/reflip-results.png" width="220" alt="results">
+<img src="docs/shots/haul-view-crops-live.png" width="220" alt="haul">
 
 ## Run it
 
@@ -35,7 +36,9 @@ Vite only proxies `/api`. It does not start the brain. Start the brain first, in
 
 See `CLAUDE.md` for the hard design rules, the pricing table, and how the secrets load.
 
-## Next: M1
+## M1 lite, not built yet
 
 M1 records what each find cost and what it sold for, and measures Claude's ranges against those
 sales. It needs no eBay access. The spec is [`docs/spec-lite-m1.md`](docs/spec-lite-m1.md).
+[`docs/spec-budget.md`](docs/spec-budget.md) builds on it and replaces its Finds view, so that spec
+must change to match before the build.

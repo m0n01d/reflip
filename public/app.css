@@ -86,6 +86,30 @@ h1 {
   margin-bottom: 12px;
 }
 
+.photo-wrap {
+  position: relative;
+  width: 100%;
+  margin-bottom: 12px;
+  border-radius: 10px;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.photo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+}
+
+.photo-box {
+  position: absolute;
+  border: 3px solid #ff5a36;
+  background: rgba(255, 90, 54, 0.15);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
 .items {
   list-style: none;
   margin: 0;
@@ -100,6 +124,42 @@ h1 {
   border-radius: 10px;
   padding: 12px 14px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+}
+
+.item-selected {
+  outline: 3px solid #173b5e;
+  outline-offset: -1px;
+}
+
+.item-top {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.item-crop {
+  flex-shrink: 0;
+  background-repeat: no-repeat;
+  border-radius: 6px;
+  background-color: #eee;
+}
+
+.item-crop-missing {
+  width: 96px;
+  height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #888;
+  font-style: italic;
+  text-align: center;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .item-name {
@@ -159,6 +219,21 @@ h1 {
   gap: 2px;
 }
 
+/* -- Haul mode (docs/spec-haul-mode.md "Step 5: phone") ------------------ */
+/* Every other haul rule moved to src/web/scan.css's haul section (step 7).
+   .haul-error stays here — it is still used by both ScanShell.res's Ready
+   screen and App.res's dock (an Active-phase, non-Done error line; the
+   Finishing-phase Done-retry error has its own restyled fail bar instead,
+   see .haul-bar-fail in scan.css). .haul-start, .haul-view, .store-name,
+   .haul-buttons, .counts, .count, .cost-line and .stop-reason are gone:
+   nothing in src/ uses those classes any more (checked with grep before
+   removal). */
+
+.haul-error {
+  font-size: 13px;
+  color: #a33;
+}
+
 @media (prefers-color-scheme: dark) {
   body {
     background: #111318;
@@ -172,6 +247,13 @@ h1 {
   .item {
     background: #1c1f26;
     box-shadow: none;
+  }
+  .item-selected {
+    outline-color: #4a90d9;
+  }
+  .item-crop,
+  .item-crop-missing {
+    background-color: #2a2d35;
   }
   .footer {
     border-top-color: #333;

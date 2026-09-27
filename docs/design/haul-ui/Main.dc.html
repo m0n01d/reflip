@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>reflip · Haul flow</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap">
+<style>body{margin:0}</style>
+</helmet>
+<div style="position: relative; width: 390px; height: {{ frameH }}; overflow: hidden; background-color: #F3EFE6; color: #1B1813; font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased">
+
+<div style="position: absolute; left: 0; top: 0; width: 390px; height: 100%; overflow-x: hidden; overflow-y: auto; scrollbar-width: none; display: flex; flex-direction: column; background-color: #F3EFE6; background-image: {{ gridImg }}; background-size: 22px 22px">
+
+<header style="height: 56px; flex-shrink: 0; padding: 0 6px 0 16px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; align-items: center; gap: 9px">
+<span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; background-color: #FF6A13; box-shadow: 0 0 0 2px #1B1813"></span>
+<span style="font-size: 23px; font-weight: 800; font-stretch: 85%; letter-spacing: -0.02em">reflip</span>
+</div>
+<sc-if value="{{ showChrome }}" hint-placeholder-val="{{ true }}">
+<button type="button" aria-label="Settings" style="width: 44px; height: 44px; padding: 0; border: 0; border-radius: 12px; background-color: transparent; color: #1B1813; display: flex; align-items: center; justify-content: center; cursor: pointer">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+</button>
+</sc-if>
+</header>
+
+<sc-if value="{{ showChrome }}" hint-placeholder-val="{{ true }}">
+<div role="group" aria-label="Mode" style="position: relative; flex-shrink: 0; margin: 2px 16px 0; padding: 4px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; background-color: #E6DECD; border-radius: 14px">
+<span aria-hidden="true" style="position: absolute; left: 4px; top: 4px; width: calc(50% - 6px); height: 44px; border-radius: 10px; background-color: #1B1813; transform: {{ thumbTf }}; transition: {{ thumbTr }}"></span>
+<button type="button" aria-pressed="{{ scanPressed }}" onClick="{{ pickScan }}" style="position: relative; height: 44px; border: 0; border-radius: 10px; background-color: transparent; color: {{ scanFg }}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; transition: color .2s">Scan</button>
+<button type="button" aria-pressed="{{ haulPressed }}" aria-label="{{ haulAria }}" onClick="{{ pickHaul }}" style="position: relative; height: 44px; border: 0; border-radius: 10px; background-color: transparent; color: {{ haulFg }}; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer; transition: color .2s; display: flex; align-items: center; justify-content: center; gap: 8px">
+<span>Haul</span>
+</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isScanTab }}" hint-placeholder-val="{{ false }}">
+<div style="flex-grow: 1; display: flex; flex-direction: column; padding: 0 16px">
+<h1 style="margin: 30px 0 0; font-size: 54px; line-height: 0.92; font-weight: 800; font-stretch: 78%; letter-spacing: -0.025em">What’s on the table?</h1>
+<p style="margin: 14px 0 0; max-width: 310px; font-size: 17px; line-height: 1.4; color: #4A443B">Snap it. Price stickers land on the photo as each item is found.</p>
+<div style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px">
+<button type="button" style="position: relative; width: 212px; height: 212px; padding: 0; border: 0; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: inherit; transform: rotate(-7deg); box-shadow: 0 2px 0 rgba(27,24,19,.18), 0 16px 32px rgba(27,24,19,.22); cursor: pointer; display: flex; align-items: center; justify-content: center">
+<span aria-hidden="true" style="position: absolute; left: 9px; top: 9px; right: 9px; bottom: 9px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.5)"></span>
+<span style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px">
+<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+<span style="font-size: 23px; font-weight: 750; font-stretch: 85%; letter-spacing: -0.01em">Snap a photo</span>
+</span>
+</button>
+<button type="button" style="min-height: 44px; padding: 0 12px; border: 0; background-color: transparent; color: #4A443B; font-family: inherit; font-size: 16px; font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer">or pick from your photos</button>
+</div>
+<div style="display: flex; justify-content: center; padding-bottom: 26px">
+<button type="button" style="min-height: 44px; padding: 0 16px; border: 1px solid #DDD5C5; border-radius: 999px; background-color: #FFFCF5; color: #4A443B; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"></path><circle cx="16" cy="7" r="2"></circle><circle cx="10" cy="17" r="2"></circle></svg>
+<span>Sonnet 5 · 1568 px</span>
+</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHaulReady }}" hint-placeholder-val="{{ true }}">
+<div style="flex-grow: 1; display: flex; flex-direction: column; padding: 0 16px">
+<h1 style="margin: 30px 0 0; font-size: 54px; line-height: 0.92; font-weight: 800; font-stretch: 78%; letter-spacing: -0.025em">Out on a haul?</h1>
+<p style="margin: 14px 0 0; max-width: 310px; font-size: 17px; line-height: 1.4; color: #4A443B">Snap as you walk. Gems come back while you shop, and the full list lands in your inbox.</p>
+<div style="flex-shrink: 0; margin-top: 18px; filter: drop-shadow(0 1px 0 rgba(27,24,19,.10)) drop-shadow(0 6px 12px rgba(27,24,19,.07))">
+<div style="padding: 12px 14px 22px; border-radius: 12px 12px 0 0; background-color: #FFFCF5; -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%">
+<label for="store-{{ uid }}" style="display: block; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">STORE</label>
+<div style="position: relative; margin-top: 6px; height: 48px">
+<sc-if value="{{ storeEmpty }}" hint-placeholder-val="{{ true }}">
+<span id="store-hint-{{ uid }}" aria-hidden="true" style="position: absolute; left: 15.5px; top: 0; font-size: 17px; line-height: 48px; color: #6B6357; white-space: nowrap; pointer-events: none">Store name (optional)</span>
+</sc-if>
+<input id="store-{{ uid }}" type="text" value="{{ store }}" onChange="{{ typeStore }}" autocomplete="off" aria-describedby="store-hint-{{ uid }}" style="position: relative; display: block; width: 100%; height: 48px; box-sizing: border-box; margin: 0; padding: 0 14px; border: 1.5px solid #1B1813; border-radius: 10px; background-color: transparent; color: #1B1813; font-family: inherit; font-size: 17px">
+</div>
+</div>
+</div>
+<div style="flex-grow: 1; display: flex; align-items: center; justify-content: center">
+<button type="button" onClick="{{ startHaul }}" style="position: relative; width: 212px; height: 212px; padding: 0; border: 0; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: inherit; transform: rotate(-7deg); box-shadow: 0 2px 0 rgba(27,24,19,.18), 0 16px 32px rgba(27,24,19,.22); cursor: pointer; display: flex; align-items: center; justify-content: center">
+<span aria-hidden="true" style="position: absolute; left: 9px; top: 9px; right: 9px; bottom: 9px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.5)"></span>
+<span style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 8px">
+<svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h14l-1.2 10.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"></path><path d="M9 9V7a3 3 0 0 1 6 0v2"></path></svg>
+<span style="font-size: 23px; font-weight: 750; font-stretch: 85%; letter-spacing: -0.01em">Start a haul</span>
+</span>
+</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWalk }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 14px 16px 0; filter: drop-shadow(0 1px 0 rgba(27,24,19,.10)) drop-shadow(0 6px 12px rgba(27,24,19,.07))">
+<section aria-label="Haul status" style="padding: 14px 16px 24px; border-radius: 12px 12px 0 0; background-color: #FFFCF5; -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%">
+<sc-if value="{{ stopped }}" hint-placeholder-val="{{ false }}">
+<div role="alert" style="margin: -14px -16px 14px; padding: 12px 16px; border-radius: 12px 12px 0 0; background-color: #1B1813; color: #FFFCF5; display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 12px; align-items: center">
+<span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 600; line-height: 28px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5; transform: rotate(-8deg)">!</span>
+<div>
+<div style="font-size: 17px; font-weight: 750; line-height: 1.2">Haul stopped</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #E6DECD">{{ stopReason }}</div>
+<div style="margin-top: 6px; font-size: 13px; line-height: 1.4; color: #E6DECD">Photos you add now are kept, but not valued.</div>
+</div>
+</div>
+</sc-if>
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+<span style="min-width: 0; font-size: 20px; line-height: 1.15; font-weight: 750; font-stretch: 85%; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ storeName }}</span>
+<span style="flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums">{{ clock }}</span>
+</div>
+<h1 aria-live="polite" style="margin: 6px 0 0; font-size: 28px; line-height: 1.05; font-weight: 750; font-stretch: 82%; letter-spacing: -0.01em"><span style="display: inline-block; opacity: {{ heroOp }}; transform: {{ heroTf }}; transition: {{ heroTr }}">{{ heroNum }}</span>{{ heroRest }}</h1>
+<p style="margin: 4px 0 0; font-size: 15px; line-height: 1.35; color: #4A443B">{{ sub }}</p>
+<div style="margin-top: 12px; padding-top: 12px; border-top: 1px dashed #D5CCBA">
+<div role="img" aria-label="{{ tallyLabel }}" style="display: flex; flex-wrap: wrap; gap: 4px">
+<sc-for list="{{ tiles }}" as="x" hint-placeholder-count="0">
+<span style="position: relative; width: 10px; height: 14px; box-sizing: border-box; border-radius: 2px; border: {{ x.border }}; background-color: {{ x.bg }}; background-image: {{ x.img }}; background-size: 6px 6px; background-position: {{ x.pos }}; box-shadow: {{ x.sh }}; opacity: {{ x.op }}; transform: {{ x.tf }}; transition: {{ x.tr }}">
+<sc-if value="{{ x.cross }}" hint-placeholder-val="{{ false }}">
+<svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="#1B1813" stroke-width="1.4" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 0; top: 2px"><path d="M2 2l4 4M6 2L2 6"></path></svg>
+</sc-if>
+</span>
+</sc-for>
+</div>
+<div style="margin-top: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #4A443B">{{ legend }}</div>
+<sc-if value="{{ isOffline }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="margin-top: 12px; padding: 10px 12px; border-radius: 10px; background-color: #F3EFE6; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start">
+<span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 50%; background-color: #1B1813; color: #FFFCF5; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 600; line-height: 24px; text-align: center; transform: rotate(-8deg)">!</span>
+<span style="font-size: 14px; font-weight: 600; line-height: 20px">{{ offlineText }}</span>
+</div>
+</sc-if>
+<div style="margin-top: 14px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357">
+<span>budget</span>
+<span style="font-size: 12px; font-weight: 600; color: #1B1813">{{ budgetText }}</span>
+</div>
+<div role="img" aria-label="{{ budgetLabel }}" style="position: relative; margin-top: 6px; height: 6px; border-radius: 3px; background-color: #E9E2D3; overflow: hidden">
+<div style="width: {{ budgetW }}; height: 6px; background-color: #1B1813; transition: {{ budgetTr }}"></div>
+<sc-for list="{{ notches }}" as="n" hint-placeholder-count="0">
+<span style="position: absolute; left: {{ n.left }}; top: 0; width: 1.5px; height: 6px; margin-left: -0.75px; background-color: #FFFCF5"></span>
+</sc-for>
+</div>
+</div>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ showTip }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 14px 16px 0">
+<p style="margin: 0; max-width: 310px; min-height: 44px; box-sizing: border-box; padding: 7px 16px; border: 1px solid #DDD5C5; border-radius: 16px; background-color: #FFFCF5; color: #4A443B; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500; line-height: 18px; display: flex; align-items: center; gap: 10px">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="flex-shrink: 0"><circle cx="12" cy="12" r="8.5"></circle><circle cx="12" cy="12" r="5"></circle></svg>
+<span>Put a quarter next to small items to show their size.</span>
+</p>
+</div>
+</sc-if>
+
+<sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 14px 16px 0; filter: drop-shadow(0 1px 0 rgba(27,24,19,.10)) drop-shadow(0 6px 12px rgba(27,24,19,.07)); clip-path: {{ printClip }}; transition: {{ printTr }}">
+<section aria-label="Haul receipt" style="position: relative; padding: 14px 16px 24px; border-radius: 12px 12px 0 0; background-color: #FFFCF5; -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%; mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 14px 100%">
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 600; letter-spacing: .12em; color: #6B6357">HAUL RECEIPT</div>
+<h1 aria-live="polite" style="margin: 8px 0 0; font-size: 28px; line-height: 1.05; font-weight: 750; font-stretch: 82%; letter-spacing: -0.01em">{{ doneHero }}</h1>
+<p style="margin: 4px 0 0; font-size: 15px; line-height: 1.35; color: #4A443B">The digest is in your inbox.</p>
+<div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #D5CCBA; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 22px">
+<sc-for list="{{ receipt }}" as="r" hint-placeholder-count="8">
+<div style="display: flex; align-items: baseline; gap: 6px">
+<span style="white-space: nowrap; color: #4A443B">{{ r.k }}</span>
+<span aria-hidden="true" style="flex-grow: 1; min-width: 12px; border-bottom: 1.5px dotted #B9AE98"></span>
+<span style="white-space: nowrap; font-weight: 500">{{ r.v }}</span>
+</div>
+</sc-for>
+</div>
+<div role="img" aria-label="Stamp: hauled, Sep 26 2026" style="position: absolute; right: 16px; top: 22px; padding: 3px; border: 2px solid #1B1813; border-radius: 7px; color: #1B1813; opacity: {{ stampOp }}; transform: {{ stampTf }}; transition: {{ stampTr }}">
+<div style="padding: 5px 12px 4px; border: 1px solid #1B1813; border-radius: 4px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace">
+<div style="margin-right: -0.18em; font-size: 20px; font-weight: 600; line-height: 24px; letter-spacing: .18em">HAULED</div>
+<div style="margin-right: -0.16em; font-size: 10px; font-weight: 600; line-height: 13px; letter-spacing: .16em">SEP 26 2026</div>
+</div>
+</div>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasFailed }}" hint-placeholder-val="{{ false }}">
+<section aria-label="Failed photos" style="flex-shrink: 0; margin: 14px 16px 0; padding: 12px 14px; border: 1px solid #E3DBCB; border-radius: 12px; background-color: #FFFCF5">
+<div style="display: flex; align-items: center; gap: 10px">
+<span aria-hidden="true" style="position: relative; flex-shrink: 0; width: 14px; height: 20px; box-sizing: border-box; border-radius: 3px; border: 1.5px solid #1B1813">
+<svg width="11" height="11" viewBox="0 0 8 8" fill="none" stroke="#1B1813" stroke-width="1.3" stroke-linecap="round" aria-hidden="true" style="position: absolute; left: 0; top: 3px"><path d="M2 2l4 4M6 2L2 6"></path></svg>
+</span>
+<h2 style="margin: 0; font-size: 17px; line-height: 1.2; font-weight: 700">{{ failedTitle }}</h2>
+</div>
+<sc-for list="{{ failRows }}" as="f" hint-placeholder-count="2">
+<div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #DDD5C5; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 17px; color: #1B1813; overflow-wrap: anywhere">{{ f.err }}</div>
+</sc-for>
+</section>
+</sc-if>
+
+<sc-if value="{{ showEmpty }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 18px 16px 0; padding: 22px 18px; border: 2px dashed #D5CCBA; border-radius: 14px; text-align: center">
+<div style="font-size: 17px; font-weight: 650">Gems land here</div>
+<div style="margin-top: 4px; font-size: 14px; line-height: 1.4; color: #6B6357">Anything with a high estimate of $20 or more.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ hasGems }}" hint-placeholder-val="{{ false }}">
+<section aria-label="{{ gemsTitle }}" style="flex-shrink: 0; margin: 22px 16px 0">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 12px">
+<h2 style="margin: 0; font-size: 20px; line-height: 1.2; font-weight: 700">{{ gemsTitle }}</h2>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 600">{{ gemHead }}</span>
+</div>
+<div style="margin-top: 2px; font-size: 13px; color: #6B6357">high estimate $20 or more</div>
+<div style="margin-top: 10px; border: 1px solid #E3DBCB; border-radius: 12px; overflow: hidden; background-color: #FFFCF5">
+<sc-for list="{{ gemRows }}" as="r" hint-placeholder-count="3">
+<div style="border-top: {{ r.rule }}">
+<button type="button" aria-label="{{ r.label }}" aria-expanded="{{ r.expanded }}" onClick="{{ r.pick }}" style="width: 100%; min-height: 64px; padding: 10px 14px; border: 0; background-color: {{ r.bg }}; color: #1B1813; font-family: inherit; text-align: left; display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 12px; align-items: center; cursor: pointer; opacity: {{ r.op }}; transform: {{ r.tf }}; transition: {{ r.tr }}">
+<span style="position: relative; width: 44px; height: 44px">
+<span style="position: absolute; left: 0; top: 0; width: 44px; height: 44px; border-radius: 8px; overflow: hidden; background-color: #2A251E">
+<img src="/_blob/be38a67f4b37d98c862a8a275b4e27c0" alt="" style="position: absolute; left: {{ r.imgL }}; top: {{ r.imgT }}; width: {{ r.imgW }}; height: {{ r.imgH }}; max-width: none">
+</span>
+<span style="position: absolute; left: -7px; top: -7px; width: 22px; height: 22px; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; line-height: 22px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5, 0 1px 3px rgba(27,24,19,.35); transform: {{ r.stTf }}; transition: {{ r.stTr }}">{{ r.num }}</span>
+</span>
+<span style="min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 16px; font-weight: 600; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">{{ r.name }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 15px; color: #6B6357; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{ r.where }}</span>
+</span>
+<span style="display: flex; flex-direction: column; align-items: flex-end; gap: 2px">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 16px; font-weight: 600; white-space: nowrap">{{ r.price }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #6B6357; white-space: nowrap">{{ r.conf }}</span>
+</span>
+</button>
+<div style="display: grid; grid-template-rows: {{ r.rows }}; transition: {{ r.rowsTr }}">
+<div style="overflow: hidden; min-height: 0">
+<div style="position: relative; margin: 12px 0 0; width: 358px; height: 184px; border-radius: 12px; overflow: hidden; background-color: #2A251E">
+<img src="/_blob/be38a67f4b37d98c862a8a275b4e27c0" alt="{{ r.detail.cropAlt }}" style="position: absolute; left: {{ r.detail.imgL }}; top: {{ r.detail.imgT }}; width: {{ r.detail.imgW }}; height: {{ r.detail.imgH }}; max-width: none">
+<span aria-hidden="true" style="position: absolute; left: {{ r.detail.boxL }}; top: {{ r.detail.boxT }}; width: {{ r.detail.boxW }}; height: {{ r.detail.boxH }}; box-sizing: border-box; border: 2px solid #FF6A13; border-radius: 6px; box-shadow: 0 0 0 999px rgba(27,24,19,.28)"></span>
+<sc-for list="{{ r.detail.pins }}" as="p" hint-placeholder-count="0">
+<span aria-hidden="true" style="position: absolute; left: {{ p.left }}; top: {{ p.top }}; width: 26px; height: 26px; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; line-height: 26px; text-align: center; box-shadow: 0 0 0 2px #FFFCF5, 0 3px 8px rgba(27,24,19,.45); transform: {{ p.rot }}">{{ p.num }}</span>
+</sc-for>
+</div>
+<sc-if value="{{ r.detail.hasSize }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 10px; font-size: 15px; line-height: 1.3; color: #6B6357">{{ r.detail.size }}</div>
+</sc-if>
+<div style="margin-top: 12px; display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 36px; font-weight: 600; letter-spacing: -0.03em">{{ r.detail.price }}</span>
+<span style="font-size: 14px; color: #6B6357">Claude’s estimate</span>
+</div>
+<div style="margin-top: 6px; display: flex; align-items: center; gap: 8px">
+<span role="img" aria-label="{{ r.detail.confLabel }}" style="display: flex; gap: 4px">
+<sc-for list="{{ r.detail.dots }}" as="d" hint-placeholder-count="5">
+<span style="width: 9px; height: 9px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #1B1813; background-color: {{ d.bg }}"></span>
+</sc-for>
+</span>
+<span style="font-size: 14px; font-weight: 600">{{ r.detail.confWord }}</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: #6B6357">{{ r.detail.confNum }}</span>
+</div>
+<div style="margin-top: 12px; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; align-items: start">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-top: 2px"><path d="M12 21s-6.5-5.6-6.5-10.5a6.5 6.5 0 0 1 13 0C18.5 15.4 12 21 12 21z"></path><circle cx="12" cy="10.5" r="2.3"></circle></svg>
+<span style="font-size: 15px; line-height: 1.45; color: #4A443B">{{ r.detail.where }}</span>
+</div>
+<div style="margin-top: 16px; padding: 14px; border: 1px solid #E3DBCB; border-radius: 12px; background-color: #F3EFE6">
+<div style="display: flex; align-items: baseline; gap: 6px">
+<span style="font-size: 13px; font-weight: 750; letter-spacing: .02em">eBay</span>
+<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #6B6357">{{ r.detail.ebayTag }}</span>
+</div>
+<sc-if value="{{ r.detail.hasStats }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 10px; display: grid; grid-template-columns: 64px minmax(0, 1fr) 84px; gap: 8px">
+<div>
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357">listings</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 600; line-height: 20px">{{ r.detail.eN }}</div>
+</div>
+<div>
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357">range</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 600; line-height: 20px; white-space: nowrap">{{ r.detail.eRange }}</div>
+</div>
+<div>
+<div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357">median</div>
+<div style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 600; line-height: 20px">{{ r.detail.eMed }}</div>
+</div>
+</div>
+<div role="img" aria-label="{{ r.detail.barLabel }}" style="position: relative; margin-top: 12px; height: 66px">
+<span style="position: absolute; left: {{ r.detail.b.labMinL }}; top: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357; white-space: nowrap">{{ r.detail.b.labMin }}</span>
+<span style="position: absolute; left: {{ r.detail.b.labMedL }}; top: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; font-weight: 600; line-height: 14px; color: #1B1813; white-space: nowrap">{{ r.detail.b.labMed }}</span>
+<span style="position: absolute; left: {{ r.detail.b.labMaxL }}; top: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #6B6357; white-space: nowrap">{{ r.detail.b.labMax }}</span>
+<span style="position: absolute; left: {{ r.detail.b.lineL }}; top: 25px; width: {{ r.detail.b.lineW }}; height: 1.5px; background-color: #1B1813"></span>
+<span style="position: absolute; left: {{ r.detail.b.tickMinL }}; top: 19px; width: 1.5px; height: 14px; background-color: #1B1813"></span>
+<span style="position: absolute; left: {{ r.detail.b.tickMaxL }}; top: 19px; width: 1.5px; height: 14px; background-color: #1B1813"></span>
+<span style="position: absolute; left: {{ r.detail.b.medL }}; top: 17px; width: 3px; height: 18px; border-radius: 1px; background-color: #1B1813"></span>
+<span style="position: absolute; left: 0; right: 0; top: 40px; height: 8px; border-radius: 4px; background-color: #E6DECD"></span>
+<span style="position: absolute; left: {{ r.detail.b.bandL }}; top: 40px; width: {{ r.detail.b.bandW }}; height: 8px; border-radius: 4px; background-color: #FF6A13"></span>
+<span style="position: absolute; left: {{ r.detail.b.bandTextL }}; top: 52px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 14px; color: #4A443B; white-space: nowrap">{{ r.detail.b.bandText }}</span>
+</div>
+</sc-if>
+<sc-if value="{{ r.detail.noStats }}" hint-placeholder-val="{{ false }}">
+<div style="margin-top: 6px; font-size: 16px; font-weight: 650">No eBay stats</div>
+</sc-if>
+<a href="{{ r.detail.soldUrl }}" target="_blank" rel="noopener noreferrer" style="margin-top: 12px; min-height: 48px; border-radius: 10px; background-color: #FF6A13; color: #1B1813; font-size: 16px; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px">Check sold prices on eBay<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"></path></svg></a>
+</div>
+<div style="height: 16px"></div>
+</div>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</sc-if>
+
+<sc-if value="{{ hasOthers }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 14px 16px 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 18px; color: #6B6357">{{ othersText }}</div>
+</sc-if>
+
+<sc-if value="{{ isDone }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; margin: 22px 16px 0; padding-bottom: 32px">
+<button type="button" onClick="{{ newHaul }}" style="width: 358px; height: 56px; border: 0; border-radius: 14px; background-color: #FF6A13; color: #1B1813; font-family: inherit; font-size: 18px; font-weight: 750; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; box-shadow: 0 2px 0 rgba(27,24,19,.18)">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9h14l-1.2 10.2a1.5 1.5 0 0 1-1.5 1.3H7.7a1.5 1.5 0 0 1-1.5-1.3z"></path><path d="M9 9V7a3 3 0 0 1 6 0v2"></path></svg>
+<span>Start a new haul</span>
+</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ isWalk }}" hint-placeholder-val="{{ false }}">
+<div style="flex-shrink: 0; height: 150px"></div>
+</sc-if>
+</div>
+
+<sc-if value="{{ showDock }}" hint-placeholder-val="{{ false }}">
+<div role="group" aria-label="Haul controls" style="position: absolute; left: 0; bottom: 0; width: 390px; height: 124px; box-sizing: border-box; padding: 0 16px 10px; border-top: 1px solid #DDD5C5; background-color: #F3EFE6; display: grid; grid-template-columns: 96px minmax(0, 1fr) 96px; align-items: center">
+<button type="button" onClick="{{ addPhotos }}" style="justify-self: start; width: 96px; height: 92px; padding: 0; border: 0; background-color: transparent; color: #1B1813; font-family: inherit; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer">
+<span style="width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%; border: 1.5px solid #1B1813; background-color: #FFFCF5; display: flex; align-items: center; justify-content: center">
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h11.5A2.5 2.5 0 0 1 21 6v11"></path><rect x="3" y="7" width="14" height="13.5" rx="2"></rect><path d="M3 17.5l4-4 3.5 3.5 2-2 4.5 4.5"></path><circle cx="12.5" cy="11" r="1.3"></circle></svg>
+</span>
+<span style="font-size: 13px; font-weight: 650">Add photos</span>
+</button>
+<button type="button" aria-label="Snap a photo" onClick="{{ snap }}" onPointerDown="{{ press }}" onPointerUp="{{ release }}" onPointerLeave="{{ release }}" style="justify-self: center; position: relative; width: 88px; height: 88px; padding: 0; border: 0; border-radius: 50%; background-color: #FF6A13; color: #1B1813; font-family: inherit; transform: {{ snapTf }}; transition: transform .12s ease-out; box-shadow: 0 2px 0 rgba(27,24,19,.18), 0 10px 22px rgba(27,24,19,.22); cursor: pointer; display: flex; align-items: center; justify-content: center">
+<span aria-hidden="true" style="position: absolute; left: 5px; top: 5px; right: 5px; bottom: 5px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.5); transform: {{ ringTf }}; transition: {{ ringTr }}"></span>
+<span style="position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5A1.5 1.5 0 0 1 4.5 7h2.6l1.6-2.2h6.6L16.9 7h2.6A1.5 1.5 0 0 1 21 8.5v9A1.5 1.5 0 0 1 19.5 19h-15A1.5 1.5 0 0 1 3 17.5z"></path><circle cx="12" cy="13" r="3.6"></circle></svg>
+<span style="font-size: 15px; font-weight: 750; font-stretch: 85%">Snap</span>
+</span>
+</button>
+<button type="button" onClick="{{ tapDone }}" style="justify-self: end; width: 96px; height: 48px; border: 0; border-radius: 999px; background-color: #1B1813; color: #FFFCF5; font-family: inherit; font-size: 16px; font-weight: 700; cursor: pointer">Done</button>
+</div>
+</sc-if>
+
+<sc-if value="{{ showBar }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="position: absolute; left: 0; bottom: 0; width: 390px; height: 124px; box-sizing: border-box; padding: 0 20px 10px; border-top: 1px solid #DDD5C5; background-color: #F3EFE6; display: flex; align-items: center; gap: 14px">
+<span aria-hidden="true" style="position: relative; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background-color: #FF6A13; transform: rotate(-7deg)">
+<span style="position: absolute; left: 4px; top: 4px; right: 4px; bottom: 4px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.6); transform: {{ ringTf }}; transition: {{ ringTr }}"></span>
+</span>
+<span style="font-size: 16px; font-weight: 650; line-height: 1.35">{{ barText }}</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ showFailBar }}" hint-placeholder-val="{{ false }}">
+<div role="status" style="position: absolute; left: 0; bottom: 0; width: 390px; height: 124px; box-sizing: border-box; padding: 0 20px 10px; border-top: 1px solid #DDD5C5; background-color: #F3EFE6; display: flex; align-items: center; gap: 14px">
+<span aria-hidden="true" style="position: relative; flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; background-color: #FF6A13; transform: rotate(-7deg)">
+<span style="position: absolute; left: 4px; top: 4px; right: 4px; bottom: 4px; border-radius: 50%; border: 2px dashed rgba(27,24,19,.6); transform: {{ ringTf }}; transition: {{ ringTr }}"></span>
+</span>
+<span style="font-size: 16px; font-weight: 650; line-height: 1.35">Can’t reach reflip to finish. It tries again on its own.</span>
+</div>
+</sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"moment":{"editor":"enum","options":["flow","ready","first","gems","gem","finishing","done","nosignal","stopped","failed"],"default":"flow"},"speed":{"editor":"range","min":1,"max":20,"step":1,"unit":"x","default":4},"frameHeight":{"editor":null,"default":844},"$preview":{"width":390,"height":844}}'>
+// Haul mode in the Scan look. One sample haul at an estate sale. Every photo is the Scan
+// canvas's table photo, and the gems are its real items with a high estimate of $20 or more.
+const PHOTO_W = 1568, PHOTO_H = 1176;
+const CAP = 10, AUTO_DONE = 1250, LAG = 20, STEP = 9, BAR_W = 328, NEVER = 1e9;
+const START = 9 * 3600 + 14 * 60;
+const STORE = 'Birch St. estate sale', STORE_B = 'Elm St. antique mall';
+const GRID = 'radial-gradient(circle, #E4DCCB 0 2px, transparent 2.6px)';
+const HATCH = 'linear-gradient(45deg, #FF6A13 25%, transparent 25%, transparent 50%, #FF6A13 50%, #FF6A13 75%, transparent 75%, transparent)';
+const EB6 = { n: 6, min: 28.5, med: 61.5, max: 89.99 };
+const EB5 = { n: 5, min: 15, med: 22, max: 31 };
+// Gem numbers are arrival order. p is the photo the gem came from. w and size are sample text.
+const GEMS = [
+  { n: 'Vintage clear glass bottles (pair)', b: [790, 90, 1000, 430], lo: 10, hi: 24, c: 0.3, p: 3, w: 'back row, center, clear glass pair', size: '', q: 'antique clear glass soda bottles lot', eb: null },
+  { n: 'Ceramic lit Christmas village church', b: [235, 170, 530, 520], lo: 15, hi: 32, c: 0.4, p: 5, w: 'back left, the lit church', size: '', q: 'vintage ceramic lighted christmas village church', eb: null },
+  { n: 'Blue and white transferware scalloped bowl set', b: [440, 505, 1000, 760], lo: 20, hi: 42, c: 0.4, p: 6, w: 'front center, blue and white stack', size: 'about 9 in wide', q: 'vintage blue white transferware scalloped bowl plates', eb: EB6 },
+  { n: 'Pewter tankard/mug', b: [995, 610, 1095, 785], lo: 15, hi: 30, c: 0.3, p: 6, w: 'front, right of the blue bowls', size: '', q: 'vintage pewter tankard mug engraved', eb: EB5 },
+  { n: 'Ornate silver-plated round tray', b: [0, 540, 220, 650], lo: 15, hi: 28, c: 0.3, p: 8, w: 'left edge, middle of the table', size: '', q: 'vintage silver plated ornate round serving tray', eb: null },
+  { n: 'Gold-footed glass compote/hurricane vase', b: [1420, 0, 1568, 590], lo: 15, hi: 28, c: 0.35, p: 9, w: 'far right, tall gold-footed glass', size: 'about 12 in tall', q: 'vintage gold footed glass compote vase', eb: null },
+  { n: 'Pink floral ceramic vase/planter', b: [1300, 320, 1470, 590], lo: 10, hi: 20, c: 0.3, p: 9, w: 'right side, next to the tall glass', size: '', q: 'vintage pink floral ceramic vase planter', eb: null },
+  { n: 'Vintage tin canister', b: [325, 445, 455, 635], lo: 10, hi: 25, c: 0.3, p: 20, w: 'front left, below the church', size: '', q: 'vintage advertising tin canister container', eb: null },
+  { n: 'Stacked scalloped-edge bowls', b: [0, 110, 215, 300], lo: 10, hi: 22, c: 0.35, p: 31, w: 'back left corner', size: '', q: 'vintage scalloped edge china bowls set', eb: null },
+  { n: 'Bisque figurine cluster (bride/groom & angels)', b: [480, 195, 710, 400], lo: 10, hi: 22, c: 0.3, p: 44, w: 'back center, right of the church', size: '', q: 'vintage bisque porcelain figurine set wedding angel', eb: null },
+  { n: 'Milk glass creamer pitcher with painted design', b: [980, 340, 1150, 495], lo: 10, hi: 20, c: 0.35, p: 58, w: 'center right, by the milk glass', size: '', q: 'vintage milk glass hand painted creamer pitcher', eb: null }
+];
+const gemsIn = (k) => GEMS.map((g, i) => (g.p === k ? i + 1 : 0)).filter((n) => n > 0);
+// The main haul, in haul seconds from 9:14 AM: [taken, sent, valued, other things, Claude cost].
+const MAIN = [
+  [40, 44, 95, 3, 0.13], [170, 175, 262, 2, 0.15], [245, 258, 320, 1, 0.14], [380, 384, 441, 2, 0.12],
+  [520, 525, 590, 1, 0.16], [655, 660, 735, 0, 0.15], [800, 806, 861, 2, 0.13], [1010, 1016, 1102, 0, 0.14],
+  [1040, 1046, 1150, 1, 0.16], [1075, 1080, 1190, 2, 0.13], [1105, 1122, 1300, 3, 0.12], [1200, 1262, 1340, 1, 0.15],
+  [1240, 1275, 1360, 2, 0.14]
+].map((r, j) => ({ k: j + 1, taken: r[0], sent: r[1], valued: r[2], others: r[3], cost: r[4], gems: gemsIn(j + 1) }));
+// The Stopped board: a second haul of 72 photos that runs into the $10.00 budget.
+const BUDGET = [];
+for (let j = 0; j < 72; j += 1) {
+  BUDGET.push({ k: j + 1, taken: 40 + j * 74, sent: 45 + j * 74, valued: 100 + j * 74, others: 2, cost: j === 71 ? 0.151 : 0.139, gems: gemsIn(j + 1) });
+}
+const BUDGET_STOP = 100 + 71 * 74, BUDGET_END = 5440;
+// The Failed board: the real error text of two photos, and a Done call that could not reach the server.
+const FAILS = {
+  11: { failAt: 1302, err: 'Claude took longer than 180 s' },
+  12: { failAt: 1330, err: "could not decode Claude's reply" }
+};
+const PRESETS = {
+  flow: {},
+  ready: {},
+  first: { phase: 'haul', t: 252, prevT: 252 },
+  gems: { phase: 'haul', t: 1116, prevT: 1116, flash: 5 },
+  gem: { phase: 'haul', t: 1180, prevT: 1180, sel: 3 },
+  finishing: { phase: 'haul', t: 1252, prevT: 1252, doneAt: 1250 },
+  done: { phase: 'haul', t: 1400, prevT: 1400, doneAt: 1250, stamped: true },
+  nosignal: { phase: 'haul', t: 1240, prevT: 1240, offline: 1100 },
+  stopped: { phase: 'haul', kind: 'budget', t: BUDGET_END, prevT: BUDGET_END },
+  failed: { phase: 'haul', t: 1400, prevT: 1400, doneAt: 1250, fails: true, failDone: true, failSince: 1400 }
+};
+const base = () => ({ mode: 'haul', phase: 'ready', kind: 'main', t: 0, prevT: 0, doneAt: null, retryAt: null, offline: null, fails: false, failDone: false, failSince: null, extra: [], sel: -1, flash: 0, stamped: false, pressed: false, store: '' });
+const preset = (m) => Object.assign(base(), PRESETS[m] || {});
+const NO_BAR = { labMin: '', labMinL: '0px', labMed: '', labMedL: '0px', labMax: '', labMaxL: '0px', lineL: '0px', lineW: '0px', tickMinL: '0px', tickMaxL: '0px', medL: '0px', bandL: '0px', bandW: '0px', bandText: '', bandTextL: '0px' };
+const px = (v) => (Math.round(v * 10) / 10) + 'px';
+const pct = (v) => (Math.round(v * 10000) / 100) + '%';
+const two = (n) => String(n).padStart(2, '0');
+const clockOf = (s) => {
+  const v = Math.max(0, Math.floor(s));
+  const h = Math.floor(v / 3600), m = Math.floor((v % 3600) / 60), x = v % 60;
+  return h ? h + ':' + two(m) + ':' + two(x) : m + ':' + two(x);
+};
+const timeOf = (s) => {
+  const v = START + Math.floor(s);
+  const h = Math.floor(v / 3600) % 24, m = Math.floor((v % 3600) / 60);
+  return (((h + 11) % 12) + 1) + ':' + two(m) + (h < 12 ? ' AM' : ' PM');
+};
+const word = (c) => (c >= 0.7 ? 'confident' : c >= 0.4 ? 'fair guess' : 'rough guess');
+const money = (lo, hi) => '$' + lo + '–' + hi;
+const usd = (v) => '$' + v.toFixed(2);
+const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+const rank = (a, b) => (b.lo - a.lo) || (b.hi - a.hi) || (a.i - b.i);
+const tilt = (n) => ((n * 37) % 17) - 8;
+const crop = (b) => {
+  const A = 358 / 184;
+  let w = Math.max((b[2] - b[0]) * 1.3, 460), h = (b[3] - b[1]) * 1.3;
+  if (w / h < A) w = h * A; else h = w / A;
+  if (w > PHOTO_W) { w = PHOTO_W; h = w / A; }
+  const x0 = Math.max(0, Math.min(PHOTO_W - w, (b[0] + b[2]) / 2 - w / 2));
+  const y0 = Math.max(0, Math.min(PHOTO_H - h, (b[1] + b[3]) / 2 - h / 2));
+  const k = 358 / w;
+  return {
+    x0: x0, y0: y0, k: k,
+    imgL: px(-x0 * k), imgT: px(-y0 * k), imgW: px(PHOTO_W * k), imgH: px(PHOTO_H * k),
+    boxL: px((b[0] - x0) * k), boxT: px((b[1] - y0) * k), boxW: px((b[2] - b[0]) * k), boxH: px((b[3] - b[1]) * k)
+  };
+};
+const thumb = (b) => {
+  const side = Math.min(Math.max(b[2] - b[0], b[3] - b[1]) * 1.2, PHOTO_H);
+  const x0 = Math.max(0, Math.min(PHOTO_W - side, (b[0] + b[2]) / 2 - side / 2));
+  const y0 = Math.max(0, Math.min(PHOTO_H - side, (b[1] + b[3]) / 2 - side / 2));
+  const k = 44 / side;
+  return { imgL: px(-x0 * k), imgT: px(-y0 * k), imgW: px(PHOTO_W * k), imgH: px(PHOTO_H * k) };
+};
+const bar = (g) => {
+  const e = g.eb;
+  const lo = Math.min(e.min, g.lo), hi = Math.max(e.max, g.hi);
+  const x = (v) => (v - lo) / (hi - lo) * BAR_W;
+  const at = (v, text) => { const w = text.length * 6.6; return px(Math.max(0, Math.min(BAR_W - w, x(v) - w / 2))); };
+  const band = 'Claude’s ' + money(g.lo, g.hi);
+  return {
+    labMin: usd(e.min), labMinL: at(e.min, usd(e.min)),
+    labMed: usd(e.med), labMedL: at(e.med, usd(e.med)),
+    labMax: usd(e.max), labMaxL: at(e.max, usd(e.max)),
+    lineL: px(x(e.min)), lineW: px(x(e.max) - x(e.min)),
+    tickMinL: px(x(e.min) - 0.75), tickMaxL: px(x(e.max) - 0.75), medL: px(x(e.med) - 1.5),
+    bandL: px(x(g.lo)), bandW: px(x(g.hi) - x(g.lo)),
+    bandText: band, bandTextL: at((g.lo + g.hi) / 2, band)
+  };
+};
+const photosOf = (st, doneAt) => {
+  let list = (st.kind === 'budget' ? BUDGET : MAIN).concat(st.extra || []);
+  if (st.fails) list = list.map((p) => (FAILS[p.k] ? Object.assign({}, p, FAILS[p.k]) : p));
+  if (doneAt != null) list = list.filter((p) => p.taken <= doneAt);
+  return list;
+};
+// The digest goes out LAG seconds after the last photo is valued and the Done call gets through.
+const digestOf = (st, doneAt) => {
+  if (doneAt == null || st.failDone || st.offline != null) return null;
+  const list = photosOf(st, doneAt);
+  const lastSent = list.reduce((a, p) => Math.max(a, p.sent), 0);
+  const lastRes = list.reduce((a, p) => Math.max(a, p.failAt != null ? p.failAt : p.valued), 0);
+  const callAt = st.retryAt != null ? st.retryAt : Math.max(doneAt, lastSent);
+  return Math.max(lastRes, callAt) + LAG;
+};
+const reduced = () => {
+  try {
+    return typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch (e) {
+    return false;
+  }
+};
+
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.uid = Math.random().toString(36).slice(2, 8);
+    this.timer = null;
+    this.settle = null;
+    this.stamp = null;
+    this.pulse = null;
+    this.beat = 0;
+    this.ringDeg = 0;
+    this.ringActive = false;
+    this.animating = false;
+    this.hatchSeen = {};
+    this.still = reduced();
+    this.state = preset((props && props.moment) || 'flow');
+  }
+  componentDidMount() {
+    if (this.still) return;
+    this.pulse = setInterval(() => {
+      this.beat += 1;
+      if (this.ringActive) this.ringDeg += 45;
+      if (this.animating) this.forceUpdate();
+    }, 1000);
+  }
+  componentDidUpdate(prev) {
+    if (prev && prev.moment !== this.props.moment) {
+      this.halt();
+      this.setState(preset(this.props.moment || 'flow'));
+    }
+  }
+  componentWillUnmount() {
+    this.halt();
+    if (this.pulse) { clearInterval(this.pulse); this.pulse = null; }
+  }
+  halt() {
+    if (this.timer) { clearInterval(this.timer); this.timer = null; }
+    if (this.settle) { clearTimeout(this.settle); this.settle = null; }
+    if (this.stamp) { clearTimeout(this.stamp); this.stamp = null; }
+  }
+  speed() {
+    const v = Number(this.props.speed ?? 4);
+    return v > 0 ? v : 4;
+  }
+  resume() {
+    if (this.timer || this.state.offline != null) return;
+    this.timer = setInterval(() => this.tick(), 100);
+  }
+  nudge() {
+    if (this.timer) return;
+    if (this.settle) clearTimeout(this.settle);
+    this.settle = setTimeout(() => { this.settle = null; this.setState({ prevT: this.state.t }); }, 80);
+  }
+  startHaul() {
+    this.halt();
+    this.setState({ phase: 'haul', kind: 'main', t: 0, prevT: 0, doneAt: null, retryAt: null, offline: null, fails: false, failDone: false, extra: [], sel: -1, flash: 0, stamped: false, pressed: false });
+    this.timer = setInterval(() => this.tick(), 100);
+  }
+  tick() {
+    const st = this.state;
+    const t = st.t;
+    const next = t + 0.1 * this.speed() * STEP;
+    // A failed Done call clears itself after a short wait, then the normal digest lag runs.
+    if (st.failDone) {
+      const since = st.failSince != null ? st.failSince : t;
+      if (next - since >= LAG) {
+        this.setState({ prevT: t, t: next, failDone: false, failSince: null, retryAt: next, flash: 0 });
+      } else {
+        this.setState({ prevT: t, t: next, flash: 0 });
+      }
+      return;
+    }
+    let doneAt = st.doneAt;
+    // The time-lapse taps Done for you at 20:50.
+    if (doneAt == null && st.kind === 'main' && next >= AUTO_DONE) doneAt = Math.max(t, AUTO_DONE);
+    const end = digestOf(st, doneAt);
+    if (end != null && next >= end) {
+      this.halt();
+      this.setState({ prevT: t, t: Math.max(t, end), doneAt: doneAt, flash: 0 });
+      this.settle = setTimeout(() => { this.settle = null; this.setState({ prevT: this.state.t }); }, 80);
+      if (this.still) this.setState({ stamped: true });
+      else this.stamp = setTimeout(() => { this.stamp = null; this.setState({ stamped: true }); }, 560);
+    } else {
+      this.setState({ prevT: t, t: next, doneAt: doneAt, flash: 0 });
+    }
+  }
+  addShots(n) {
+    const st = this.state;
+    if (st.phase !== 'haul' || st.doneAt != null) return;
+    const t = st.t;
+    // A photo added after the budget stop still uploads. The Mac keeps it, but never values it.
+    const neverValues = st.kind !== 'main';
+    const add = [];
+    for (let j = 0; j < n; j += 1) {
+      add.push({ k: MAIN.length + st.extra.length + j + 1, taken: t, sent: t + 6 + j * 3, valued: neverValues ? NEVER : t + 65 + j * 7, others: 1, cost: 0.14, gems: [] });
+    }
+    this.setState({ extra: st.extra.concat(add), prevT: Math.min(st.prevT, t - 0.01) });
+    this.resume();
+    this.nudge();
+  }
+  tapDone() {
+    const st = this.state;
+    if (st.phase !== 'haul' || st.doneAt != null) return;
+    this.setState({ doneAt: st.t, flash: 0 });
+    this.resume();
+  }
+  newHaul() {
+    this.halt();
+    this.setState(Object.assign(base(), { mode: 'haul' }));
+  }
+  pick(n) { this.setState({ sel: this.state.sel === n ? -1 : n }); }
+
+  renderVals() {
+    const st = this.state;
+    const motion = !this.still;
+    const frame = Number(this.props.frameHeight) || 844;
+    const t = st.t, prevT = st.prevT;
+    const enters = (at) => motion && at != null && prevT < t && prevT < at && at <= t;
+    const EASE = 'opacity .35s, transform .45s cubic-bezier(.2,.8,.2,1)';
+    const onHaulTab = st.mode === 'haul';
+    const open = st.phase === 'haul';
+
+    const list = photosOf(st, st.doneAt);
+    const shot = list.filter((p) => p.taken <= t).sort((a, b) => a.taken - b.taken);
+    const seen = st.offline != null ? Math.min(t, st.offline) : t;
+    const stateOf = (p) => {
+      if (p.sent > seen) return 'phone';
+      if (p.failAt != null) return p.failAt <= seen ? 'failed' : 'valuing';
+      if (p.valued === NEVER) return 'unvalued';
+      return p.valued <= seen ? 'valued' : 'valuing';
+    };
+    const states = shot.map(stateOf);
+    const nOf = (s) => states.filter((x) => x === s).length;
+    const nValued = nOf('valued'), nValuing = nOf('valuing'), nPhone = nOf('phone'), nFailed = nOf('failed'), nUnvalued = nOf('unvalued');
+    const pending = nValuing + nPhone;
+    const valued = shot.filter((p, j) => states[j] === 'valued');
+    const cost = valued.reduce((a, p) => a + p.cost, 0);
+    const others = valued.reduce((a, p) => a + p.others, 0);
+    const gemAt = {};
+    valued.forEach((p) => p.gems.forEach((n) => { gemAt[n] = p.valued; }));
+    const gems = Object.keys(gemAt).map((key) => {
+      const n = Number(key);
+      return Object.assign({ num: n, i: n, at: gemAt[key] }, GEMS[n - 1]);
+    }).sort(rank);
+    const sumLo = gems.reduce((a, g) => a + g.lo, 0), sumHi = gems.reduce((a, g) => a + g.hi, 0);
+    const newest = gems.reduce((a, g) => Math.max(a, g.at), -1);
+    const lastRes = shot.reduce((a, p) => Math.max(a, p.failAt != null ? p.failAt : p.valued), 0);
+
+    const digestAt = open ? digestOf(st, st.doneAt) : null;
+    const doneView = open && digestAt != null && t >= digestAt;
+    const walk = open && !doneView;
+    const budgetHit = st.kind === 'budget' && t >= BUDGET_STOP;
+    const stopped = walk && budgetHit;
+    const finishing = walk && st.doneAt != null;
+    const failBar = finishing && st.failDone && pending === 0;
+    const isWalk = onHaulTab && walk, isDone = onHaulTab && doneView;
+    const storeName = (st.store || '').trim() || (st.kind === 'budget' ? STORE_B : STORE);
+
+    const lastN = (n) => (n === 1 ? 'the last photo' : 'the last ' + n + ' photos');
+    let barText = 'Done. Sending the digest…';
+    if (nPhone > 0) barText = 'Sending ' + lastN(nPhone) + '…';
+    else if (nValuing > 0) barText = 'Done. Valuing ' + lastN(nValuing) + ', then the digest goes out.';
+
+    const heroIn = enters(newest);
+    const legend = nValued + ' valued · ' + nValuing + ' valuing · ' + nPhone + ' on phone' + (nUnvalued ? ' · ' + nUnvalued + ' not valued' : '') + (nFailed ? ' · ' + nFailed + ' failed' : '');
+
+    const TILE_TR = 'opacity .3s, transform .3s cubic-bezier(.34,1.56,.64,1), background-position 1s linear';
+    const tiles = shot.map((p, j) => {
+      const s = states[j];
+      const x = { op: '1', tf: 'translateY(0px) scale(1)', tr: motion ? TILE_TR : 'none', bg: 'transparent', img: 'none', pos: '0px 0px', border: '0px solid transparent', sh: 'none', cross: false };
+      if (s === 'valued') {
+        x.bg = '#1B1813';
+      } else if (s === 'valuing') {
+        const key = st.kind + ':' + p.k + ':' + p.taken;
+        if (this.hatchSeen[key] == null) this.hatchSeen[key] = this.beat;
+        x.bg = '#FFE8D6';
+        x.img = HATCH;
+        x.sh = 'inset 0 0 0 1px #1B1813';
+        x.pos = motion ? ((this.beat - this.hatchSeen[key]) * 6) + 'px 0px' : '0px 0px';
+      } else if (s === 'phone') {
+        x.border = '1px dashed #1B1813';
+      } else if (s === 'unvalued') {
+        x.border = '1px solid #1B1813';
+      } else {
+        x.border = '1px solid #1B1813';
+        x.cross = true;
+      }
+      if (enters(p.taken)) {
+        x.op = '0'; x.tf = 'translateY(-10px) scale(1)'; x.tr = 'none';
+      } else if ((s === 'valued' || s === 'failed') && enters(p.failAt != null ? p.failAt : p.valued)) {
+        x.tf = 'translateY(0px) scale(1.4)'; x.tr = 'none';
+      }
+      return x;
+    });
+
+    const byTime = valued.slice().sort((a, b) => a.valued - b.valued);
+    const notches = [];
+    let acc = 0;
+    byTime.forEach((p, j) => {
+      acc += p.cost;
+      if (j < byTime.length - 1) notches.push({ left: pct(Math.min(acc, CAP) / CAP) });
+    });
+
+    const ROW_TR = 'background-color 1.2s ease-out, ' + EASE;
+    const POP = 'transform .5s cubic-bezier(.34,1.56,.64,1)';
+    const detailOf = (g) => {
+      const c = crop(g.b);
+      const nd = Math.round(g.c * 5);
+      const eb = g.eb;
+      const pins = GEMS.map((o, i) => ({ g: o, n: i + 1 }))
+        .filter((o) => o.n !== g.num && o.g.p === g.p)
+        .map((o) => {
+          const cx = ((o.g.b[0] + o.g.b[2]) / 2 - c.x0) * c.k, cy = ((o.g.b[1] + o.g.b[3]) / 2 - c.y0) * c.k;
+          return { num: String(o.n), left: px(cx - 13), top: px(cy - 13), rot: 'rotate(' + tilt(o.n) + 'deg)', ok: cx >= 8 && cx <= 350 && cy >= 8 && cy <= 176 };
+        })
+        .filter((o) => o.ok);
+      return Object.assign({}, c, {
+        size: g.size, hasSize: g.size !== '', price: money(g.lo, g.hi),
+        confWord: word(g.c), confNum: g.c.toFixed(2), confLabel: 'Confidence ' + nd + ' of 5',
+        dots: [0, 1, 2, 3, 4].map((k) => ({ bg: k < nd ? '#1B1813' : 'transparent' })),
+        where: g.w, pins: pins, cropAlt: 'Close-up of ' + g.n,
+        hasStats: !!eb, noStats: !eb, ebayTag: eb ? '· active asking, not sold' : '· no stats',
+        eN: eb ? String(eb.n) : '', eRange: eb ? '$' + eb.min.toFixed(2) + '–' + eb.max.toFixed(2) : '', eMed: eb ? usd(eb.med) : '',
+        b: eb ? bar(g) : NO_BAR,
+        barLabel: eb ? 'eBay asking prices ' + usd(eb.min) + ' to ' + usd(eb.max) + ', median ' + usd(eb.med) + '. Claude’s estimate $' + g.lo + ' to $' + g.hi + '.' : '',
+        soldUrl: 'https://www.ebay.com/sch/i.html?_nkw=' + encodeURIComponent(g.q) + '&LH_Sold=1&LH_Complete=1'
+      });
+    };
+    const ROWS_TR = 'grid-template-rows .25s ease';
+    const gemRows = gems.map((g, k) => {
+      const fresh = enters(g.at);
+      const expanded = g.num === st.sel;
+      return Object.assign({
+        num: String(g.num), name: g.n, where: g.w, price: money(g.lo, g.hi), conf: word(g.c),
+        rule: k === 0 ? '0px solid transparent' : '1px dashed #DDD5C5',
+        bg: fresh || g.num === st.flash ? '#FFE8D6' : '#FFFCF5',
+        op: fresh ? '0' : '1', tf: fresh ? 'translateY(8px)' : 'translateY(0px)',
+        tr: fresh || !motion ? 'none' : ROW_TR,
+        stTf: fresh ? 'rotate(-8deg) scale(0.3)' : 'rotate(' + tilt(g.num) + 'deg) scale(1)',
+        stTr: fresh || !motion ? 'none' : POP,
+        label: 'Gem ' + g.num + ': ' + g.n + ', $' + g.lo + ' to $' + g.hi + ', ' + word(g.c),
+        pick: () => this.pick(g.num),
+        expanded: String(expanded),
+        rows: expanded ? '1fr' : '0fr',
+        rowsTr: motion ? ROWS_TR : 'none',
+        detail: detailOf(g)
+      }, thumb(g.b));
+    });
+
+    const failRows = shot.filter((p, j) => states[j] === 'failed').map((p) => ({ err: p.err }));
+
+    const printing = digestAt != null && enters(digestAt);
+    const stampOn = st.stamped || !motion;
+    const receipt = [
+      { k: 'Store', v: storeName },
+      { k: 'Started', v: timeOf(0) },
+      { k: 'Finished', v: timeOf(lastRes) },
+      { k: 'Photos', v: String(shot.length) }
+    ];
+    if (nFailed) receipt.push({ k: 'Failed', v: String(nFailed) });
+    receipt.push({ k: 'Gems', v: String(gems.length) });
+    receipt.push({ k: 'Gems worth', v: gems.length ? money(sumLo, sumHi) : 'none' });
+    receipt.push({ k: 'Claude cost', v: usd(cost) + ' of ' + usd(CAP) });
+    if (budgetHit) receipt.push({ k: 'Stopped', v: 'budget reached' });
+    receipt.push({ k: 'Digest', v: 'sent · ' + (digestAt != null ? timeOf(digestAt) : '') });
+
+    this.animating = motion && walk;
+    this.ringActive = motion && walk && (pending > 0 || failBar);
+
+    return {
+      frameH: frame + 'px',
+      gridImg: onHaulTab && open ? 'none' : GRID,
+      thumbTf: onHaulTab ? 'translateX(calc(100% + 4px))' : 'translateX(0px)',
+      thumbTr: motion ? 'transform .28s cubic-bezier(.2,.8,.2,1)' : 'none',
+      scanPressed: String(!onHaulTab), haulPressed: String(onHaulTab),
+      scanFg: onHaulTab ? '#4A443B' : '#FFFCF5', haulFg: onHaulTab ? '#FFFCF5' : '#4A443B',
+      haulAria: walk ? 'Haul, a haul is running' : 'Haul',
+      showChrome: !open,
+      isScanTab: !onHaulTab, isHaulReady: onHaulTab && !open, isWalk: isWalk, isDone: isDone,
+      showTip: isWalk && !finishing,
+      uid: this.uid, store: st.store, storeEmpty: !st.store,
+      stopped: stopped, stopReason: 'budget reached: ' + usd(cost) + ' of ' + usd(CAP),
+      storeName: storeName, clock: clockOf(t),
+      heroNum: gems.length ? String(gems.length) : '',
+      heroRest: gems.length ? (gems.length === 1 ? ' gem' : ' gems') + (stopped ? '' : ' so far') : 'No gems yet',
+      heroOp: heroIn ? '0' : '1', heroTf: heroIn ? 'translateY(10px)' : 'translateY(0px)',
+      heroTr: heroIn || !motion ? 'none' : EASE,
+      sub: gems.length ? plural(shot.length, 'photo', 'photos') + ' · gems worth ' + money(sumLo, sumHi) : 'Gems show up here as each photo is valued.',
+      tallyLabel: plural(shot.length, 'photo', 'photos') + ': ' + legend,
+      tiles: tiles, legend: legend,
+      isOffline: walk && st.offline != null,
+      offlineText: 'Can’t reach reflip. ' + (nPhone === 1 ? '1 photo is safe on the phone and sends on its own.' : nPhone + ' photos are safe on the phone and send on their own.'),
+      budgetText: usd(cost) + ' of ' + usd(CAP),
+      budgetLabel: 'Claude cost ' + usd(cost) + ' of the ' + usd(CAP) + ' budget',
+      budgetW: pct(Math.min(cost, CAP) / CAP), budgetTr: motion ? 'width .6s ease' : 'none',
+      notches: notches,
+      hasFailed: isWalk && nFailed > 0, failedTitle: plural(nFailed, 'photo', 'photos') + ' failed', failRows: failRows,
+      showEmpty: isWalk && gems.length === 0,
+      hasGems: (isWalk || isDone) && gems.length > 0,
+      gemsTitle: isWalk && !stopped ? 'Gems so far' : 'Gems',
+      gemHead: gems.length + ' · ' + money(sumLo, sumHi),
+      gemRows: gemRows,
+      hasOthers: (isWalk || isDone) && others > 0,
+      othersText: others === 1 ? '1 other thing seen, not a gem' : others + ' other things seen, not gems',
+      printClip: printing ? 'inset(0px -30px 100% -30px)' : 'inset(-30px -30px -30px -30px)',
+      printTr: printing || !motion ? 'none' : 'clip-path .4s cubic-bezier(.2,.8,.2,1)',
+      doneHero: gems.length ? plural(gems.length, 'gem', 'gems') : 'No gems this time',
+      receipt: receipt,
+      stampOp: stampOn ? '0.88' : '0',
+      stampTf: stampOn ? 'rotate(-8deg) scale(1)' : 'rotate(-8deg) scale(1.3)',
+      stampTr: motion ? 'opacity .15s ease-out, transform .32s cubic-bezier(.3,1.5,.5,1)' : 'none',
+      showDock: isWalk && st.doneAt == null,
+      snapTf: 'rotate(-7deg) scale(' + (st.pressed && motion ? '0.96' : '1') + ')',
+      ringTf: 'rotate(' + this.ringDeg + 'deg)', ringTr: motion ? 'transform 1s linear' : 'none',
+      showBar: isWalk && finishing && !failBar, barText: barText,
+      showFailBar: isWalk && failBar,
+      startHaul: () => this.startHaul(),
+      snap: () => this.addShots(1),
+      addPhotos: () => this.addShots(2),
+      tapDone: () => this.tapDone(),
+      newHaul: () => this.newHaul(),
+      pickScan: () => this.setState({ mode: 'scan' }),
+      pickHaul: () => this.setState({ mode: 'haul' }),
+      typeStore: (e) => this.setState({ store: (e && e.target && e.target.value) || '' }),
+      press: () => this.setState({ pressed: true }),
+      release: () => { if (this.state.pressed) this.setState({ pressed: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -3,19 +3,33 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": "^22.13.0 || >=23.4.0"
+  },
   "scripts": {
-    "build": "rescript build && vite build",
+    "build": "node scripts/write-build-info.mjs && rescript build && vite build",
     "clean": "rescript clean",
-    "dev": "rescript build -w",
+    "dev": "node scripts/write-build-info.mjs && rescript build -w",
     "dev:web": "vite",
     "test": "npm run build && node src/tests/AllTests.res.mjs",
-    "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs"
+    "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs",
+    "tailnet": "ts=\"$(command -v tailscale || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)\" && \"$ts\" serve --bg --yes \"${PORT:-8787}\" && \"$ts\" status --peers=false",
+    "email:check": "node --env-file-if-exists=$HOME/.config/reflip/env src/EmailCheck.res.mjs",
+    "spike:stream": "node --env-file-if-exists=$HOME/.config/reflip/env src/spike/StreamSpike.res.mjs",
+    "spike:spot": "node --env-file-if-exists=$HOME/.config/reflip/env src/spike/SpotRecord.res.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
+    "idb-keyval": "^6.3.0",
+    "leaflet": "^1.9.4",
+    "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "rescript": "^12.3.0",
+    "rescript-rewind": "github:m0n01d/rewind#953fd177125182049e539f29a22066d0c6a4aab8",
     "vite": "^8.3.0"
   }
 }

@@ -1,0 +1,22 @@
+photo: /private/tmp/claude-501/-Users-dwight-code/884c8a85-ddf3-494b-8bae-c1feeecf9648/scratchpad/scene-5c0c5ba7/photo-1568x1176.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+headers: 4951ms
+message_start: 4963ms  input_tokens=8595
+tool code_execution: start=26823ms done=34966ms status=-
+tool code_execution: start=35912ms done=38464ms status=-
+tool code_execution: start=39615ms done=42107ms status=-
+tool code_execution: start=86535ms done=89226ms status=-
+search "vintage blue white transferware scalloped divided bowl resale value": start=34928ms done=34949ms count=10
+search "vintage ceramic lighted Christmas village church figurine value": start=34950ms done=34955ms count=10
+search "vintage milk glass hobnail bud vase candlestick value": start=34956ms done=34965ms count=10
+first text delta: 89227ms
+first box: 89536ms
+first item: 90188ms
+last item: 112551ms
+done: 112608ms
+items: 22
+usage: in=60202 out=10605 cacheRead=0 cacheWrite=0 webSearch=3
+usd: $0.2565
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

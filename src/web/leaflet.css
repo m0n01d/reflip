@@ -1,0 +1,5 @@
+/* Loads Leaflet's own stylesheet through Vite (docs/haul-map-build.md,
+   step 4, checklist item 1): a linked CSS file that index.html pulls in,
+   not a %raw script tag, so the build resolves and bundles it like any
+   other asset and the tiles line up in the built dist/ page. */
+@import "leaflet/dist/leaflet.css";

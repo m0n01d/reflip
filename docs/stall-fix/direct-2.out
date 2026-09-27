@@ -1,0 +1,17 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=direct parallel=default
+headers: 2843ms
+message_start: 2848ms  input_tokens=5447
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: 27366ms
+first box: 27857ms
+first item: 28858ms
+last item: 50257ms
+done: 50313ms
+items: 23
+usage: in=5447 out=5012 cacheRead=0 cacheWrite=0 webSearch=0
+usd: $0.0610
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

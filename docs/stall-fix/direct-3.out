@@ -1,0 +1,19 @@
+photo: /Users/dwight/code/reflip/.claude/worktrees/admiring-kirch-eef695/data/boxes/s01-1568-sent.jpg (1568x1176)
+model: claude-sonnet-5  schema: box-second  search: on
+variant: prompt=default tool=web_search_20260209 callers=direct parallel=default
+headers: 2555ms
+message_start: 2563ms  input_tokens=5447
+search "vintage milk glass creamer poinsettia design value": start=9596ms done=12871ms count=10
+search "vintage ceramic light-up church Christmas village figurine value": start=9986ms done=12874ms count=10
+code steps: 0  detection_timeout: 0  longest step: -
+first text delta: 38013ms
+first box: 38325ms
+first item: 39371ms
+last item: 72470ms
+done: 73888ms
+items: 23
+usage: in=39094 out=6424 cacheRead=0 cacheWrite=0 webSearch=2
+usd: $0.1624
+stop reason: end_turn
+items equal final decode: true
+outcome: completed

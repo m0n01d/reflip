@@ -1,0 +1,14 @@
+     0 ms  event: photo-received
+     0 ms  event: claude-started
+   990 ms  event: thinking
+  4514 ms  event: tool-run
+  7035 ms  event: search-started
+  7529 ms  event: search-done
+  8531 ms  event: tool-done
+ 11037 ms  event: search-started
+ 11540 ms  event: search-failed
+ 24603 ms  event: item
+ 34137 ms  event: item
+ 41664 ms  event: item
+ 43167 ms  event: done
+ 43674 ms  event: scene
