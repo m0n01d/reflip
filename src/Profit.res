@@ -89,3 +89,85 @@ let estimate = (
     tagPriceUsd,
   }
 }
+
+// Whole-dollar money text, in the style of ScanState.usd0 (Math.round,
+// Float.toInt, Int.toString) but with the sign outside the "$" — "-$1", not
+// "$-1" (docs/spec-profit.md, netText: "A negative value shows as \"-$1\"").
+// Profit.res stays Node-free, so it does not import the web-only
+// ScanState.res; this is a small helper of its own, in the same shape.
+let usd0 = (v: float): string => {
+  let n = Float.toInt(Math.round(v))
+  n < 0 ? "-$" ++ Int.toString(-n) : "$" ++ Int.toString(n)
+}
+
+// Two-decimal money text. Only ever called on a fee or a postage, which are
+// never negative, so no sign handling is needed here.
+let usdCents = (v: float): string => "$" ++ Float.toFixed(v, ~digits=2)
+
+// "$5 to $14", or just "$5" when both ends round to the same whole dollar.
+let rangeText = (loUsd: float, hiUsd: float): string => {
+  let lo = usd0(loUsd)
+  let hi = usd0(hiUsd)
+  lo == hi ? lo : lo ++ " to " ++ hi
+}
+
+// A tag price shows cents only when it is not whole: "$4", but "$0.50" and
+// "$2.50" (docs/spec-profit.md, "For the haul redesign").
+let tagText = (v: float): string =>
+  Math.abs(v -. Math.round(v)) < 0.005 ? usd0(v) : usdCents(v)
+
+// "Net $5 to $14" — the net at the low end and the high end, in whole
+// dollars (docs/spec-profit.md, "For the haul redesign").
+let netText = (e: estimate): string => "Net " ++ rangeText(e.netLowUsd, e.netHighUsd)
+
+// With a tag price: Some("Profit $1 to $10 at the $4 tag") — profit is the
+// net minus the tag, at each end. Without one, None.
+let profitText = (e: estimate): option<string> =>
+  switch e.tagPriceUsd {
+  | None => None
+  | Some(tag) =>
+    Some(
+      "Profit " ++
+      rangeText(e.netLowUsd -. tag, e.netHighUsd -. tag) ++
+      " at the " ++
+      tagText(tag) ++
+      " tag",
+    )
+  }
+
+// profitText when there is a tag price, else netText — the one line a gem
+// card or the haul email shows under the range.
+let lineText = (e: estimate): string =>
+  switch profitText(e) {
+  | Some(t) => t
+  | None => netText(e)
+  }
+
+// With a tag price, the item loses money if the midpoint net, less the tag,
+// is under $0. Without one, if the midpoint net alone is under $0.
+let isLoss = (e: estimate): bool =>
+  switch e.tagPriceUsd {
+  | Some(tag) => e.netMidUsd -. tag < 0.0
+  | None => e.netMidUsd < 0.0
+  }
+
+// The parts at the midpoint: "Price $25 · eBay fee $4.06 · Postage $11.57
+// (medium)", plus " · Tag $4" when there is a tag price. midUsd is the
+// midpoint of the scan range — estimate itself keeps no raw price, only the
+// net and the fee derived from it, so the caller passes it in.
+let partsText = (e: estimate, ~midUsd: float): string => {
+  let base =
+    "Price " ++
+    usd0(midUsd) ++
+    " · eBay fee " ++
+    usdCents(e.feeMidUsd) ++
+    " · Postage " ++
+    usdCents(e.postageUsd) ++
+    " (" ++
+    toString(e.shipClass) ++
+    ")"
+  switch e.tagPriceUsd {
+  | Some(tag) => base ++ " · Tag " ++ tagText(tag)
+  | None => base
+  }
+}

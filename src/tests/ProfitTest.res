@@ -81,4 +81,64 @@ let run = () => {
     Profit.fromString(Profit.toString(Profit.Pickup)) == Some(Profit.Pickup),
   )
   TestKit.check("unknown string gives None", Profit.fromString("bogus") == None)
+
+  TestKit.section("Profit.netText, profitText, lineText, isLoss, partsText")
+
+  // Case 1: $20 to $30, medium, no tag.
+  let c1 = Profit.estimate(~lowUsd=20.0, ~highUsd=30.0, ~shipClass=Profit.Medium, ~tagPriceUsd=None)
+  TestKit.check("netText: case 1 range", Profit.netText(c1) == "Net $5 to $14")
+  TestKit.check("profitText: case 1 with no tag is None", Profit.profitText(c1) == None)
+  TestKit.check(
+    "lineText: case 1 with no tag falls back to netText",
+    Profit.lineText(c1) == "Net $5 to $14",
+  )
+  TestKit.check("isLoss: case 1 with no tag is not a loss", !Profit.isLoss(c1))
+
+  // Case 1 with a $4 tag: profit = net - tag at each end.
+  let c1Tag4 = Profit.estimate(
+    ~lowUsd=20.0,
+    ~highUsd=30.0,
+    ~shipClass=Profit.Medium,
+    ~tagPriceUsd=Some(4.0),
+  )
+  TestKit.check(
+    "profitText: case 1 with a $4 tag",
+    Profit.profitText(c1Tag4) == Some("Profit $1 to $10 at the $4 tag"),
+  )
+  TestKit.check(
+    "lineText: case 1 with a $4 tag uses profitText",
+    Profit.lineText(c1Tag4) == "Profit $1 to $10 at the $4 tag",
+  )
+  TestKit.check("isLoss: case 1 with a $4 tag is not a loss", !Profit.isLoss(c1Tag4))
+
+  // Case 1 with a $0.50 tag: the tag shows cents because it is not whole.
+  let c1TagHalf = Profit.estimate(
+    ~lowUsd=20.0,
+    ~highUsd=30.0,
+    ~shipClass=Profit.Medium,
+    ~tagPriceUsd=Some(0.5),
+  )
+  TestKit.check(
+    "profitText: a non-whole tag shows cents",
+    switch Profit.profitText(c1TagHalf) {
+    | Some(t) => String.includes(t, "at the $0.50 tag")
+    | None => false
+    },
+  )
+
+  // Case 2: an $8 item in class small, low = high (one price, not a range).
+  // It loses money on eBay even with no tag.
+  let c2 = Profit.estimate(~lowUsd=8.0, ~highUsd=8.0, ~shipClass=Profit.Small, ~tagPriceUsd=None)
+  TestKit.check("netText: case 2 is a single negative value", Profit.netText(c2) == "Net -$1")
+  TestKit.check("isLoss: case 2 is a loss", Profit.isLoss(c2))
+
+  // partsText: the parts at the midpoint. Fee and postage show cents.
+  TestKit.check(
+    "partsText: case 1 names the postage in cents with its class",
+    String.includes(Profit.partsText(c1, ~midUsd=25.0), "Postage $11.57 (medium)"),
+  )
+  TestKit.check(
+    "partsText: a tag price adds a Tag part",
+    String.includes(Profit.partsText(c1Tag4, ~midUsd=25.0), "Tag $4"),
+  )
 }
