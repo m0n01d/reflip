@@ -91,6 +91,7 @@ The steps go in order. Steps 1 to 4 do not need the budget spec. Step 5 taps Bou
 
 1. Place: the `hauls` columns with the migration, `POST /api/hauls/:id/place`, the position request at Start haul, the IndexedDB outbox, and the `GuardTest.res` case.
 2. Phone test of step 1, before the map is built. It settles the unknown iOS behavior first. On the iPhone, open the tailnet URL in Safari and from the Home Screen. Start a haul indoors and one outdoors. Record the accuracy, the time to a position, and whether iOS asks again at each start. Write the results in this spec. If they show a need, change the timeout.
+   Result on 2026-09-26: Dwight reports that the position works on the iPhone. He recorded no accuracy or time values. The 15 s timeout stays.
 3. `GET /api/hauls` and `HaulList.res`, with its test. Until budget MVP step 2 adds `manualBuys`, `buys` lists only the paid finds.
 4. Map view: `Leaflet.res`, `MapView.res`, the pins, the range chips, the list, the panel and Set place.
 5. Smoke test. Extend `scripts/haul-smoke.mjs`, which runs the brain in fixture mode with a throwaway `DATA_DIR`. Use dev-browser at 390x844 on `http://127.0.0.1`:
