@@ -55,6 +55,21 @@ let run = () => {
     ~eps=0.001,
   )
 
+  // -- uploadPct ---------------------------------------------------------
+  TestKit.approx("upload pct: half sent", HaulLayout.uploadPct(50, 100), 0.5, ~eps=0.001)
+  TestKit.approx(
+    "upload pct: over total clamps to 1.0",
+    HaulLayout.uploadPct(120, 100),
+    1.0,
+    ~eps=0.001,
+  )
+  TestKit.approx(
+    "upload pct: a zero total is 0.0, never a division error",
+    HaulLayout.uploadPct(50, 0),
+    0.0,
+    ~eps=0.001,
+  )
+
   // -- notchPositions ----------------------------------------------------
   TestKit.check(
     "notchPositions: valued <= 1 gives no notches",

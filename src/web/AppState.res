@@ -23,6 +23,10 @@ type queueItem = {
   // Failed uploads so far for this item. Drives the retry backoff
   // (retryDelayMs below) and is never reset — a photo is never dropped.
   attempts: int,
+  // Bytes sent so far, from Api.postHaulScene's XHR upload-progress
+  // callback. Only meaningful while status is SendingNow; UploadStarted
+  // resets it to 0.
+  uploadedBytes: int,
 }
 
 type placeFix = {lat: float, lon: float, accuracyM: float, tookMs: option<float>}
@@ -115,6 +119,7 @@ type msg =
   | PhotoQueueErr(string)
   | QueueRestored(array<(string, WebApi.blob)>) // read back from IndexedDB on load
   | UploadStarted(string)
+  | UploadProgress(string, int) // clientId, bytes sent so far
   | HaulUploadOk(string, string) // clientId, sceneId
   | HaulUploadFailed(string, string) // clientId, error
   | RetryDue(string) // the backoff timer for this clientId fired
@@ -324,7 +329,8 @@ let addQueueItem = (queue: array<queueItem>, clientId: string, blob: WebApi.blob
 > =>
   switch Array.find(queue, item => item.clientId == clientId) {
   | Some(_) => queue // already queued (a restore or a duplicate dispatch) — no-op
-  | None => Array.concat(queue, [{clientId, blob, status: QueuedLocal, attempts: 0}])
+  | None =>
+    Array.concat(queue, [{clientId, blob, status: QueuedLocal, attempts: 0, uploadedBytes: 0}])
   }
 
 let update = (model: model, msg: msg): model =>
@@ -369,7 +375,15 @@ let update = (model: model, msg: msg): model =>
     }
   | UploadStarted(clientId) => {
       ...model,
-      queue: updateQueueItem(model.queue, clientId, item => {...item, status: SendingNow}),
+      queue: updateQueueItem(model.queue, clientId, item => {
+        ...item,
+        status: SendingNow,
+        uploadedBytes: 0,
+      }),
+    }
+  | UploadProgress(clientId, bytes) => {
+      ...model,
+      queue: updateQueueItem(model.queue, clientId, item => {...item, uploadedBytes: bytes}),
     }
   | HaulUploadOk(clientId, _sceneId) => {
       ...model,

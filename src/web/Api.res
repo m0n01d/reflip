@@ -156,29 +156,41 @@ let postPlace = async (haulId: string, body: string): placeResult =>
 let scenePhotoUrl = (sceneId: string): string =>
   "/api/scenes/" ++ encodeURIComponent(sceneId) ++ "/photo"
 
-let postHaulScene = async (
+// XMLHttpRequest, not fetch: the only way to get a real upload-progress
+// callback (bytes sent so far) that also works in Safari/iOS Safari.
+// docs/spec-upload-progress.md's Research section has why.
+let postHaulScene = (
   haulId: string,
   clientId: string,
   blob: WebApi.blob,
-): result<(string, bool), string> =>
-  try {
-    let resp = await WebApi.fetchBlob(
-      "/api/hauls/" ++ haulId ++ "/scenes",
-      {
-        WebApi.method: "POST",
-        headers: Dict.fromArray([("Content-Type", "image/jpeg"), ("x-client-id", clientId)]),
-        body: blob,
-      },
+  ~onProgress: int => unit,
+): promise<result<(string, bool), string>> =>
+  Promise.make((resolve, _reject) => {
+    let req = WebApi.makeXhr()
+    WebApi.xhrOpen(req, "POST", "/api/hauls/" ++ haulId ++ "/scenes")
+    WebApi.xhrSetRequestHeader(req, "Content-Type", "image/jpeg")
+    WebApi.xhrSetRequestHeader(req, "x-client-id", clientId)
+    WebApi.onUploadProgress(WebApi.xhrUploadOf(req), evt =>
+      onProgress(evt.lengthComputable ? Float.toInt(evt.loaded) : 0)
     )
-    if WebApi.responseOk(resp) {
-      let json = await WebApi.responseJson(resp)
-      switch Json.stringField(json, "sceneId") {
-      | Some(sceneId) => Ok((sceneId, Json.boolField(json, "duplicate")->Option.getOr(false)))
-      | None => Error("could not read the reply: missing sceneId")
+    WebApi.onXhrError(req, () => resolve(Error("could not reach the server")))
+    WebApi.onXhrLoad(req, () => {
+      let status = WebApi.xhrStatus(req)
+      let text = WebApi.xhrResponseText(req)
+      let json = try Some(JSON.parseOrThrow(text)) catch {
+      | JsExn(_) => None
       }
-    } else {
-      Error(await readErrorReason(resp))
-    }
-  } catch {
-  | JsExn(_) => Error("could not reach the server")
-  }
+      if status >= 200 && status < 300 {
+        switch json->Option.flatMap(j => Json.stringField(j, "sceneId")) {
+        | Some(sceneId) =>
+          resolve(Ok((sceneId, json->Option.flatMap(j => Json.boolField(j, "duplicate"))->Option.getOr(false))))
+        | None => resolve(Error("could not read the reply: missing sceneId"))
+        }
+      } else {
+        let said = "the server said " ++ Int.toString(status)
+        let reason = json->Option.flatMap(j => Json.stringField(j, "error"))
+        resolve(Error(reason->Option.mapOr(said, r => said ++ ": " ++ r)))
+      }
+    })
+    WebApi.xhrSend(req, blob)
+  })

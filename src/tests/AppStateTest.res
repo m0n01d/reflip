@@ -129,6 +129,19 @@ let runHaul = () => {
       },
   )
 
+  let h6b = AppState.update(h6, AppState.UploadProgress("client-a", 42))
+  TestKit.check(
+    "UploadProgress sets that one item's uploadedBytes, and no other",
+    switch Array.find(h6b.queue, i => i.clientId == "client-a") {
+    | Some(item) => item.uploadedBytes == 42
+    | None => false
+    } &&
+      switch Array.find(h6b.queue, i => i.clientId == "client-b") {
+      | Some(item) => item.uploadedBytes == 0
+      | None => false
+      },
+  )
+
   let h7 = AppState.update(h6, AppState.HaulUploadOk("client-a", "scene-1"))
   TestKit.check("a successful upload removes the item", Array.length(h7.queue) == 1)
   TestKit.check("a successful upload counts as uploaded", h7.uploadedCount == 1)

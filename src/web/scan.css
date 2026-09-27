@@ -1979,6 +1979,42 @@ body:has(.scan-shell) {
   line-height: 20px;
 }
 
+.haul-upload-row {
+  margin-top: 14px;
+}
+
+.haul-upload-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--scan-font-mono);
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--scan-muted);
+}
+
+.haul-upload-value {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--scan-ink);
+}
+
+.haul-upload-track {
+  position: relative;
+  margin-top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--scan-fill);
+  overflow: hidden;
+}
+
+.haul-upload-fill {
+  height: 6px;
+  background-color: var(--scan-ink);
+  transition: width .2s ease;
+}
+
 .haul-budget-row {
   margin-top: 14px;
 }

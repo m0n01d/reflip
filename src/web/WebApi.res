@@ -71,6 +71,24 @@ type requestInitString = {method: string, headers: Dict.t<string>, body: string}
 @val external setInterval: (unit => unit, int) => float = "setInterval"
 @val external clearInterval: float => unit = "clearInterval"
 
+// XMLHttpRequest, typed narrowly for one job: POST a blob with a real,
+// cross-browser upload-progress event. fetch has none (see
+// docs/spec-upload-progress.md's Research) — xhr.upload.onprogress is the
+// only one that also works in Safari/iOS Safari.
+type xhr
+type xhrUpload
+type progressEvent = {loaded: float, total: float, lengthComputable: bool}
+@new external makeXhr: unit => xhr = "XMLHttpRequest"
+@send external xhrOpen: (xhr, string, string) => unit = "open"
+@send external xhrSetRequestHeader: (xhr, string, string) => unit = "setRequestHeader"
+@send external xhrSend: (xhr, blob) => unit = "send"
+@get external xhrUploadOf: xhr => xhrUpload = "upload"
+@get external xhrStatus: xhr => int = "status"
+@get external xhrResponseText: xhr => string = "responseText"
+@set external onUploadProgress: (xhrUpload, progressEvent => unit) => unit = "onprogress"
+@set external onXhrLoad: (xhr, unit => unit) => unit = "onload"
+@set external onXhrError: (xhr, unit => unit) => unit = "onerror"
+
 @get external blobType: blob => string = "type"
 
 // A Blob constructor: lets AppStateTest build a real queue item without a
