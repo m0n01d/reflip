@@ -1,6 +1,6 @@
 # reflip budget: a monthly buy limit, and what each buy made
 
-Status: proposal, written 2026-09-25. It builds on the paid and sold entry of M1 lite (`docs/spec-lite-m1.md`, on [PR #2](https://github.com/m0n01d/reflip/pull/2), not merged yet). The haul map (`docs/spec-haul-map.md`) puts the buys of this spec on a map.
+Status: proposal, written 2026-09-25. It builds on the paid and sold entry of M1 lite (`docs/spec-lite-m1.md`, from [PR #2](https://github.com/m0n01d/reflip/pull/2)). The haul map (`docs/spec-haul-map.md`) puts the buys of this spec on a map.
 
 ## Problem
 

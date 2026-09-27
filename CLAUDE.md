@@ -168,5 +168,6 @@ The eBay keys must come from the Production keyset on developer.ebay.com. The Ap
 
 ## What is not built yet
 
+- M1 lite, per [`docs/spec-lite-m1.md`](docs/spec-lite-m1.md): the paid and sold entry on the phone page and the calibration readout. `docs/spec-budget.md` replaces its Finds view, so the M1 lite spec must change to match before the build. The first experiment is in `docs/m1-first-experiment.md`.
 - The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, a way to keep the brain running, and its own `tailscale serve`. The MacBook Pro already runs one, per `docs/stream-spike.md`.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.
