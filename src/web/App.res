@@ -483,6 +483,31 @@ let pollHaul = async (dispatch: AppState.msg => unit, haulId: string) => {
   }
 }
 
+let loadHauls = async (dispatch: AppState.msg => unit): unit => {
+  dispatch(AppState.Map(MapState.HaulsLoading))
+  switch await Api.getHauls() {
+  | Ok(hauls) => dispatch(AppState.Map(MapState.HaulsLoaded(hauls)))
+  | Error(msg) => dispatch(AppState.Map(MapState.HaulsLoadFailed(msg)))
+  }
+}
+
+let submitMapPlace = async (
+  dispatch: AppState.msg => unit,
+  haulId: string,
+  lat: float,
+  lon: float,
+): unit => {
+  let body = MapState.pinPlaceBody(lat, lon)
+  switch await Api.postPlace(haulId, body) {
+  | Sent(_) =>
+    dispatch(AppState.Map(MapState.PlaceSet))
+    await loadHauls(dispatch)
+  | Rejected(status) =>
+    dispatch(AppState.Map(MapState.PlaceSetFailed("the server said " ++ Int.toString(status))))
+  | NotSent(reason) => dispatch(AppState.Map(MapState.PlaceSetFailed(reason)))
+  }
+}
+
 let finishHaul = async (dispatch: AppState.msg => unit, haulId: string) =>
   switch await Api.postHaulDone(haulId) {
   | Ok(status) => dispatch(AppState.DoneSent(status))
@@ -1352,6 +1377,46 @@ let make = () => {
       None
     }
   }, (pollHaulId, pollActive))
+
+  // -- Map view (docs/spec-haul-map.md): load the haul list each time the
+  // Map tab opens. Keyed on model.activeTab, so a tab switch fires it and
+  // an unrelated re-render while already on the Map tab does not re-fetch.
+  React.useEffect1(() => {
+    if model.activeTab == AppState.MapTab {
+      loadHauls(dispatch)->Promise.ignore
+    }
+    None
+  }, [model.activeTab])
+
+  // -- Map view: send a pin tap once MapState.update has moved setPlace to
+  // Submitting. Reads rewind.live, not rewind.model, per the rewind rule —
+  // a paused view must not fire a live network call against a haul that is
+  // no longer live.
+  React.useEffect1(() => {
+    switch rewind.live.map.setPlace {
+    | Submitting(haulId, lat, lon) => submitMapPlace(dispatch, haulId, lat, lon)->Promise.ignore
+    | Off | Selecting(_) => ()
+    }
+    None
+  }, [rewind.live.map.setPlace])
+
+  // -- the #map hash (docs/spec-haul-map.md "The page"): read once on
+  // mount, so a link straight to #map opens on the Map tab.
+  React.useEffect0(() => {
+    let hash = WebApi.locationHash(WebApi.location(WebApi.windowGlobal))
+    switch AppState.tabOfHash(hash) {
+    | Some(tab) => dispatch(AppState.SetActiveTab(tab))
+    | None => ()
+    }
+    None
+  })
+
+  // -- the #map hash: write it back on every tab switch, so the Map tab
+  // is bookmarkable and survives a reload.
+  React.useEffect1(() => {
+    WebApi.setLocationHash(WebApi.location(WebApi.windowGlobal), AppState.hashOfTab(model.activeTab))
+    None
+  }, [model.activeTab])
 
   // -- the new streaming scan flow: refs so Stop/New scan's edge effects
   // below can reach the live ScanApi.handle and revoke the current photo's

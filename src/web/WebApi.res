@@ -190,6 +190,14 @@ type windowLike
 @val external windowGlobal: windowLike = "window"
 @send external addWindowListener: (windowLike, string, unit => unit) => unit = "addEventListener"
 
+// window.location.hash, for the Map view's #map (docs/spec-haul-map.md
+// "The page"). Read once on mount and set on every tab switch — App.res
+// owns both edges, AppState.tabOfHash/hashOfTab stay pure.
+type location
+@get external location: windowLike => location = "location"
+@get external locationHash: location => string = "hash"
+@set external setLocationHash: (location, string) => unit = "hash"
+
 @send
 external removeDocumentListener: (document, string, unit => unit) => unit = "removeEventListener"
 

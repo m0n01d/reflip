@@ -106,6 +106,22 @@ let getHaulStatus = async (haulId: string): result<Types.haulStatus, string> =>
   | JsExn(_) => Error("could not reach the server")
   }
 
+// GET /api/hauls, for the Map view (docs/spec-haul-map.md "Shape").
+let getHauls = async (): result<array<Types.haulListRow>, string> =>
+  try {
+    let resp = await WebApi.fetchGet("/api/hauls")
+    if WebApi.responseOk(resp) {
+      switch Shared.decodeHaulList(await WebApi.responseJson(resp)) {
+      | Ok(rows) => Ok(rows)
+      | Error(msg) => Error("could not read the hauls: " ++ msg)
+      }
+    } else {
+      Error(await readErrorReason(resp))
+    }
+  } catch {
+  | JsExn(_) => Error("could not reach the server")
+  }
+
 let postHaulDone = async (haulId: string): result<Types.haulStatus, string> =>
   try {
     let resp = await WebApi.fetchString(

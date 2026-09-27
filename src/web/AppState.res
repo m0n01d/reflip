@@ -50,7 +50,19 @@ type haulPhase =
 // only, independent of haulPhase above. NoHaul + HaulTab shows the existing
 // haul-start entry form; NoHaul + ScanTab shows the restyled scan Ready
 // screen. Any other haulPhase always shows HaulView regardless of this.
-type tab = ScanTab | HaulTab
+// MapTab shows the Map view (docs/spec-haul-map.md), with #map in the URL
+// hash so the view survives a reload.
+type tab = ScanTab | HaulTab | MapTab
+
+// #map opens on MapTab; every other hash (including none) leaves the tab
+// where it was — App.res only calls this once, on mount.
+let tabOfHash = (hash: string): option<tab> => hash == "#map" ? Some(MapTab) : None
+
+let hashOfTab = (tab: tab): string =>
+  switch tab {
+  | MapTab => "#map"
+  | ScanTab | HaulTab => ""
+  }
 
 type model = {
   selectedModel: Shared.model,
@@ -91,6 +103,9 @@ type model = {
   // The device position for this haul (docs/spec-haul-map.md "The
   // position"). See placeState above for the seven states.
   place: placeState,
+  // The Map view's own model (docs/spec-haul-map.md), folded in the same
+  // way scan above folds ScanState.model.
+  map: MapState.model,
 }
 
 type msg =
@@ -140,6 +155,7 @@ type msg =
   | PlaceSent(string, option<Types.place>)
   | PlaceSendFailed(string)
   | PlaceRejected(string)
+  | Map(MapState.msg)
 
 let initialModel: model = {
   selectedModel: Shared.defaultModel,
@@ -163,6 +179,7 @@ let initialModel: model = {
   settingsOpen: false,
   openGem: None,
   place: PlaceNotAsked,
+  map: MapState.initialModel,
 }
 
 // -- IndexedDB key layout (docs/spec-haul-mode.md "Step 5: phone") --------
@@ -425,6 +442,7 @@ let update = (model: model, msg: msg): model =>
   | SelectItem(i) => {...model, selected: Some(i)}
   | Scan(scanMsg) => {...model, scan: ScanState.update(model.scan, scanMsg)}
   | SetActiveTab(t) => {...model, activeTab: t}
+  | Map(mapMsg) => {...model, map: MapState.update(model.map, mapMsg)}
   | SetSettingsOpen(open_) => {...model, settingsOpen: open_}
   | ToggleGem(findId) => {
       ...model,

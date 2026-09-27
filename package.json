@@ -21,6 +21,7 @@
     "@glennsl/rescript-json-combinators": "^1.5.1",
     "@rescript/react": "^0.15.0",
     "idb-keyval": "^6.3.0",
+    "leaflet": "^1.9.4",
     "nodemailer": "^10.0.10",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",

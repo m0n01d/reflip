@@ -160,7 +160,7 @@ body:has(.scan-shell) {
   margin: 2px 16px 0;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   background-color: var(--scan-mode-track);
   border-radius: 14px;
@@ -2603,4 +2603,177 @@ body:has(.scan-shell) {
   .haul-stamp {
     animation: none;
   }
+}
+
+/* -- Map view (docs/spec-haul-map.md) ------------------------------------- */
+
+.haul-map-view {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.haul-map-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.haul-map-chip {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--scan-dash-2);
+  border-radius: 999px;
+  background-color: var(--scan-card);
+  color: var(--scan-muted-2);
+  font-family: var(--scan-font-mono);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.haul-map-chip-active {
+  background-color: var(--scan-ink);
+  color: var(--scan-card);
+  border-color: var(--scan-ink);
+}
+
+.haul-map-canvas-wrap {
+  border-radius: var(--scan-radius);
+  overflow: hidden;
+  border: 1px solid var(--scan-card-border);
+}
+
+.haul-map-canvas {
+  width: 100%;
+  height: 260px;
+  background-color: var(--scan-fill);
+}
+
+.haul-map-status {
+  font-size: 13px;
+  color: var(--scan-muted);
+}
+
+.haul-map-error {
+  color: #B3261E;
+}
+
+.haul-map-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.haul-map-row {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--scan-card-border);
+  border-radius: 10px;
+  background-color: var(--scan-card);
+  color: var(--scan-ink);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.haul-map-row-active {
+  border-color: var(--scan-orange);
+}
+
+.haul-map-row-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.haul-map-row-date {
+  color: var(--scan-muted);
+  font-family: var(--scan-font-mono);
+  font-size: 12px;
+}
+
+.haul-map-row-place {
+  color: var(--scan-muted);
+  font-size: 12px;
+}
+
+.haul-map-panel {
+  border: 1px solid var(--scan-card-border);
+  border-radius: var(--scan-radius);
+  background-color: var(--scan-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.haul-map-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.haul-map-panel-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.haul-map-panel-date {
+  color: var(--scan-muted);
+  font-size: 13px;
+}
+
+.haul-map-panel-counts {
+  color: var(--scan-muted-2);
+  font-size: 13px;
+}
+
+.haul-map-buys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.haul-map-buy {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.haul-map-panel-total {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.haul-map-place-hint {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--scan-muted-2);
+}
+
+.haul-map-set-place {
+  align-self: flex-start;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--scan-orange);
+  color: var(--scan-ink);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
 }
