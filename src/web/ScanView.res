@@ -128,14 +128,14 @@ let make = (
   let lastLine = Array.get(lines, Array.length(lines) - 1)
   let marks = ScanState.trackMarks(model)
   let elapsed = ScanState.elapsedMs(model)
-  // While the photo itself is still going out, the track shows real
-  // upload progress (bytes sent of the photo's own size) instead of
-  // elapsed-time-of-3:00, which is near-meaningless in the first second
-  // of a scan. docs/spec-upload-progress.md.
-  let trackPct = switch model.phase {
-  | ScanState.Sending => pctOf(Int.toFloat(model.uploadedBytes), Int.toFloat(model.uploadBytes))
-  | _ => pctOf(elapsed, limitMs)
-  }
+  // The 3:00 track always means elapsed time — upload progress used to
+  // share it, but that made it impossible to tell "this is uploading"
+  // apart from "the scan is running" (docs/spec-upload-progress.md's
+  // follow-up). Upload progress now lives on its own, as a bar along the
+  // bottom edge of the photo itself (uploadBorderPct below), shown only
+  // during Sending.
+  let trackPct = pctOf(elapsed, limitMs)
+  let uploadBorderPct = pctOf(Int.toFloat(model.uploadedBytes), Int.toFloat(model.uploadBytes))
   let summary = ScanState.gemsSummary(model)
   let unpriced = visible->Array.filter(s => s.item->Option.isNone)
   let alsoItems = Array.concat(ScanState.others(model), unpriced)
@@ -152,6 +152,11 @@ let make = (
         | Some(url) =>
           <div className="scan-photo-frame">
             <img className="scan-photo-img" src={url} />
+            {model.phase == ScanState.Sending
+              ? <div className="scan-upload-border">
+                  <div className="scan-upload-border-fill" style={{JsxDOMStyle.width: uploadBorderPct}} />
+                </div>
+              : React.null}
             {
               let pinned =
                 visible->Array.filterMap(s =>

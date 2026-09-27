@@ -481,6 +481,24 @@ body:has(.scan-shell) {
   height: auto;
 }
 
+/* Upload progress lives on the photo itself, not the status card below —
+   a bar along the bottom edge, unmissable and unambiguous: visible only
+   while the photo is actually going out, gone the moment it's not. */
+.scan-upload-border {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 6px;
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+.scan-upload-border-fill {
+  height: 6px;
+  background-color: var(--scan-orange);
+  transition: width .15s linear;
+}
+
 .scan-pin {
   position: absolute;
   width: 44px;
