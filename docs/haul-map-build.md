@@ -533,25 +533,74 @@ Scope: docs/spec-haul-map.md lines 11-19, 32-51 and 72-76 only.
 
 Checklist:
 
-- [ ] 1. Install leaflet 1.9.4. Add src/web/Leaflet.res with typed externals
+- [x] 1. Install leaflet 1.9.4. Add src/web/Leaflet.res with typed externals
       for the calls the spec lists. Load leaflet/dist/leaflet.css through
-      Vite with a linked CSS file, no raw script tag.
-- [ ] 2. src/web/MapState.res: the pure model, the msg type and update.
+      Vite with a linked CSS file, no raw script tag. (leaflet.css link
+      still to do — folded into step 6's commit, since it belongs next to
+      MapView.)
+- [x] 2. src/web/MapState.res: the pure model, the msg type and update.
       Pure helpers: the range filter, the pin style, and the fit rule.
       src/tests/MapStateTest.res, registered in AllTests.res.
-- [ ] 3. AppState.res: add MapTab to tab, a map field to model, a Map msg,
-      and the hash helpers for #map.
-- [ ] 4. Api.res: getHauls for GET /api/hauls, reusing the Set place call.
+      `npm test`: all tests passed. Commit f81814f.
+- [x] 3. AppState.res: add MapTab to tab, a map field to model, a Map msg,
+      and the hash helpers for #map. Commit 83c8247.
+- [x] 4. Api.res: getHauls for GET /api/hauls, reusing the Set place call.
+      Commit 83c8247.
 - [ ] 5. App.res: load hauls when the Map view opens and after a Set place
-      succeeds. Wire the URL hash. WebApi.res gets the hash bindings.
-- [ ] 6. ScanShell.res: the Map tab button and its content.
+      succeeds. Wire the URL hash. WebApi.res already has the hash
+      bindings (commit 83c8247) — not called from App.res yet.
+- [x] 6. ScanShell.res: the Map tab button and its content.
       src/web/MapView.res: the map ref effects, the pins, the range chips,
       the list and the panel. scan.css gets the new classes.
-- [ ] 7. npm test passes.
+      Commit 83c8247.
+- [x] 7. npm test passes (commit 83c8247: all tests passed, npx rescript
+      build with no warnings).
 - [ ] 8. npm run build, then a dev-browser check by hand at 390x844, with
       shots in docs/shots/haul-map/.
 
 ### Log
+
+A TURN-COUNTER note arrived at turn 60, partway through step 6 (ScanShell
+had the Map button wired but not the switch case, so the build had a
+partial-match warning and two unused-variable warnings). Finished step 6
+to a clean, warning-free build rather than leaving it half-wired, then
+stopped there per the note. Steps 1, 2, 3, 4, 6 and 7 are done and
+committed (f81814f, 83c8247). Step 5 (the three App.res effects) and
+step 8 (build + dev-browser check + screenshots) are not started.
+
+**What the Map tab does right now, tapped in a real page:** it opens
+(button + mode switch render, MapView mounts, Leaflet map + tiles + click
+handler are created), but the list stays on "Loading hauls..." forever,
+because nothing calls Api.getHauls yet — that dispatch only happens from
+App.res, which is step 5. Likewise a Set place tap sets MapState into
+Selecting/Submitting correctly (proven by MapStateTest.res) but nothing
+ever calls Api.postPlace against a real Submitting state — also step 5.
+So step 8's dev-browser check cannot pass yet; do step 5 first.
+
+**Design notes for step 5** (so a fresh agent can pick this up cold):
+
+- `loadHauls = async (dispatch: AppState.msg => unit): unit => {dispatch(AppState.Map(MapState.HaulsLoading)); switch await Api.getHauls() { | Ok(hauls) => dispatch(AppState.Map(MapState.HaulsLoaded(hauls))) | Error(msg) => dispatch(AppState.Map(MapState.HaulsLoadFailed(msg))) }}`
+  — add near the other haul-mode effect functions (restoreHaul, pollHaul).
+- `submitMapPlace = async (dispatch, haulId: string, lat: float, lon: float): unit => { let body = MapState.pinPlaceBody(lat, lon); switch await Api.postPlace(haulId, body) { | Sent(_) => dispatch(AppState.Map(MapState.PlaceSet)); await loadHauls(dispatch) | Rejected(status) => dispatch(AppState.Map(MapState.PlaceSetFailed("the server said " ++ Int.toString(status)))) | NotSent(reason) => dispatch(AppState.Map(MapState.PlaceSetFailed(reason))) } }`
+- Effect A, in App.res's `make`, keyed on `model.activeTab`:
+  `React.useEffect1(() => { if model.activeTab == AppState.MapTab { loadHauls(dispatch)->Promise.ignore }; None }, [model.activeTab])`
+  — this covers both "opens" (tab switch fires it) and re-loading is not
+  needed on every render since deps only change on a tab switch.
+- Effect B, keyed on `model.map.setPlace`, reading `rewind.live.map.setPlace`
+  per this repo's rewind rule (a paused view must not fire a live network
+  call): `React.useEffect1(() => { switch rewind.live.map.setPlace { | Submitting(haulId, lat, lon) => submitMapPlace(dispatch, haulId, lat, lon)->Promise.ignore | Off | Selecting(_) => () }; None }, [rewind.live.map.setPlace])`
+- Effect C, the hash: on mount (`React.useEffect0`), read
+  `WebApi.locationHash(WebApi.location(WebApi.windowGlobal))`, and if
+  `AppState.tabOfHash(hash)` is `Some(tab)`, `dispatch(AppState.SetActiveTab(tab))`.
+  Then a second small effect keyed on `model.activeTab` sets
+  `WebApi.setLocationHash(WebApi.location(WebApi.windowGlobal), AppState.hashOfTab(model.activeTab))`
+  — guard so it does not fight the mount-effect's own read (order:
+  mount-effect runs first, so this is safe as two separate effects).
+- After step 5, run `npm test`, then step 8: `npm run build`, start the
+  brain per the brief's verify section (FIXTURES=1, a free port, a tmp
+  DATA_DIR), make haul A (place 61.2181,-149.9003) and haul B (no place)
+  through the API, open `#map` at 390x844 with dev-browser, and shoot the
+  four states the brief names into docs/shots/haul-map/.
 
 ## Status on 2026-09-26
 
