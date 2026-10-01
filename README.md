@@ -4,9 +4,11 @@ reflip is the brain and the phone page behind Flip Scout, a personal tool that v
 resale. Take one photo, and it replies with each sellable item's name, a resale estimate from
 Claude, and matching eBay active-listing stats.
 
-<img src="docs/shots/reflip-empty.png" width="220" alt="empty">
-<img src="docs/shots/reflip-results.png" width="220" alt="results">
-<img src="docs/shots/haul-view-crops-live.png" width="220" alt="haul">
+<img src="docs/shots/readme-scan-result.png" width="240" alt="A finished scan: price stickers on the photo, three items worth a look, and the run summary">
+<img src="docs/shots/readme-item-detail.png" width="240" alt="One item opened: Claude's resale estimate, a confidence score, and matching eBay active-listing stats">
+<img src="docs/shots/readme-haul.png" width="240" alt="The haul view: gems found so far with estimates, a budget bar, and the Snap and Done controls">
+
+<sub>Screens come from fixture mode (`FIXTURES=1`): a generated test photo and recorded replies, not a live scan.</sub>
 
 ## Run it
 
