@@ -14,6 +14,9 @@
     "test": "npm run build && node src/tests/AllTests.res.mjs",
     "start": "node --env-file-if-exists=$HOME/.config/reflip/env src/Main.res.mjs",
     "tailnet": "ts=\"$(command -v tailscale || echo /Applications/Tailscale.app/Contents/MacOS/Tailscale)\" && \"$ts\" serve --bg --yes \"${PORT:-8787}\" && \"$ts\" status --peers=false",
+    "prod:deploy": "sh scripts/prod.sh deploy",
+    "prod:status": "sh scripts/prod.sh status",
+    "prod:logs": "sh scripts/prod.sh logs",
     "email:check": "node --env-file-if-exists=$HOME/.config/reflip/env src/EmailCheck.res.mjs",
     "spike:stream": "node --env-file-if-exists=$HOME/.config/reflip/env src/spike/StreamSpike.res.mjs",
     "spike:spot": "node --env-file-if-exists=$HOME/.config/reflip/env src/spike/SpotRecord.res.mjs"

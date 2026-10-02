@@ -108,7 +108,23 @@ To develop the page with fast reloads, run the brain in one shell and Vite in an
 
 To test the page from a phone on the tailnet, run `npm run build`, then `npm run tailnet`, then `npm start`. `npm run tailnet` points `tailscale serve` at the brain port and prints the HTTPS URL. The port is `PORT`, or 8787 if `PORT` is not set. The proxy is on the tailnet only, and it stays on after the script exits. The script finds the `tailscale` CLI on `PATH` or in `/Applications/Tailscale.app`. If Tailscale is off, the script prints `Tailscale is stopped.` and exits with code 1.
 
-The tailnet needs MagicDNS and HTTPS certificates. Both are on in the Tailscale admin console. The first request can take about 25 s, because Tailscale gets the TLS certificate then. The brain does not restart by itself. If nothing listens on the port, the proxy returns an error. To stop the proxy, run `tailscale serve reset`. That command clears every serve rule on the Mac. To make sure that the brain listens on `127.0.0.1` only, run `lsof -nP -iTCP:8787 -sTCP:LISTEN`. The output must show `127.0.0.1:8787`, not `*:8787`.
+The tailnet needs MagicDNS and HTTPS certificates. Both are on in the Tailscale admin console. The first request can take about 25 s, because Tailscale gets the TLS certificate then. If nothing listens on the port, the proxy returns an error. A plain `npm start` does not restart by itself. The prod agent below does. To stop the proxy, run `tailscale serve reset`. That command clears every serve rule on the Mac. To make sure that the brain listens on `127.0.0.1` only, run `lsof -nP -iTCP:8787 -sTCP:LISTEN`. The output must show `127.0.0.1:8787`, not `*:8787`.
+
+## Prod on the Mac mini
+
+The Mac mini is the always-on host. `scripts/prod.sh` runs the brain there as the launchd agent `com.m0n01d.reflip`. launchd starts it at login and starts it again 10 s after any exit. The agent runs its own clone in `~/.reflip/app`, at `origin/main`, so archiving a worktree never stops it. It reads the same `~/.config/reflip/env`.
+
+```sh
+npm run prod:deploy
+npm run prod:status
+npm run prod:logs
+```
+
+`prod:deploy` fetches `origin/main`, runs `npm ci` only when the lockfile changed, builds, restarts the agent, waits for `GET /` to answer, and runs `tailscale serve` on the port. It refuses to start when another process holds the port, such as an `npm start` in a terminal. `scripts/prod.sh restart` restarts without a rebuild. `scripts/prod.sh stop` stops the agent and removes it until the next deploy. The logs are in `~/.reflip/logs/`.
+
+`DATA_DIR` is `~/.reflip/data`. On the Mac mini that is a symlink to the main checkout's `data/`, which holds the hauls from before 2026-10-02. The node is the one asdf picks from the clone's `.tool-versions`, 22.16.0 on the Mac mini. The plist holds its absolute path, because launchd does not run asdf.
+
+The agent starts at login, not at boot. Auto-login is off on the Mac mini, so after a power cut the brain stays off until someone logs in. `pmset` has `autorestart 1` and `sleep 0`.
 
 ## Use `resq` when editing the `.res` files here
 
@@ -169,5 +185,4 @@ The eBay keys must come from the Production keyset on developer.ebay.com. The Ap
 ## What is not built yet
 
 - M1 lite, per [`docs/spec-lite-m1.md`](docs/spec-lite-m1.md): the paid and sold entry on the phone page and the calibration readout. `docs/spec-budget.md` replaces its Finds view, so the M1 lite spec must change to match before the build. The first experiment is in `docs/m1-first-experiment.md`.
-- The Mac mini as the always-on host, with its own clone, its own `~/.config/reflip/env`, a way to keep the brain running, and its own `tailscale serve`. The MacBook Pro already runs one, per `docs/stream-spike.md`.
 - The Chrome extension side of Flip Scout. That is later spec work, not this spike.
