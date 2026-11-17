@@ -25,17 +25,19 @@ The idea's origin is [wesbos/yard-sale](https://github.com/wesbos/yard-sale), by
 
 ## The numbers M0 set
 
-Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` and the claude-api skill. Re-check before this drifts far from that date.
+Checked 2026-11-17 against `platform.claude.com/docs/en/about-claude/pricing` and the claude-api skill. Re-check before this drifts far from that date.
 
 | Model id | Input $/MTok | Output $/MTok | Cache read multiplier | Web search tool type |
 |---|---|---|---|---|
 | `claude-opus-5-5` | 4 | 20 | 0.05x | `web_search_20260209` |
-| `claude-sonnet-5` (default) | 2 | 10 | 0.1x | `web_search_20260209` |
-| `claude-haiku-4-5` | 1 | 5 | 0.1x | `web_search_20250305` only |
+| `claude-sonnet-5-5` (default) | 2 | 10 | 0.05x | `web_search_20260209` |
+| `claude-haiku-5-5` | 0.10 | 0.50 | 0.1x | `web_search_20260209` |
+
+Haiku 5.5 bills $0.50 / $2.50 when a prompt is over 100,000 tokens.
 
 - A 5-minute cache write costs 1.25x the input price, on every model above.
 - A web search costs a flat $0.01. Its result text also bills as input tokens, on top of that flat fee.
-- An image bills at about ceil(w/28) times ceil(h/28) tokens. Haiku 4.5 downsizes an image above a 1568px long edge. Opus 5.5 and Sonnet 5 downsize above 2576px.
+- An image bills at about ceil(w/28) times ceil(h/28) tokens. All three models downsize an image above a 2576px long edge.
 - Structured output uses `output_config.format`, not the old `output_format` field. Its shape is `{type: "json_schema", schema: {...}}`.
 - Never use forced `tool_choice`. It returns a 400 on Opus 5.5.
 - The web search tool sets `allowed_callers: ["direct"]`, so Claude never searches from a code step. On Sonnet 5, parallel code steps stalled for about 96 s. `disable_parallel_tool_use` returns a 400 with code-step search. See `docs/stall-fix.md`.

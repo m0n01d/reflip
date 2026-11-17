@@ -8,17 +8,16 @@
 
 type tier = {maxEdge: int, maxTokens: int}
 
-// claude-opus-5-5 and claude-sonnet-5 are the high-resolution tier (2576px /
-// 4784 tokens); claude-haiku-4-5 is the standard tier (1568px / 1568
-// tokens). Per the spec's "Shape" section.
+// All three models (claude-opus-5-5, claude-sonnet-5-5, claude-haiku-5-5) are the
+// high-resolution tier (2576px / 4784 tokens), checked 2026-11-17. The standard
+// tier (1568px) stays for older models and tests.
 let standardTier: tier = {maxEdge: 1568, maxTokens: 1568}
 let highTier: tier = {maxEdge: 2576, maxTokens: 4784}
 
 // Maps from Shared.model, never a copied model id string.
 let tierFor = (m: Shared.model): tier =>
   switch m {
-  | Shared.Opus5_5 | Shared.Sonnet5 => highTier
-  | Shared.Haiku4_5 => standardTier
+  | Shared.Opus5_5 | Shared.Sonnet5_5 | Shared.Haiku5_5 => highTier
   }
 
 let maxInt = (a: int, b: int): int => a > b ? a : b

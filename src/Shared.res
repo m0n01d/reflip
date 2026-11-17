@@ -4,24 +4,24 @@
 // No Node imports — this file compiles straight into the browser bundle too.
 // Per reflip's CLAUDE.md: nothing else may hand-copy a model id string.
 
-type model = Opus5_5 | Sonnet5 | Haiku4_5
+type model = Opus5_5 | Sonnet5_5 | Haiku5_5
 
-let allModels = [Opus5_5, Sonnet5, Haiku4_5]
+let allModels = [Opus5_5, Sonnet5_5, Haiku5_5]
 
-let defaultModel = Sonnet5
+let defaultModel = Sonnet5_5
 
 let modelId = (m: model): string =>
   switch m {
   | Opus5_5 => "claude-opus-5-5"
-  | Sonnet5 => "claude-sonnet-5"
-  | Haiku4_5 => "claude-haiku-4-5"
+  | Sonnet5_5 => "claude-sonnet-5-5"
+  | Haiku5_5 => "claude-haiku-5-5"
   }
 
 let modelLabel = (m: model): string =>
   switch m {
   | Opus5_5 => "Opus 5.5"
-  | Sonnet5 => "Sonnet 5 (the default)"
-  | Haiku4_5 => "Haiku 4.5"
+  | Sonnet5_5 => "Sonnet 5.5 (the default)"
+  | Haiku5_5 => "Haiku 5.5"
   }
 
 let parseModelId = (id: string): option<model> => allModels->Array.find(m => modelId(m) == id)

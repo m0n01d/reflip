@@ -114,7 +114,7 @@ let runTakeover = () => {
     // sets sentWidth/sentHeight so toBox below actually decodes the raw
     // boxes instead of short-circuiting to None (initialModel starts at
     // 0x0; a real transcript always sends photo-received first, per
-    // docs/scan-ui.md §2). 1000x1000 fits Sonnet5's high tier
+    // docs/scan-ui.md §2). 1000x1000 fits Sonnet5_5's high tier
     // (ImageSize.highTier, maxEdge 2576), so no resize happens and the
     // scale factor is exactly 1.0 — the raw box coordinates below pass
     // through unchanged, matching the IoU arithmetic in the comments.
@@ -542,7 +542,7 @@ let run = () => {
 
     let picked = ScanState.update(
       ScanState.initialModel,
-      PhotoPicked({model: Shared.Sonnet5, photoUrl: "blob:x", bytes: 100, resizeMs: 40.0}),
+      PhotoPicked({model: Shared.Sonnet5_5, photoUrl: "blob:x", bytes: 100, resizeMs: 40.0}),
     )
     TestKit.check("PhotoPicked's resizeMs lands in the model", picked.resizeMs == Some(40.0))
 
