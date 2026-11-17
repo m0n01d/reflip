@@ -371,7 +371,7 @@ let run = () => {
   TestKit.section("AppState.update")
 
   let m0 = AppState.initialModel
-  TestKit.check("initial model defaults to Sonnet 5", m0.selectedModel == Shared.Sonnet5)
+  TestKit.check("initial model defaults to Sonnet 5.5", m0.selectedModel == Shared.Sonnet5_5)
   TestKit.check("initial model defaults to 1568 long edge", m0.longEdge == 1568)
 
   // -- both pickers ----------------------------------------------------

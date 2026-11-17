@@ -32,9 +32,9 @@ let run = () => {
   )
 
   TestKit.check(
-    "tierFor maps Opus 5.5 and Sonnet 5 to the high tier, Haiku 4.5 to standard",
+    "tierFor maps all three models to the high tier",
     ImageSize.tierFor(Shared.Opus5_5) == ImageSize.highTier &&
-      ImageSize.tierFor(Shared.Sonnet5) == ImageSize.highTier &&
-      ImageSize.tierFor(Shared.Haiku4_5) == ImageSize.standardTier,
+      ImageSize.tierFor(Shared.Sonnet5_5) == ImageSize.highTier &&
+      ImageSize.tierFor(Shared.Haiku5_5) == ImageSize.highTier,
   )
 }

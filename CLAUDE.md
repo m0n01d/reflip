@@ -25,17 +25,19 @@ The idea's origin is [wesbos/yard-sale](https://github.com/wesbos/yard-sale), by
 
 ## The numbers M0 set
 
-Checked 2026-09-24 against `platform.claude.com/docs/en/about-claude/pricing` and the claude-api skill. Re-check before this drifts far from that date.
+Checked 2026-11-17 against `platform.claude.com/docs/en/about-claude/pricing` and the claude-api skill. Re-check before this drifts far from that date.
 
 | Model id | Input $/MTok | Output $/MTok | Cache read multiplier | Web search tool type |
 |---|---|---|---|---|
 | `claude-opus-5-5` | 4 | 20 | 0.05x | `web_search_20260209` |
-| `claude-sonnet-5` (default) | 2 | 10 | 0.1x | `web_search_20260209` |
-| `claude-haiku-4-5` | 1 | 5 | 0.1x | `web_search_20250305` only |
+| `claude-sonnet-5-5` (default) | 2 | 10 | 0.05x | `web_search_20260209` |
+| `claude-haiku-5-5` | 0.10 | 0.50 | 0.1x | `web_search_20260209` |
+
+Haiku 5.5 bills $0.50 / $2.50 when a prompt is over 100,000 tokens.
 
 - A 5-minute cache write costs 1.25x the input price, on every model above.
 - A web search costs a flat $0.01. Its result text also bills as input tokens, on top of that flat fee.
-- An image bills at about ceil(w/28) times ceil(h/28) tokens. Haiku 4.5 downsizes an image above a 1568px long edge. Opus 5.5 and Sonnet 5 downsize above 2576px.
+- An image bills at about ceil(w/28) times ceil(h/28) tokens. All three models downsize an image above a 2576px long edge.
 - Structured output uses `output_config.format`, not the old `output_format` field. Its shape is `{type: "json_schema", schema: {...}}`.
 - Never use forced `tool_choice`. It returns a 400 on Opus 5.5.
 - The web search tool sets `allowed_callers: ["direct"]`, so Claude never searches from a code step. On Sonnet 5, parallel code steps stalled for about 96 s. `disable_parallel_tool_use` returns a 400 with code-step search. See `docs/stall-fix.md`.
@@ -61,7 +63,7 @@ The first M1 experiment measured 10 real scenes on Sonnet 5 on 2026-09-24. Its r
 - `src/Pricing.res`, `src/Stats.res`: the cost formula and the price-percentile math, both pure and both tested.
 - `src/ImageSize.res`: the reference resize function from the Claude vision guide, and the resolution tier of each model. It gives the size of the photo that Claude sees.
 - `src/JpegSize.res`: reads the width and the height of the uploaded JPEG from its header. The reply sends them back as `imageWidth` and `imageHeight`.
-- `src/Box.res`: decodes the `[x1, y1, x2, y2]` box of an item, clamps it to the photo, and rescales it when Claude saw a resized photo (Haiku 4.5).
+- `src/Box.res`: decodes the `[x1, y1, x2, y2]` box of an item, clamps it to the photo, and rescales it when Claude saw a resized photo, which happens when the photo is over 2576px on the long edge.
 - `src/SystemPrompt.res`: our own prompt text and the JSON schema for structured output.
 - `src/ClaudeClient.res`: builds the Claude request, decodes its reply, and retries once without `output_config` on a 400 that names it. It stops a call after `timeoutMs` (180 s), and the scene route then returns a 504 with a JSON error.
 - `src/EbayClient.res`: the client-credentials token (cached until it expires), the Browse API search, and the stats decode.

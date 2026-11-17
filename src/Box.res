@@ -8,7 +8,7 @@
 //
 // `sentWidth`/`sentHeight` are the size of the photo the page actually
 // sent. `seen` is the size ImageSize.resizedSize says Claude saw for that
-// model — they differ only on the standard tier (Haiku 4.5).
+// model — they differ only when a photo exceeds the tier limit.
 
 let decode = (
   rawBox: option<array<float>>,

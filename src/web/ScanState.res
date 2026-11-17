@@ -686,13 +686,13 @@ let ebayState = (
 // Main.dc.html mock rows ("40 ms" / "2:46").
 // modelLabel uses the plain name (docs/design/scan-ui/Main.dc.html's
 // MODELS[].label), not Shared.modelLabel's Settings-radio copy, which adds
-// "(the default)" to Sonnet 5 — right for a Settings option, wrong for a
+// "(the default)" to Sonnet 5.5 — right for a Settings option, wrong for a
 // receipt value.
 let shortModelLabel = (m: Shared.model): string =>
   switch m {
-  | Shared.Sonnet5 => "Sonnet 5"
+  | Shared.Sonnet5_5 => "Sonnet 5.5"
   | Shared.Opus5_5 => "Opus 5.5"
-  | Shared.Haiku4_5 => "Haiku 4.5"
+  | Shared.Haiku5_5 => "Haiku 5.5"
   }
 
 type receipt = {
@@ -732,12 +732,12 @@ let receipt = (m: model): option<receipt> =>
   })
 
 // Settings sheet model order (docs/design/scan-ui/Main.dc.html MODELS):
-// Sonnet 5, Opus 5.5, Haiku 4.5 — differs from Shared.allModels order
-// ([Opus5_5, Sonnet5, Haiku4_5]), so it lives in web code, not Shared.res.
+// Sonnet 5.5, Opus 5.5, Haiku 5.5 — differs from Shared.allModels order
+// ([Opus5_5, Sonnet5_5, Haiku5_5]), so it lives in web code, not Shared.res.
 // ScanStateTest checks it holds exactly Shared.allModels, each once, so
 // a model added to Shared later fails a test instead of silently
 // dropping out of Settings (R6).
-let settingsModelOrder: array<Shared.model> = [Shared.Sonnet5, Shared.Opus5_5, Shared.Haiku4_5]
+let settingsModelOrder: array<Shared.model> = [Shared.Sonnet5_5, Shared.Opus5_5, Shared.Haiku5_5]
 
 // True for exactly the two msg shapes update/foldEvent turn into `Ended`.
 // App.res wraps the dispatch it hands to ScanApi.run and watches for

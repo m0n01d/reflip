@@ -284,7 +284,7 @@ let buildSceneReply = async (
   let ebayNote = Array.filterMap(merged, ((_, note)) => note)->Array.get(0)
   // The box was decoded raw off Claude's reply; finishing it needs the sent
   // photo's size and the model's tier, both known only here. Falls back to
-  // Sonnet 5's tier if `model` somehow is not one of Shared.allModels — it
+  // the default model's tier if `model` somehow is not one of Shared.allModels — it
   // always is, since it came from Shared.modelId in route below.
   let boxModel = Shared.parseModelId(model)->Option.getOr(Shared.defaultModel)
   let replyItems = Array.mapWithIndex(items, (item, i) => {

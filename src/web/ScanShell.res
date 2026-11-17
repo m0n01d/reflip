@@ -29,7 +29,7 @@ let make = (
   let onStop = (_: ReactEvent.Mouse.t) => scanDispatch(ScanState.StopTapped)
   let onNewScan = (_: ReactEvent.Mouse.t) => scanDispatch(ScanState.NewScan)
 
-  // Shared.modelLabel spells out "Sonnet 5 (the default)" for the settings
+  // Shared.modelLabel spells out "Sonnet 5.5 (the default)" for the settings
   // API; the design's chip wants the short form (Ready.png). ScanState
   // already has this exact switch (the run receipt's Model row uses it),
   // so reuse it here instead of keeping a second copy in sync (R8).
@@ -278,14 +278,14 @@ let make = (
               {ScanState.settingsModelOrder
               ->Array.map(m => {
                 let (label, desc) = switch m {
-                | Shared.Sonnet5 => (
-                    "Sonnet 5",
-                    "Default. On 10 real scenes: median 0:47 and $0.15 a photo.",
+                | Shared.Sonnet5_5 => (
+                    "Sonnet 5.5",
+                    "Default. Same token price as Sonnet 5. Not yet timed on real scenes.",
                   )
-                | Shared.Opus5_5 => ("Opus 5.5", "Most capable. Twice the token price of Sonnet 5.")
-                | Shared.Haiku4_5 => (
-                    "Haiku 4.5",
-                    "Half the token price of Sonnet 5. Sees at most 1568 px.",
+                | Shared.Opus5_5 => ("Opus 5.5", "Most capable. Twice the token price of Sonnet 5.5.")
+                | Shared.Haiku5_5 => (
+                    "Haiku 5.5",
+                    "A twentieth of the token price of Sonnet 5.5.",
                   )
                 }
                 <label key={Shared.modelId(m)} className="scan-option">
@@ -311,7 +311,7 @@ let make = (
                 (
                   2576,
                   "2576 px",
-                  "Sharper. About 6,300 image tokens, near $0.01 more a photo on Sonnet 5.",
+                  "Sharper. About 6,300 image tokens, near $0.01 more a photo on Sonnet 5.5.",
                 ),
               ]
               ->Array.map(((px, label, desc)) =>
